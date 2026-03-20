@@ -133,6 +133,22 @@ class MainWindow(QMainWindow):
         self.brush_shortcut.triggered.connect(self._select_brush_tool)
         self.addAction(self.brush_shortcut)
         
+        # 画笔工具快捷键
+        self.brush_color_toggle = QAction(self)
+        self.brush_color_toggle.setShortcut("Ctrl+X")
+        self.brush_color_toggle.triggered.connect(self._toggle_brush_color)
+        self.addAction(self.brush_color_toggle)
+        
+        self.brush_size_up = QAction(self)
+        self.brush_size_up.setShortcut("Ctrl+Up")
+        self.brush_size_up.triggered.connect(self._increase_brush_size)
+        self.addAction(self.brush_size_up)
+        
+        self.brush_size_down = QAction(self)
+        self.brush_size_down.setShortcut("Ctrl+Down")
+        self.brush_size_down.triggered.connect(self._decrease_brush_size)
+        self.addAction(self.brush_size_down)
+        
         self.crop_action = QAction("裁剪工具 (C)", self)
         self.crop_action.setShortcut("C")
         self.crop_action.setCheckable(True)
@@ -142,6 +158,7 @@ class MainWindow(QMainWindow):
         """创建工具栏"""
         self.toolbar = QToolBar("工具")
         self.toolbar.setMovable(False)
+        self.toolbar.setContextMenuPolicy(Qt.PreventContextMenu)  # 禁用右键菜单
         self.addToolBar(self.toolbar)
         
         # 文件操作
@@ -213,6 +230,81 @@ class MainWindow(QMainWindow):
         self.crop_action.setChecked(True)
         self.current_tool_label.setText("当前工具：裁剪")
         self.statusbar.showMessage("裁剪工具已激活")
+    
+    def _toggle_brush_color(self):
+        """切换画笔颜色（Ctrl+X）"""
+        # 只在画笔工具激活时有效
+        if not isinstance(self.canvas.current_tool, type(self.canvas.brush_tool)):
+            return
+        if self.canvas.current_tool != self.canvas.brush_tool:
+            return
+        
+        current_color = self.canvas.brush_tool.color
+        new_color = 255 if current_color == 0 else 0
+        self.canvas.brush_tool.color = new_color
+        
+        # 更新设置面板（如果可见）
+        if hasattr(self, 'brush_settings_panel') and self.brush_settings_panel.isVisible():
+            if new_color == 0:
+                self.black_radio.setChecked(True)
+            else:
+                self.white_radio.setChecked(True)
+        
+        self.statusbar.showMessage(f"画笔颜色: {'黑色' if new_color == 0 else '白色'}")
+    
+    def _increase_brush_size(self):
+        """增大画笔（Ctrl+Up）"""
+        # 只在画笔工具激活时有效
+        if not isinstance(self.canvas.current_tool, type(self.canvas.brush_tool)):
+            return
+        if self.canvas.current_tool != self.canvas.brush_tool:
+            return
+        
+        current_size = self.canvas.brush_tool.size
+        # 根据当前大小选择步长
+        if current_size < 20:
+            step = 1
+        elif current_size < 50:
+            step = 5
+        else:
+            step = 10
+        
+        new_size = min(500, current_size + step)
+        self.canvas.brush_tool.size = new_size
+        
+        # 更新设置面板（如果可见）
+        if hasattr(self, 'brush_settings_panel') and self.brush_settings_panel.isVisible():
+            self.brush_size_spinbox.setValue(int(new_size))
+        
+        self.statusbar.showMessage(f"画笔大小: {int(new_size)}")
+        self.canvas.update()  # 更新光标显示
+    
+    def _decrease_brush_size(self):
+        """减小画笔（Ctrl+Down）"""
+        # 只在画笔工具激活时有效
+        if not isinstance(self.canvas.current_tool, type(self.canvas.brush_tool)):
+            return
+        if self.canvas.current_tool != self.canvas.brush_tool:
+            return
+        
+        current_size = self.canvas.brush_tool.size
+        # 根据当前大小选择步长
+        if current_size <= 20:
+            step = 1
+        elif current_size <= 50:
+            step = 5
+        else:
+            step = 10
+        
+        new_size = max(1, current_size - step)
+        self.canvas.brush_tool.size = new_size
+        
+        # 更新设置面板（如果可见）
+        if hasattr(self, 'brush_settings_panel') and self.brush_settings_panel.isVisible():
+            self.brush_size_spinbox.setValue(int(new_size))
+        
+        self.statusbar.showMessage(f"画笔大小: {int(new_size)}")
+        self.canvas.update()  # 更新光标显示
         
         # 隐藏画笔设置面板
         if hasattr(self, 'brush_settings_panel'):
