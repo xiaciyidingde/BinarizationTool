@@ -8,11 +8,13 @@ from typing import Optional
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt, Signal, QPoint, QUrl
 from PySide6.QtGui import QPainter, QPixmap, QImage, QPaintEvent, QMouseEvent, QWheelEvent, QDragEnterEvent, QDropEvent
+import numpy as np
 
 from ..models.view_transform import ViewTransform
 from ..models.image_data import ImageData
 from ..models.brush_tool import BrushTool
 from ..models.crop_tool import CropTool
+from ..models.tile_cache import TileCache
 
 
 class Canvas(QWidget):
@@ -45,9 +47,8 @@ class Canvas(QWidget):
         self.brush_tool = BrushTool()
         self.crop_tool = CropTool()
         
-        # 渲染缓存
-        self.pixmap_cache: Optional[QPixmap] = None
-        self.cache_valid = False
+        # 分块渲染缓存
+        self.tile_cache = TileCache(tile_size=256, max_tiles=100)
         
         # 交互状态
         self.mouse_pos: Optional[QPoint] = None
@@ -71,7 +72,10 @@ class Canvas(QWidget):
             image_data: ImageData 对象
         """
         self.image_data = image_data
-        self.cache_valid = False
+        
+        # 更新分块缓存
+        pixels = image_data.get_current_pixels()
+        self.tile_cache.set_image(pixels)
         
         # 自动适配缩放
         self._fit_image_to_view()
@@ -91,6 +95,9 @@ class Canvas(QWidget):
         if isinstance(tool, BrushTool):
             # 画笔工具：隐藏系统光标
             self.setCursor(Qt.BlankCursor)
+        elif isinstance(tool, CropTool):
+            # 裁剪工具：十字光标
+            self.setCursor(Qt.CrossCursor)
         else:
             # 其他工具或无工具：恢复默认光标
             self.setCursor(Qt.ArrowCursor)
@@ -147,8 +154,9 @@ class Canvas(QWidget):
                     self.image_data.start_temp_layer()
                     stroke = self.current_tool.start_stroke(pixel_x, pixel_y)
                     dirty_rect = stroke.rasterize(self.image_data)
-                    self.rasterized_point_count = len(stroke.points)  # 记录已光栅化的点数
-                    self.cache_valid = False
+                    self.rasterized_point_count = len(stroke.points)
+                    # 更新分块缓存
+                    self._update_tile_cache()
                     self.update()
                 
                 elif isinstance(self.current_tool, CropTool):
@@ -171,7 +179,6 @@ class Canvas(QWidget):
             delta_y = event.pos().y() - self.pan_start_pos.y()
             self.view_transform.translate(delta_x, delta_y)
             self.pan_start_pos = event.pos()
-            self.cache_valid = False
             self.update()
         
         elif self.image_data is not None and self.current_tool is not None:
@@ -188,8 +195,16 @@ class Canvas(QWidget):
                     dirty_rect = self.current_tool.current_stroke.rasterize(self.image_data, old_point_count)
                     self.rasterized_point_count = len(self.current_tool.current_stroke.points)
                     
-                    # 绘制过程中：标记缓存失效，全图更新（简单但有效）
-                    self.cache_valid = False
+                    # 更新图片数据并使脏区域失效
+                    if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
+                        pixels = self.image_data.get_current_pixels()
+                        self.tile_cache.update_image(pixels)
+                        self.tile_cache.invalidate_region(
+                            dirty_rect[0], dirty_rect[1], 
+                            dirty_rect[2] - dirty_rect[0], 
+                            dirty_rect[3] - dirty_rect[1]
+                        )
+                    
                     self.update()
             
             elif isinstance(self.current_tool, CropTool) and self.current_tool.is_dragging:
@@ -214,8 +229,9 @@ class Canvas(QWidget):
                     # 结束画笔笔画
                     self.current_tool.end_stroke()
                     self.image_data.commit_temp_layer()
-                    self.rasterized_point_count = 0  # 重置计数器
-                    self.cache_valid = False
+                    self.rasterized_point_count = 0
+                    # 完全更新分块缓存
+                    self._update_tile_cache()
                     self.image_modified.emit()
                     self.update()
                 
@@ -237,8 +253,11 @@ class Canvas(QWidget):
                             # 重新适配视图
                             self._fit_image_to_view()
                             
+                            # 更新分块缓存
+                            pixels = self.image_data.get_current_pixels()
+                            self.tile_cache.set_image(pixels)
+                            
                             # 通知图片已修改
-                            self.cache_valid = False
                             self.image_modified.emit()
                             self.update()
         
@@ -263,7 +282,6 @@ class Canvas(QWidget):
             scale_factor
         )
         
-        self.cache_valid = False
         self.update()
     
     def keyPressEvent(self, event):
@@ -305,68 +323,34 @@ class Canvas(QWidget):
     
     def _render_image(self, painter: QPainter):
         """
-        渲染图片到画布
+        渲染图片到画布（使用分块渲染）
         
-        使用缓存提高性能。
+        只渲染视口内可见的块，大幅提升性能。
         """
-        if not self.cache_valid:
-            self._update_cache()
-        
-        if self.pixmap_cache is not None:
-            # 计算图片在视图中的位置
-            view_x, view_y = self.view_transform.pixel_to_view(0, 0)
-            painter.drawPixmap(int(view_x), int(view_y), self.pixmap_cache)
-    
-    def _update_cache(self):
-        """更新渲染缓存"""
         if self.image_data is None:
             return
         
-        # 获取当前像素数据
-        pixels = self.image_data.get_current_pixels()
+        # 更新缩放级别
+        self.tile_cache.set_scale(self.view_transform.scale)
         
-        # 转换为 QImage
-        height, width = pixels.shape
-        bytes_per_line = width
-        qimage = QImage(pixels.data, width, height, bytes_per_line, QImage.Format_Grayscale8)
-        
-        # 缩放到视图大小
-        scaled_width = int(width * self.view_transform.scale)
-        scaled_height = int(height * self.view_transform.scale)
-        
-        # 创建 QPixmap 缓存
-        self.pixmap_cache = QPixmap.fromImage(qimage).scaled(
-            scaled_width, scaled_height,
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation if self.view_transform.scale < 1.0 else Qt.FastTransformation
+        # 获取视口内的所有块
+        view_x, view_y = self.view_transform.pixel_to_view(0, 0)
+        tiles = self.tile_cache.get_tiles_in_viewport(
+            view_x, view_y,
+            self.width(), self.height()
         )
         
-        self.cache_valid = True
+        # 绘制所有块
+        for tile_x, tile_y, draw_x, draw_y, draw_width, draw_height, pixmap in tiles:
+            painter.drawPixmap(int(draw_x), int(draw_y), pixmap)
     
-    def _update_dirty_region(self, dirty_rect: tuple[int, int, int, int]):
-        """
-        只更新脏区域（像素坐标）
+    def _update_tile_cache(self):
+        """更新分块缓存的图片数据"""
+        if self.image_data is None:
+            return
         
-        Args:
-            dirty_rect: (x_min, y_min, x_max, y_max) 像素坐标
-        """
-        from PySide6.QtCore import QRect
-        
-        # 转换为视图坐标
-        x1_view, y1_view = self.view_transform.pixel_to_view(dirty_rect[0], dirty_rect[1])
-        x2_view, y2_view = self.view_transform.pixel_to_view(dirty_rect[2], dirty_rect[3])
-        
-        # 创建视图矩形（添加一些边距以确保完全覆盖）
-        margin = 5
-        view_rect = QRect(
-            int(min(x1_view, x2_view) - margin),
-            int(min(y1_view, y2_view) - margin),
-            int(abs(x2_view - x1_view) + 2 * margin),
-            int(abs(y2_view - y1_view) + 2 * margin)
-        )
-        
-        # 只更新该区域
-        self.update(view_rect)
+        pixels = self.image_data.get_current_pixels()
+        self.tile_cache.set_image(pixels)
     
     def _fit_image_to_view(self):
         """自动适配图片到视图"""

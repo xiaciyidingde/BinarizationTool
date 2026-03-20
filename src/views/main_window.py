@@ -37,6 +37,7 @@ class MainWindow(QMainWindow):
         self.image_data: Optional[ImageData] = None
         self.history_manager = HistoryManager()
         self.current_file_path: Optional[str] = None
+        self.saved_file_path: Optional[str] = None  # 记录已保存的文件路径
         
         # 设置窗口
         self.setWindowTitle("BinarizationTool - 二值化图片编辑器")
@@ -93,29 +94,29 @@ class MainWindow(QMainWindow):
     def create_actions(self):
         """创建动作"""
         # 文件菜单动作
-        self.open_action = QAction("打开...", self)
+        self.open_action = QAction("打开 (Ctrl+O)", self)
         self.open_action.setShortcut("Ctrl+O")
         self.open_action.triggered.connect(self._open_file)
         
-        self.save_action = QAction("保存", self)
+        self.save_action = QAction("保存 (Ctrl+S)", self)
         self.save_action.setShortcut("Ctrl+S")
         self.save_action.triggered.connect(self._save_file)
         
-        self.save_as_action = QAction("另存为...", self)
+        self.save_as_action = QAction("另存为 (Ctrl+Shift+S)", self)
         self.save_as_action.setShortcut("Ctrl+Shift+S")
         self.save_as_action.triggered.connect(self._save_file_as)
         
-        self.exit_action = QAction("退出", self)
+        self.exit_action = QAction("退出 (Ctrl+Q)", self)
         self.exit_action.setShortcut("Ctrl+Q")
         self.exit_action.triggered.connect(self.close)
         
         # 编辑菜单动作
-        self.undo_action = QAction("← 后退", self)
+        self.undo_action = QAction("后退 (Ctrl+Z)", self)
         self.undo_action.setShortcut("Ctrl+Z")
         self.undo_action.setToolTip("后退到上一步 (Ctrl+Z)")
         self.undo_action.triggered.connect(self._undo)
         
-        self.redo_action = QAction("前进 →", self)
+        self.redo_action = QAction("前进 (Ctrl+Y)", self)
         self.redo_action.setShortcut("Ctrl+Y")
         self.redo_action.setToolTip("前进到下一步 (Ctrl+Y)")
         self.redo_action.triggered.connect(self._redo)
@@ -132,7 +133,7 @@ class MainWindow(QMainWindow):
         self.brush_shortcut.triggered.connect(self._select_brush_tool)
         self.addAction(self.brush_shortcut)
         
-        self.crop_action = QAction("裁剪工具", self)
+        self.crop_action = QAction("裁剪工具 (C)", self)
         self.crop_action.setShortcut("C")
         self.crop_action.setCheckable(True)
         self.crop_action.triggered.connect(self._select_crop_tool)
@@ -156,6 +157,16 @@ class MainWindow(QMainWindow):
         # 工具选择 - 使用自定义按钮
         self.toolbar.addWidget(self.brush_button)
         self.toolbar.addAction(self.crop_action)
+        
+        # 添加弹性空间，将后续内容推到右边
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.toolbar.addWidget(spacer)
+        
+        # 当前工具显示（右对齐）
+        self.current_tool_label = QLabel("当前工具：无")
+        self.current_tool_label.setStyleSheet("padding: 0 10px; color: #666;")
+        self.toolbar.addWidget(self.current_tool_label)
         
         # 创建画笔设置面板（初始隐藏）
         self._create_brush_settings_panel()
@@ -186,6 +197,7 @@ class MainWindow(QMainWindow):
         self.canvas.set_tool(self.canvas.brush_tool)
         self.brush_button.setChecked(True)
         self.crop_action.setChecked(False)
+        self.current_tool_label.setText("当前工具：画笔")
         self.statusbar.showMessage("画笔工具已激活")
         
         # 确保 Canvas 获得焦点以接收键盘事件
@@ -199,6 +211,7 @@ class MainWindow(QMainWindow):
         self.canvas.set_tool(self.canvas.crop_tool)
         self.brush_button.setChecked(False)
         self.crop_action.setChecked(True)
+        self.current_tool_label.setText("当前工具：裁剪")
         self.statusbar.showMessage("裁剪工具已激活")
         
         # 隐藏画笔设置面板
@@ -250,6 +263,7 @@ class MainWindow(QMainWindow):
             
             # 保存文件路径
             self.current_file_path = file_path
+            self.saved_file_path = None  # 重置保存路径，新文件需要重新保存
             
             # 更新状态
             self.statusbar.showMessage(f"已加载: {file_path}")
@@ -259,11 +273,16 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "错误", f"无法加载图片:\n{str(e)}")
     
     def _save_file(self):
-        """保存文件（默认另存为，文件名添加时间戳）"""
+        """保存文件（第一次另存为，之后覆盖）"""
         if self.image_data is None:
             return
         
-        # 生成默认文件名
+        # 如果已经保存过，直接覆盖
+        if self.saved_file_path:
+            self._save_to_file(self.saved_file_path)
+            return
+        
+        # 第一次保存：生成默认文件名并弹出对话框
         default_name = self._generate_default_save_name()
         
         file_path, _ = QFileDialog.getSaveFileName(
@@ -275,11 +294,26 @@ class MainWindow(QMainWindow):
         
         if file_path:
             self._save_to_file(file_path)
+            self.saved_file_path = file_path  # 记录保存路径
     
     def _save_file_as(self):
-        """另存为"""
-        # 与 _save_file 行为一致
-        self._save_file()
+        """另存为（总是弹出对话框）"""
+        if self.image_data is None:
+            return
+        
+        # 生成默认文件名
+        default_name = self._generate_default_save_name()
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "另存为",
+            default_name,
+            "PNG 图片 (*.png);;JPEG 图片 (*.jpg);;BMP 图片 (*.bmp)"
+        )
+        
+        if file_path:
+            self._save_to_file(file_path)
+            self.saved_file_path = file_path  # 更新保存路径
     
     def _generate_default_save_name(self) -> str:
         """
@@ -355,7 +389,11 @@ class MainWindow(QMainWindow):
             
             # 只更新基础图层，保留编辑图层
             self.image_data.update_base_layer(binary_pixels)
-            self.canvas.cache_valid = False
+            
+            # 更新分块缓存
+            pixels = self.image_data.get_current_pixels()
+            self.canvas.tile_cache.set_image(pixels)
+            
             self.canvas.update()
             
         except Exception as e:

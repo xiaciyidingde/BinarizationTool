@@ -8,6 +8,7 @@ from .brush_stroke import BrushStroke
 from .brush_tool import BrushTool
 from .crop_tool import CropTool
 from .history_manager import HistoryManager
+from .tile_cache import TileCache
 
 __all__ = [
     'ViewTransform',
@@ -16,4 +17,5 @@ __all__ = [
     'BrushTool',
     'CropTool',
     'HistoryManager',
+    'TileCache',
 ]
