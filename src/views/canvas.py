@@ -55,6 +55,9 @@ class Canvas(QWidget):
         self.pan_start_pos: Optional[QPoint] = None
         self.space_pressed = False
         
+        # 画笔绘制优化：记录已光栅化的点数
+        self.rasterized_point_count = 0
+        
         # 设置
         self.setMouseTracking(True)  # 启用鼠标跟踪
         self.setFocusPolicy(Qt.StrongFocus)  # 接收键盘事件
@@ -83,6 +86,15 @@ class Canvas(QWidget):
             tool: 工具对象（BrushTool 或 CropTool）
         """
         self.current_tool = tool
+        
+        # 根据工具类型设置光标
+        if isinstance(tool, BrushTool):
+            # 画笔工具：隐藏系统光标
+            self.setCursor(Qt.BlankCursor)
+        else:
+            # 其他工具或无工具：恢复默认光标
+            self.setCursor(Qt.ArrowCursor)
+        
         self.update()
     
     def paintEvent(self, event: QPaintEvent):
@@ -134,7 +146,8 @@ class Canvas(QWidget):
                     # 开始画笔笔画
                     self.image_data.start_temp_layer()
                     stroke = self.current_tool.start_stroke(pixel_x, pixel_y)
-                    stroke.rasterize(self.image_data)
+                    dirty_rect = stroke.rasterize(self.image_data)
+                    self.rasterized_point_count = len(stroke.points)  # 记录已光栅化的点数
                     self.cache_valid = False
                     self.update()
                 
@@ -168,12 +181,16 @@ class Canvas(QWidget):
             
             if isinstance(self.current_tool, BrushTool) and self.current_tool.is_drawing:
                 # 继续画笔笔画
+                old_point_count = self.rasterized_point_count
                 self.current_tool.continue_stroke(pixel_x, pixel_y)
                 if self.current_tool.current_stroke is not None:
-                    # 只光栅化新添加的点
-                    self.current_tool.current_stroke.rasterize(self.image_data)
-                self.cache_valid = False
-                self.update()
+                    # 只光栅化新添加的点（增量更新）
+                    dirty_rect = self.current_tool.current_stroke.rasterize(self.image_data, old_point_count)
+                    self.rasterized_point_count = len(self.current_tool.current_stroke.points)
+                    
+                    # 绘制过程中：标记缓存失效，全图更新（简单但有效）
+                    self.cache_valid = False
+                    self.update()
             
             elif isinstance(self.current_tool, CropTool) and self.current_tool.is_dragging:
                 # 更新裁剪选择
@@ -197,6 +214,7 @@ class Canvas(QWidget):
                     # 结束画笔笔画
                     self.current_tool.end_stroke()
                     self.image_data.commit_temp_layer()
+                    self.rasterized_point_count = 0  # 重置计数器
                     self.cache_valid = False
                     self.image_modified.emit()
                     self.update()
@@ -324,6 +342,31 @@ class Canvas(QWidget):
         )
         
         self.cache_valid = True
+    
+    def _update_dirty_region(self, dirty_rect: tuple[int, int, int, int]):
+        """
+        只更新脏区域（像素坐标）
+        
+        Args:
+            dirty_rect: (x_min, y_min, x_max, y_max) 像素坐标
+        """
+        from PySide6.QtCore import QRect
+        
+        # 转换为视图坐标
+        x1_view, y1_view = self.view_transform.pixel_to_view(dirty_rect[0], dirty_rect[1])
+        x2_view, y2_view = self.view_transform.pixel_to_view(dirty_rect[2], dirty_rect[3])
+        
+        # 创建视图矩形（添加一些边距以确保完全覆盖）
+        margin = 5
+        view_rect = QRect(
+            int(min(x1_view, x2_view) - margin),
+            int(min(y1_view, y2_view) - margin),
+            int(abs(x2_view - x1_view) + 2 * margin),
+            int(abs(y2_view - y1_view) + 2 * margin)
+        )
+        
+        # 只更新该区域
+        self.update(view_rect)
     
     def _fit_image_to_view(self):
         """自动适配图片到视图"""

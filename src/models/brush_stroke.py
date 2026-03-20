@@ -43,74 +43,117 @@ class BrushStroke:
         """
         self.points.append((x, y))
     
-    def rasterize(self, image_data: 'ImageData'):
+    def rasterize(self, image_data: 'ImageData', start_index: int = 0) -> tuple[int, int, int, int]:
         """
         将笔画光栅化到图片数据
         
-        遍历所有笔画点，在每个点绘制一个圆形笔刷印记。
+        遍历笔画点，在每个点绘制一个圆形笔刷印记。
+        支持增量光栅化以提高性能。
         
         Args:
             image_data: 目标 ImageData 对象
+            start_index: 开始光栅化的点索引（默认0，光栅化所有点）
+            
+        Returns:
+            脏区域 (x_min, y_min, x_max, y_max)，如果没有点则返回 (0, 0, 0, 0)
         """
-        for x, y in self.points:
+        if start_index >= len(self.points):
+            return (0, 0, 0, 0)
+        
+        radius = self.size / 2.0
+        
+        # 计算受影响的区域
+        x_min = image_data.width
+        y_min = image_data.height
+        x_max = 0
+        y_max = 0
+        
+        for i in range(start_index, len(self.points)):
+            x, y = self.points[i]
             self._draw_brush_dab(image_data, x, y)
+            
+            # 更新脏区域
+            x_min = min(x_min, int(x - radius))
+            y_min = min(y_min, int(y - radius))
+            x_max = max(x_max, int(x + radius) + 1)
+            y_max = max(y_max, int(y + radius) + 1)
+        
+        # 限制在图片范围内
+        x_min = max(0, x_min)
+        y_min = max(0, y_min)
+        x_max = min(image_data.width, x_max)
+        y_max = min(image_data.height, y_max)
+        
+        return (x_min, y_min, x_max, y_max)
     
     def _draw_brush_dab(self, image_data: 'ImageData', center_x: int, center_y: int):
         """
-        绘制单个笔刷印记（圆形）
+        绘制单个笔刷印记（圆形）- 使用 NumPy 向量化优化
         
         硬度控制边缘衰减：
         - hardness = 1.0: 完全硬边（半径内全是目标颜色）
         - hardness < 1.0: 柔和边缘（使用径向渐变）
-        
-        算法：
-        1. 计算笔刷半径
-        2. 计算硬边缘半径 = 半径 * 硬度
-        3. 遍历笔刷边界框内的所有像素
-        4. 对于每个像素：
-           - 如果距离 <= 硬边缘半径：完全不透明（设为目标颜色）
-           - 如果硬边缘半径 < 距离 <= 半径：线性衰减
-           - 如果距离 > 半径：不绘制
         
         Args:
             image_data: 目标 ImageData 对象
             center_x: 笔刷中心 X 坐标
             center_y: 笔刷中心 Y 坐标
         """
+        import numpy as np
+        
         radius = self.size / 2.0
         inner_radius = radius * self.hardness  # 硬边缘半径
         
         # 计算笔刷边界框
-        x_min = int(center_x - radius)
-        x_max = int(center_x + radius) + 1
-        y_min = int(center_y - radius)
-        y_max = int(center_y + radius) + 1
+        x_min = max(0, int(center_x - radius))
+        x_max = min(image_data.width - 1, int(center_x + radius))
+        y_min = max(0, int(center_y - radius))
+        y_max = min(image_data.height - 1, int(center_y + radius))
         
-        # 遍历边界框内的所有像素
-        for y in range(y_min, y_max):
-            for x in range(x_min, x_max):
-                # 检查坐标是否有效
-                if not image_data.is_valid_coord(x, y):
-                    continue
-                
-                # 计算到中心的距离
-                dx = x - center_x
-                dy = y - center_y
-                dist = (dx * dx + dy * dy) ** 0.5
-                
-                if dist <= inner_radius:
-                    # 硬边缘区域：完全不透明
-                    image_data.set_pixel(x, y, self.color)
-                elif dist <= radius:
-                    # 柔和边缘区域：线性衰减
-                    # alpha = 1.0 在 inner_radius，0.0 在 radius
-                    alpha = 1.0 - (dist - inner_radius) / (radius - inner_radius)
-                    
-                    # 对于二值化图片，使用阈值决定是否绘制
-                    # 阈值可以调整以获得更好的视觉效果
-                    if alpha > 0.5:
-                        image_data.set_pixel(x, y, self.color)
-                    # 如果需要更平滑的边缘，可以使用混合：
-                    # current_value = image_data.get_pixel(x, y)
-                    # new_value = int(current_value * (1 - alpha) + self.color * alpha)
-                    # image_data.set_pixel(x, y, new_value)
+        # 如果边界框无效，直接返回
+        if x_min > x_max or y_min > y_max:
+            return
+        
+        # 使用 NumPy 网格一次性计算所有像素的距离
+        width = x_max - x_min + 1
+        height = y_max - y_min + 1
+        
+        # 创建坐标网格
+        y_coords = np.arange(y_min, y_max + 1)
+        x_coords = np.arange(x_min, x_max + 1)
+        x_grid, y_grid = np.meshgrid(x_coords, y_coords)
+        
+        # 计算到中心的距离（向量化）
+        dx = x_grid - center_x
+        dy = y_grid - center_y
+        dist = np.sqrt(dx * dx + dy * dy)
+        
+        # 创建掩码
+        if self.hardness >= 0.99:
+            # 完全硬边：简单的圆形掩码
+            mask = dist <= radius
+        else:
+            # 柔和边缘：使用 alpha 混合
+            mask = dist <= radius
+            alpha = np.ones_like(dist)
+            
+            # 柔和区域的 alpha 值
+            soft_region = (dist > inner_radius) & (dist <= radius)
+            alpha[soft_region] = 1.0 - (dist[soft_region] - inner_radius) / (radius - inner_radius)
+            
+            # 对于二值化图片，使用阈值
+            mask = mask & (alpha > 0.5)
+        
+        # 批量设置像素
+        if image_data.temp_layer is not None:
+            image_data.temp_layer[y_min:y_max+1, x_min:x_max+1][mask] = self.color
+            # 同时标记这些像素为已编辑
+            if image_data.temp_edit_mask is not None:
+                image_data.temp_edit_mask[y_min:y_max+1, x_min:x_max+1][mask] = True
+        elif image_data.edit_mask is not None:
+            # 如果有编辑掩码，标记这些像素
+            image_data.edit_mask[y_min:y_max+1, x_min:x_max+1][mask] = True
+            image_data.edit_values[y_min:y_max+1, x_min:x_max+1][mask] = self.color
+        else:
+            # 直接修改基础层
+            image_data.pixels[y_min:y_max+1, x_min:x_max+1][mask] = self.color

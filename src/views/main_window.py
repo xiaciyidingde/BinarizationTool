@@ -9,9 +9,10 @@ import os
 from datetime import datetime
 from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
                                 QSplitter, QToolBar, QFileDialog, QMessageBox,
-                                QPushButton, QLabel, QStatusBar, QSizePolicy)
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QAction, QIcon
+                                QPushButton, QLabel, QStatusBar, QSizePolicy,
+                                QSpinBox, QRadioButton, QButtonGroup, QFrame)
+from PySide6.QtCore import Qt, QPoint
+from PySide6.QtGui import QAction, QIcon, QEnterEvent
 
 from .canvas import Canvas
 from .binarization_panel import BinarizationPanel
@@ -119,11 +120,17 @@ class MainWindow(QMainWindow):
         self.redo_action.setToolTip("前进到下一步 (Ctrl+Y)")
         self.redo_action.triggered.connect(self._redo)
         
-        # 工具动作
-        self.brush_action = QAction("画笔工具", self)
-        self.brush_action.setShortcut("B")
-        self.brush_action.setCheckable(True)
-        self.brush_action.triggered.connect(self._select_brush_tool)
+        # 工具动作 - 创建自定义按钮以支持悬浮事件
+        self.brush_button = QPushButton("画笔工具 (B)")
+        self.brush_button.setCheckable(True)
+        self.brush_button.clicked.connect(self._select_brush_tool)
+        self.brush_button.installEventFilter(self)
+        
+        # 为画笔按钮添加快捷键
+        self.brush_shortcut = QAction(self)
+        self.brush_shortcut.setShortcut("B")
+        self.brush_shortcut.triggered.connect(self._select_brush_tool)
+        self.addAction(self.brush_shortcut)
         
         self.crop_action = QAction("裁剪工具", self)
         self.crop_action.setShortcut("C")
@@ -132,23 +139,26 @@ class MainWindow(QMainWindow):
     
     def create_toolbars(self):
         """创建工具栏"""
-        toolbar = QToolBar("工具")
-        toolbar.setMovable(False)
-        self.addToolBar(toolbar)
+        self.toolbar = QToolBar("工具")
+        self.toolbar.setMovable(False)
+        self.addToolBar(self.toolbar)
         
         # 文件操作
-        toolbar.addAction(self.open_action)
-        toolbar.addAction(self.save_action)
-        toolbar.addSeparator()
+        self.toolbar.addAction(self.open_action)
+        self.toolbar.addAction(self.save_action)
+        self.toolbar.addSeparator()
         
         # 编辑操作 - 后退/前进
-        toolbar.addAction(self.undo_action)
-        toolbar.addAction(self.redo_action)
-        toolbar.addSeparator()
+        self.toolbar.addAction(self.undo_action)
+        self.toolbar.addAction(self.redo_action)
+        self.toolbar.addSeparator()
         
-        # 工具选择
-        toolbar.addAction(self.brush_action)
-        toolbar.addAction(self.crop_action)
+        # 工具选择 - 使用自定义按钮
+        self.toolbar.addWidget(self.brush_button)
+        self.toolbar.addAction(self.crop_action)
+        
+        # 创建画笔设置面板（初始隐藏）
+        self._create_brush_settings_panel()
     
     def create_statusbar(self):
         """创建状态栏"""
@@ -170,12 +180,16 @@ class MainWindow(QMainWindow):
     def _select_brush_tool(self):
         """选择画笔工具"""
         if self.image_data is None:
+            self.statusbar.showMessage("请先加载图片")
             return
         
         self.canvas.set_tool(self.canvas.brush_tool)
-        self.brush_action.setChecked(True)
+        self.brush_button.setChecked(True)
         self.crop_action.setChecked(False)
         self.statusbar.showMessage("画笔工具已激活")
+        
+        # 确保 Canvas 获得焦点以接收键盘事件
+        self.canvas.setFocus()
     
     def _select_crop_tool(self):
         """选择裁剪工具"""
@@ -183,9 +197,13 @@ class MainWindow(QMainWindow):
             return
         
         self.canvas.set_tool(self.canvas.crop_tool)
-        self.brush_action.setChecked(False)
+        self.brush_button.setChecked(False)
         self.crop_action.setChecked(True)
         self.statusbar.showMessage("裁剪工具已激活")
+        
+        # 隐藏画笔设置面板
+        if hasattr(self, 'brush_settings_panel'):
+            self.brush_settings_panel.hide()
     
     def _open_file(self):
         """打开文件"""
@@ -363,5 +381,185 @@ class MainWindow(QMainWindow):
         self.redo_action.setEnabled(self.history_manager.can_redo())
         
         # 工具
-        self.brush_action.setEnabled(has_image)
+        self.brush_button.setEnabled(has_image)
         self.crop_action.setEnabled(has_image)
+    
+    def _create_brush_settings_panel(self):
+        """创建画笔设置面板"""
+        self.brush_settings_panel = QFrame(self)
+        self.brush_settings_panel.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
+        self.brush_settings_panel.setAttribute(Qt.WA_TranslucentBackground, False)
+        self.brush_settings_panel.setStyleSheet("""
+            QFrame {
+                background-color: #f5f5f5;
+                border: 1px solid #d0d0d0;
+                border-radius: 6px;
+            }
+            QLabel {
+                color: #333;
+                font-size: 12px;
+                padding: 2px;
+                background: transparent;
+                border: none;
+            }
+            QSpinBox {
+                padding: 4px 8px;
+                border: 1px solid #ccc;
+                border-radius: 3px;
+                background-color: white;
+                min-width: 80px;
+            }
+            QSpinBox::up-button, QSpinBox::down-button {
+                width: 16px;
+                border: none;
+                background-color: #e0e0e0;
+            }
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+                background-color: #d0d0d0;
+            }
+            QRadioButton {
+                color: #333;
+                font-size: 12px;
+                spacing: 6px;
+                background: transparent;
+                border: none;
+            }
+            QRadioButton::indicator {
+                width: 16px;
+                height: 16px;
+            }
+        """)
+        
+        # 安装事件过滤器以检测鼠标离开
+        self.brush_settings_panel.installEventFilter(self)
+        
+        layout = QVBoxLayout(self.brush_settings_panel)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+        
+        # 大小设置
+        size_layout = QHBoxLayout()
+        size_layout.setSpacing(8)
+        size_label = QLabel("大小:")
+        size_label.setMinimumWidth(40)
+        self.brush_size_spinbox = QSpinBox()
+        self.brush_size_spinbox.setRange(1, 500)
+        self.brush_size_spinbox.setValue(int(self.canvas.brush_tool.size))
+        self.brush_size_spinbox.valueChanged.connect(self._on_brush_size_changed)
+        size_layout.addWidget(size_label)
+        size_layout.addWidget(self.brush_size_spinbox)
+        size_layout.addStretch()
+        layout.addLayout(size_layout)
+        
+        # 颜色设置 - 标题和选项在同一行
+        color_layout = QHBoxLayout()
+        color_layout.setSpacing(12)
+        color_label = QLabel("颜色:")
+        color_label.setMinimumWidth(40)
+        color_layout.addWidget(color_label)
+        
+        self.color_button_group = QButtonGroup(self)
+        
+        self.black_radio = QRadioButton("黑色")
+        self.white_radio = QRadioButton("白色")
+        
+        self.color_button_group.addButton(self.black_radio, 0)
+        self.color_button_group.addButton(self.white_radio, 255)
+        
+        # 设置初始选中状态
+        if self.canvas.brush_tool.color == 0:
+            self.black_radio.setChecked(True)
+        else:
+            self.white_radio.setChecked(True)
+        
+        self.color_button_group.buttonClicked.connect(self._on_brush_color_changed)
+        
+        color_layout.addWidget(self.black_radio)
+        color_layout.addWidget(self.white_radio)
+        color_layout.addStretch()
+        layout.addLayout(color_layout)
+        
+        self.brush_settings_panel.setLayout(layout)
+        self.brush_settings_panel.hide()
+    
+    def _on_brush_size_changed(self, value: int):
+        """画笔大小改变"""
+        self.canvas.brush_tool.size = float(value)
+    
+    def _on_brush_color_changed(self):
+        """画笔颜色改变"""
+        color = self.color_button_group.checkedId()
+        self.canvas.brush_tool.color = color
+    
+    def eventFilter(self, obj, event):
+        """事件过滤器 - 处理画笔按钮和设置面板的悬浮事件"""
+        if obj == self.brush_button:
+            event_type = event.type()
+            
+            # 不拦截鼠标点击事件，让按钮正常处理
+            if event_type == event.Type.Enter:
+                # 鼠标进入画笔按钮 - 延迟显示设置面板，避免干扰点击
+                from PySide6.QtCore import QTimer
+                if not hasattr(self, '_show_timer'):
+                    self._show_timer = QTimer()
+                    self._show_timer.setSingleShot(True)
+                    self._show_timer.timeout.connect(self._show_brush_settings)
+                self._show_timer.start(500)  # 延迟500ms显示
+                return False
+            elif event_type == event.Type.Leave:
+                # 鼠标离开画笔按钮
+                if hasattr(self, '_show_timer'):
+                    self._show_timer.stop()
+                # 延迟检查是否需要隐藏
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(100, self._check_hide_brush_settings)
+                return False
+        
+        elif obj == self.brush_settings_panel:
+            if event.type() == event.Type.Leave:
+                # 鼠标离开设置面板，延迟检查是否需要隐藏
+                from PySide6.QtCore import QTimer
+                QTimer.singleShot(100, self._check_hide_brush_settings)
+                return False
+        
+        return super().eventFilter(obj, event)
+    
+    def _check_hide_brush_settings(self):
+        """检查是否需要隐藏画笔设置面板"""
+        if not hasattr(self, 'brush_settings_panel'):
+            return
+        
+        # 获取鼠标全局位置
+        from PySide6.QtGui import QCursor
+        mouse_pos = QCursor.pos()
+        
+        # 检查鼠标是否在按钮或面板区域内
+        button_rect = self.brush_button.rect()
+        button_global_rect = button_rect.translated(self.brush_button.mapToGlobal(QPoint(0, 0)))
+        
+        panel_rect = self.brush_settings_panel.rect()
+        panel_global_rect = panel_rect.translated(self.brush_settings_panel.pos())
+        
+        # 如果鼠标不在按钮或面板内，隐藏面板
+        if not button_global_rect.contains(mouse_pos) and not panel_global_rect.contains(mouse_pos):
+            self.brush_settings_panel.hide()
+    
+    def _show_brush_settings(self):
+        """显示画笔设置面板"""
+        if self.image_data is None:
+            return
+        
+        # 更新设置值
+        self.brush_size_spinbox.setValue(int(self.canvas.brush_tool.size))
+        if self.canvas.brush_tool.color == 0:
+            self.black_radio.setChecked(True)
+        else:
+            self.white_radio.setChecked(True)
+        
+        # 计算位置（在画笔按钮下方）
+        button_pos = self.brush_button.mapToGlobal(QPoint(0, 0))
+        panel_x = button_pos.x()
+        panel_y = button_pos.y() + self.brush_button.height()
+        
+        self.brush_settings_panel.move(panel_x, panel_y)
+        self.brush_settings_panel.show()

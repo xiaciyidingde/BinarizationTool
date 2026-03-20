@@ -28,6 +28,9 @@ class BrushTool:
         self.opacity: float = 1.0  # 0.0-1.0，虽然二值化图片不需要，但保留接口
         self.spacing: float = 0.25  # 笔刷间距（相对于大小），PS 默认 25%
         
+        # 十字准星显示阈值（视图大小）
+        self.crosshair_threshold: float = 30.0  # 当圆圈小于此值时显示十字
+        
         self.is_drawing: bool = False
         self.current_stroke: Optional[BrushStroke] = None
         self.last_draw_pos: Optional[tuple[int, int]] = None
@@ -114,7 +117,7 @@ class BrushTool:
         """
         渲染画笔光标
         
-        绘制圆形外圈显示画笔大小，加上十字准星（Photoshop 风格）。
+        绘制圆形外圈显示画笔大小。当圆圈太小时在圆圈外显示红色十字准星。
         
         Args:
             painter: Qt QPainter 对象
@@ -123,43 +126,60 @@ class BrushTool:
             view_size: 画笔大小（视图坐标）
         """
         from PySide6.QtCore import Qt, QPointF
-        from PySide6.QtGui import QPen
+        from PySide6.QtGui import QPen, QColor
         
         # 保存当前画笔状态
         old_pen = painter.pen()
         
-        # 设置画笔光标样式
+        # === 第一层：绘制圆形外圈 ===
         pen = QPen(Qt.white, 1)
         pen.setStyle(Qt.SolidLine)
         painter.setPen(pen)
         
-        # 绘制圆形外圈
         radius = view_size / 2.0
         painter.drawEllipse(QPointF(view_x, view_y), radius, radius)
         
-        # 绘制黑色外圈（增强可见性）
+        # 绘制黑色虚线外圈（增强可见性）
         pen.setColor(Qt.black)
         pen.setWidth(1)
         pen.setStyle(Qt.DashLine)
         painter.setPen(pen)
         painter.drawEllipse(QPointF(view_x, view_y), radius, radius)
         
-        # 绘制十字准星
-        pen.setColor(Qt.white)
-        pen.setStyle(Qt.SolidLine)
-        painter.setPen(pen)
-        
-        crosshair_size = 5
-        # 水平线
-        painter.drawLine(
-            int(view_x - crosshair_size), int(view_y),
-            int(view_x + crosshair_size), int(view_y)
-        )
-        # 垂直线
-        painter.drawLine(
-            int(view_x), int(view_y - crosshair_size),
-            int(view_x), int(view_y + crosshair_size)
-        )
+        # === 第二层：绘制红色十字准星（在圆圈外，只在圆圈小时显示）===
+        if view_size < self.crosshair_threshold:
+            pen = QPen(QColor(255, 0, 0))  # 红色
+            pen.setWidth(2)  # 更粗的线条
+            pen.setStyle(Qt.SolidLine)
+            painter.setPen(pen)
+            
+            # 十字准星从圆圈边缘开始，向外延伸
+            gap = 2  # 圆圈和十字之间的间隙
+            crosshair_length = 8  # 十字线的长度
+            
+            # 水平线（左右两段，不穿过圆圈）
+            # 左边
+            painter.drawLine(
+                int(view_x - radius - gap - crosshair_length), int(view_y),
+                int(view_x - radius - gap), int(view_y)
+            )
+            # 右边
+            painter.drawLine(
+                int(view_x + radius + gap), int(view_y),
+                int(view_x + radius + gap + crosshair_length), int(view_y)
+            )
+            
+            # 垂直线（上下两段，不穿过圆圈）
+            # 上边
+            painter.drawLine(
+                int(view_x), int(view_y - radius - gap - crosshair_length),
+                int(view_x), int(view_y - radius - gap)
+            )
+            # 下边
+            painter.drawLine(
+                int(view_x), int(view_y + radius + gap),
+                int(view_x), int(view_y + radius + gap + crosshair_length)
+            )
         
         # 恢复画笔状态
         painter.setPen(old_pen)
