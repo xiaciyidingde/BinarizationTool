@@ -6,8 +6,8 @@ Canvas 画布组件
 
 from typing import Optional
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, Signal, QPoint
-from PySide6.QtGui import QPainter, QPixmap, QImage, QPaintEvent, QMouseEvent, QWheelEvent
+from PySide6.QtCore import Qt, Signal, QPoint, QUrl
+from PySide6.QtGui import QPainter, QPixmap, QImage, QPaintEvent, QMouseEvent, QWheelEvent, QDragEnterEvent, QDropEvent
 
 from ..models.view_transform import ViewTransform
 from ..models.image_data import ImageData
@@ -25,6 +25,7 @@ class Canvas(QWidget):
     
     # 信号
     image_modified = Signal()  # 图片被修改时发射
+    file_dropped = Signal(str)  # 文件拖放时发射，传递文件路径
     
     def __init__(self, parent=None):
         """
@@ -57,6 +58,7 @@ class Canvas(QWidget):
         # 设置
         self.setMouseTracking(True)  # 启用鼠标跟踪
         self.setFocusPolicy(Qt.StrongFocus)  # 接收键盘事件
+        self.setAcceptDrops(True)  # 启用拖放功能
     
     def set_image(self, image_data: ImageData):
         """
@@ -257,6 +259,31 @@ class Canvas(QWidget):
         if event.key() == Qt.Key_Space:
             self.space_pressed = False
             self.setCursor(Qt.ArrowCursor)
+    
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """拖动进入事件"""
+        if event.mimeData().hasUrls():
+            # 检查是否包含图片文件
+            urls = event.mimeData().urls()
+            if urls:
+                file_path = urls[0].toLocalFile()
+                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+    
+    def dropEvent(self, event: QDropEvent):
+        """拖放事件"""
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if urls:
+                file_path = urls[0].toLocalFile()
+                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+                    # 发射信号通知主窗口加载文件
+                    self.file_dropped.emit(file_path)
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
     
     def _render_image(self, painter: QPainter):
         """

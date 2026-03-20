@@ -5,6 +5,8 @@
 """
 
 from typing import Optional
+import os
+from datetime import datetime
 from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
                                 QSplitter, QToolBar, QFileDialog, QMessageBox,
                                 QPushButton, QLabel, QStatusBar, QSizePolicy)
@@ -34,9 +36,6 @@ class MainWindow(QMainWindow):
         self.image_data: Optional[ImageData] = None
         self.history_manager = HistoryManager()
         self.current_file_path: Optional[str] = None
-        
-        # 模式状态
-        self.is_edit_mode = False
         
         # 设置窗口
         self.setWindowTitle("BinarizationTool - 二值化图片编辑器")
@@ -150,21 +149,6 @@ class MainWindow(QMainWindow):
         # 工具选择
         toolbar.addAction(self.brush_action)
         toolbar.addAction(self.crop_action)
-        
-        # 添加弹性空间
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        toolbar.addWidget(spacer)
-        
-        # 模式切换按钮和标签
-        self.mode_label = QLabel("当前模式: 预览模式")
-        self.mode_label.setStyleSheet("padding: 0 10px;")
-        toolbar.addWidget(self.mode_label)
-        
-        self.mode_button = QPushButton("进入编辑模式")
-        self.mode_button.setCheckable(True)
-        self.mode_button.clicked.connect(self._toggle_mode)
-        toolbar.addWidget(self.mode_button)
     
     def create_statusbar(self):
         """创建状态栏"""
@@ -179,35 +163,13 @@ class MainWindow(QMainWindow):
         
         # Canvas 图片修改
         self.canvas.image_modified.connect(self._on_image_modified)
-    
-    def _toggle_mode(self):
-        """切换预览/编辑模式"""
-        self.is_edit_mode = not self.is_edit_mode
         
-        if self.is_edit_mode:
-            # 进入编辑模式
-            self.mode_button.setText("退出编辑模式")
-            self.mode_label.setText("当前模式: 编辑模式")
-            self.binarization_panel.set_enabled(False)
-            
-            # 默认选择画笔工具
-            self._select_brush_tool()
-        else:
-            # 返回预览模式
-            self.mode_button.setText("进入编辑模式")
-            self.mode_label.setText("当前模式: 预览模式")
-            self.binarization_panel.set_enabled(True)
-            
-            # 取消工具选择
-            self.canvas.set_tool(None)
-            self.brush_action.setChecked(False)
-            self.crop_action.setChecked(False)
-        
-        self._update_ui_state()
+        # Canvas 文件拖放
+        self.canvas.file_dropped.connect(self._load_file_from_path)
     
     def _select_brush_tool(self):
         """选择画笔工具"""
-        if not self.is_edit_mode:
+        if self.image_data is None:
             return
         
         self.canvas.set_tool(self.canvas.brush_tool)
@@ -217,7 +179,7 @@ class MainWindow(QMainWindow):
     
     def _select_crop_tool(self):
         """选择裁剪工具"""
-        if not self.is_edit_mode:
+        if self.image_data is None:
             return
         
         self.canvas.set_tool(self.canvas.crop_tool)
@@ -235,66 +197,95 @@ class MainWindow(QMainWindow):
         )
         
         if file_path:
-            try:
-                # 加载图片（不自动二值化）
-                self.image_data = load_image(file_path, binarize=False)
-                
-                # 应用预处理和二值化
-                preprocess_params = self.binarization_panel.get_preprocess_params()
-                method = self.binarization_panel.get_method()
-                threshold = self.binarization_panel.get_threshold()
-                
-                # 预处理
-                preprocessed = BinarizationEngine.apply_preprocess(
-                    self.image_data.original_pixels.copy(),
-                    **preprocess_params
-                )
-                
-                # 二值化
-                binary_pixels = BinarizationEngine.apply_threshold(
-                    preprocessed, method, threshold
-                )
-                
-                self.image_data.pixels = binary_pixels
-                
-                # 设置到 Canvas
-                self.canvas.set_image(self.image_data)
-                
-                # 清除历史并保存初始状态
-                self.history_manager.clear()
-                self.history_manager.push_state(self.image_data)
-                
-                # 保存文件路径
-                self.current_file_path = file_path
-                
-                # 更新状态
-                self.statusbar.showMessage(f"已加载: {file_path}")
-                self._update_ui_state()
-                
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"无法加载图片:\n{str(e)}")
+            self._load_file_from_path(file_path)
+    
+    def _load_file_from_path(self, file_path: str):
+        """从文件路径加载图片（支持打开文件和拖放）"""
+        try:
+            # 加载图片（不自动二值化）
+            self.image_data = load_image(file_path, binarize=False)
+            
+            # 应用预处理和二值化
+            preprocess_params = self.binarization_panel.get_preprocess_params()
+            method = self.binarization_panel.get_method()
+            threshold = self.binarization_panel.get_threshold()
+            
+            # 预处理
+            preprocessed = BinarizationEngine.apply_preprocess(
+                self.image_data.original_pixels.copy(),
+                **preprocess_params
+            )
+            
+            # 二值化
+            binary_pixels = BinarizationEngine.apply_threshold(
+                preprocessed, method, threshold
+            )
+            
+            self.image_data.pixels = binary_pixels
+            
+            # 设置到 Canvas
+            self.canvas.set_image(self.image_data)
+            
+            # 清除历史并保存初始状态
+            self.history_manager.clear()
+            self.history_manager.push_state(self.image_data)
+            
+            # 保存文件路径
+            self.current_file_path = file_path
+            
+            # 更新状态
+            self.statusbar.showMessage(f"已加载: {file_path}")
+            self._update_ui_state()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"无法加载图片:\n{str(e)}")
     
     def _save_file(self):
-        """保存文件"""
-        if self.current_file_path:
-            self._save_to_file(self.current_file_path)
-        else:
-            self._save_file_as()
-    
-    def _save_file_as(self):
-        """另存为"""
+        """保存文件（默认另存为，文件名添加时间戳）"""
         if self.image_data is None:
             return
+        
+        # 生成默认文件名
+        default_name = self._generate_default_save_name()
         
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "保存图片",
-            "",
+            default_name,
             "PNG 图片 (*.png);;JPEG 图片 (*.jpg);;BMP 图片 (*.bmp)"
         )
         
         if file_path:
             self._save_to_file(file_path)
+    
+    def _save_file_as(self):
+        """另存为"""
+        # 与 _save_file 行为一致
+        self._save_file()
+    
+    def _generate_default_save_name(self) -> str:
+        """
+        生成默认保存文件名（原名_时间戳）
+        
+        Returns:
+            默认文件名路径
+        """
+        if self.current_file_path:
+            # 获取原文件信息
+            dir_path = os.path.dirname(self.current_file_path)
+            file_name = os.path.basename(self.current_file_path)
+            name_without_ext, ext = os.path.splitext(file_name)
+            
+            # 生成时间戳
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            
+            # 组合新文件名
+            new_name = f"{name_without_ext}_{timestamp}{ext}"
+            return os.path.join(dir_path, new_name)
+        else:
+            # 如果没有原文件路径，使用默认名称
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            return f"image_{timestamp}.png"
     
     def _save_to_file(self, file_path: str):
         """保存到文件"""
@@ -329,7 +320,7 @@ class MainWindow(QMainWindow):
     
     def _on_parameters_changed(self, preprocess_params: dict, method: int, threshold: int):
         """参数改变（预处理或二值化）"""
-        if self.image_data is None or self.is_edit_mode:
+        if self.image_data is None:
             return
         
         try:
@@ -344,8 +335,8 @@ class MainWindow(QMainWindow):
                 preprocessed, method, threshold
             )
             
-            # 更新图片数据
-            self.image_data.pixels = binary_pixels
+            # 只更新基础图层，保留编辑图层
+            self.image_data.update_base_layer(binary_pixels)
             self.canvas.cache_valid = False
             self.canvas.update()
             
@@ -371,9 +362,6 @@ class MainWindow(QMainWindow):
         self.undo_action.setEnabled(self.history_manager.can_undo())
         self.redo_action.setEnabled(self.history_manager.can_redo())
         
-        # 模式切换
-        self.mode_button.setEnabled(has_image)
-        
         # 工具
-        self.brush_action.setEnabled(has_image and self.is_edit_mode)
-        self.crop_action.setEnabled(has_image and self.is_edit_mode)
+        self.brush_action.setEnabled(has_image)
+        self.crop_action.setEnabled(has_image)
