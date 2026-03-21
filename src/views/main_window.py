@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
                                 QSplitter, QToolBar, QFileDialog, QMessageBox,
                                 QPushButton, QLabel, QStatusBar, QSizePolicy,
                                 QSpinBox, QRadioButton, QButtonGroup, QFrame)
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, QTimer
 from PySide6.QtGui import QAction, QIcon, QEnterEvent
 
 from .canvas import Canvas
@@ -19,8 +19,12 @@ from .binarization_panel import BinarizationPanel
 from .shortcut_handler import ShortcutHandler
 from ..models.image_data import ImageData
 from ..models.history_manager import HistoryManager
+from ..models.brush_tool import BrushTool
+from ..models.selection_tool import SelectionTool
 from ..utils.file_io import load_image, save_image
 from ..utils.binarization_engine import BinarizationEngine
+from ..utils.binarization_worker import BinarizationWorker
+from ..utils.theme_manager import ThemeManager
 
 
 class MainWindow(QMainWindow):
@@ -34,15 +38,25 @@ class MainWindow(QMainWindow):
         """初始化主窗口"""
         super().__init__()
         
+        # 主题管理器
+        self.theme_manager = ThemeManager()
+        
         # 数据
         self.image_data: Optional[ImageData] = None
         self.history_manager = HistoryManager()
         self.current_file_path: Optional[str] = None
         self.saved_file_path: Optional[str] = None  # 记录已保存的文件路径
         
+        # 异步二值化
+        self.binarization_worker: Optional[BinarizationWorker] = None
+        self.pending_binarization_params: Optional[tuple] = None  # (preprocess_params, method, threshold)
+        self.binarization_debounce_timer = QTimer()
+        self.binarization_debounce_timer.setSingleShot(True)
+        self.binarization_debounce_timer.timeout.connect(self._start_binarization)
+        
         # 设置窗口
         self.setWindowTitle("BinarizationTool - 二值化图片编辑器")
-        self.setGeometry(100, 100, 1200, 800)
+        self.setGeometry(100, 100, 1450, 800)
         
         # 创建 UI
         self.setup_ui()
@@ -56,6 +70,20 @@ class MainWindow(QMainWindow):
         # 初始状态
         self._update_ui_state()
     
+    def closeEvent(self, event):
+        """窗口关闭事件 - 清理资源"""
+        # 停止防抖定时器
+        if self.binarization_debounce_timer.isActive():
+            self.binarization_debounce_timer.stop()
+        
+        # 取消并等待后台线程完成
+        if self.binarization_worker is not None and self.binarization_worker.isRunning():
+            self.binarization_worker.cancel()
+            self.binarization_worker.wait(1000)  # 最多等待1秒
+        
+        # 接受关闭事件
+        event.accept()
+    
     def setup_ui(self):
         """设置 UI 布局"""
         # 中央部件
@@ -66,66 +94,95 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout(central_widget)
         main_layout.setContentsMargins(0, 0, 0, 0)
         
-        # 创建分割器
-        splitter = QSplitter(Qt.Horizontal)
+        # 创建主分割器（左侧面板 + 中右部分）
+        main_splitter = QSplitter(Qt.Horizontal)
+        main_splitter.setHandleWidth(0)  # 设置分隔条宽度为 0
+        main_splitter.setChildrenCollapsible(False)  # 禁止折叠
         
         # 左侧：二值化面板
         self.binarization_panel = BinarizationPanel()
-        self.binarization_panel.setMaximumWidth(300)
-        self.binarization_panel.setMinimumWidth(200)
-        splitter.addWidget(self.binarization_panel)
+        self.binarization_panel.setMaximumWidth(290)
+        self.binarization_panel.setMinimumWidth(290)
+        main_splitter.addWidget(self.binarization_panel)
         
-        # 右侧：Canvas
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
-        right_layout.setContentsMargins(0, 0, 0, 0)
+        # 中右部分：Canvas + 属性面板
+        center_right_splitter = QSplitter(Qt.Horizontal)
         
-        # Canvas
+        # 中间：Canvas
         self.canvas = Canvas()
-        right_layout.addWidget(self.canvas)
+        center_right_splitter.addWidget(self.canvas)
         
-        splitter.addWidget(right_widget)
+        # 右侧：属性面板
+        from .properties_panel import PropertiesPanel
+        self.properties_panel = PropertiesPanel()
+        center_right_splitter.addWidget(self.properties_panel)
         
-        # 设置分割器比例
-        splitter.setStretchFactor(0, 0)
-        splitter.setStretchFactor(1, 1)
+        # 设置中右分割器比例
+        center_right_splitter.setStretchFactor(0, 1)  # Canvas 可伸缩
+        center_right_splitter.setStretchFactor(1, 0)  # 属性面板固定
         
-        main_layout.addWidget(splitter)
+        main_splitter.addWidget(center_right_splitter)
+        
+        # 设置主分割器比例
+        main_splitter.setStretchFactor(0, 0)  # 左侧面板固定
+        main_splitter.setStretchFactor(1, 1)  # 中右部分可伸缩
+        
+        # 禁用左侧面板的拖动（通过设置固定宽度已经实现）
+        main_splitter.handle(1).setEnabled(False)  # 禁用第一个分隔条
+        
+        main_layout.addWidget(main_splitter)
     
     def create_actions(self):
         """创建动作"""
         # 文件菜单动作
-        self.open_action = QAction("打开 (Ctrl+O)", self)
+        self.open_action = QAction("打开", self)
         self.open_action.setShortcut("Ctrl+O")
+        self.open_action.setToolTip("打开图片 (Ctrl+O)")
         self.open_action.triggered.connect(self._open_file)
+        self.addAction(self.open_action)  # 添加到主窗口以启用快捷键
         
-        self.save_action = QAction("保存 (Ctrl+S)", self)
+        self.save_action = QAction("保存", self)
         self.save_action.setShortcut("Ctrl+S")
+        self.save_action.setToolTip("保存图片 (Ctrl+S)")
         self.save_action.triggered.connect(self._save_file)
+        self.addAction(self.save_action)  # 添加到主窗口以启用快捷键
         
-        self.save_as_action = QAction("另存为 (Ctrl+Shift+S)", self)
+        self.save_as_action = QAction("另存为", self)
         self.save_as_action.setShortcut("Ctrl+Shift+S")
+        self.save_as_action.setToolTip("另存为 (Ctrl+Shift+S)")
         self.save_as_action.triggered.connect(self._save_file_as)
+        self.addAction(self.save_as_action)  # 添加到主窗口以启用快捷键
         
-        self.exit_action = QAction("退出 (Ctrl+Q)", self)
+        self.exit_action = QAction("退出", self)
         self.exit_action.setShortcut("Ctrl+Q")
+        self.exit_action.setToolTip("退出程序 (Ctrl+Q)")
         self.exit_action.triggered.connect(self.close)
+        self.addAction(self.exit_action)  # 添加到主窗口以启用快捷键
         
         # 编辑菜单动作
-        self.undo_action = QAction("后退 (Ctrl+Z)", self)
+        self.undo_action = QAction("后退", self)
         self.undo_action.setShortcut("Ctrl+Z")
         self.undo_action.setToolTip("后退到上一步 (Ctrl+Z)")
         self.undo_action.triggered.connect(self._undo)
+        self.addAction(self.undo_action)  # 添加到主窗口以启用快捷键
         
-        self.redo_action = QAction("前进 (Ctrl+Y)", self)
+        self.redo_action = QAction("前进", self)
         self.redo_action.setShortcut("Ctrl+Y")
         self.redo_action.setToolTip("前进到下一步 (Ctrl+Y)")
         self.redo_action.triggered.connect(self._redo)
+        self.addAction(self.redo_action)  # 添加到主窗口以启用快捷键
+        
+        self.reset_action = QAction("重置", self)
+        self.reset_action.setShortcut("Ctrl+R")
+        self.reset_action.setToolTip("重置到初始状态 (Ctrl+R)")
+        self.reset_action.triggered.connect(self._reset_to_initial)
+        self.addAction(self.reset_action)  # 添加到主窗口以启用快捷键
         
         # 工具动作 - 创建自定义按钮以支持悬浮事件
-        self.brush_button = QPushButton("画笔工具 (B)")
+        self.brush_button = QPushButton("画笔工具")
         self.brush_button.setCheckable(True)
         self.brush_button.setFlat(True)  # 扁平样式，类似 QAction
+        self.brush_button.setToolTip("画笔工具 (B)")
         self.brush_button.clicked.connect(self._select_brush_tool)
         self.brush_button.installEventFilter(self)
         
@@ -138,15 +195,17 @@ class MainWindow(QMainWindow):
         # 初始化快捷键处理器（统一管理工具快捷键）
         self.shortcut_handler = ShortcutHandler(self)
         
-        self.crop_action = QAction("裁剪工具 (C)", self)
+        self.crop_action = QAction("裁剪工具", self)
         self.crop_action.setShortcut("C")
         self.crop_action.setCheckable(True)
+        self.crop_action.setToolTip("裁剪工具 (C)")
         self.crop_action.triggered.connect(self._select_crop_tool)
         
         # 选择工具动作
-        self.selection_tool_action = QAction("选择工具 (W)", self)
+        self.selection_tool_action = QAction("选择工具", self)
         self.selection_tool_action.setShortcut("W")
         self.selection_tool_action.setCheckable(True)
+        self.selection_tool_action.setToolTip("选择工具 (W)")
         self.selection_tool_action.triggered.connect(self._select_selection_tool)
         self.addAction(self.selection_tool_action)  # 添加到主窗口以启用快捷键
         
@@ -154,10 +213,12 @@ class MainWindow(QMainWindow):
         self.deselect_action = QAction("取消选择 (Ctrl+D)", self)
         self.deselect_action.setShortcut("Ctrl+D")
         self.deselect_action.triggered.connect(self._deselect)
+        self.addAction(self.deselect_action)  # 添加到主窗口以启用快捷键
         
         self.invert_selection_action = QAction("反选 (Ctrl+Shift+I)", self)
         self.invert_selection_action.setShortcut("Ctrl+Shift+I")
         self.invert_selection_action.triggered.connect(self._invert_selection)
+        self.addAction(self.invert_selection_action)  # 添加到主窗口以启用快捷键
         
         self.select_black_action = QAction("选择黑色", self)
         self.select_black_action.triggered.connect(lambda: self._select_by_color(0))
@@ -170,44 +231,92 @@ class MainWindow(QMainWindow):
         self.toolbar = QToolBar("工具")
         self.toolbar.setMovable(False)
         self.toolbar.setContextMenuPolicy(Qt.PreventContextMenu)  # 禁用右键菜单
-        self.addToolBar(self.toolbar)
         
-        # 先创建设置面板（在添加按钮之前）
-        self._create_brush_settings_panel()
-        self._create_selection_tool_settings_panel()
+        # 创建工具栏容器
+        toolbar_container = QWidget()
+        toolbar_layout = QHBoxLayout(toolbar_container)
+        toolbar_layout.setContentsMargins(8, 4, 8, 4)
+        toolbar_layout.setSpacing(8)
         
-        # 文件操作
-        self.toolbar.addAction(self.open_action)
-        self.toolbar.addAction(self.save_action)
-        self.toolbar.addSeparator()
+        # 创建按钮辅助函数
+        def create_toolbar_button(text, tooltip, checkable=False):
+            btn = QPushButton(text)
+            btn.setCheckable(checkable)
+            btn.setToolTip(tooltip)
+            btn.setMinimumHeight(28)
+            btn.setMaximumHeight(28)
+            return btn
         
-        # 编辑操作 - 后退/前进
-        self.toolbar.addAction(self.undo_action)
-        self.toolbar.addAction(self.redo_action)
-        self.toolbar.addSeparator()
+        # 创建按钮组容器辅助函数
+        def create_button_group():
+            group = QFrame()
+            group.setObjectName("toolbarButtonGroup")
+            group_layout = QHBoxLayout(group)
+            group_layout.setContentsMargins(3, 1, 3, 1)
+            group_layout.setSpacing(0)
+            return group, group_layout
+            group_layout.setSpacing(0)
+            return group, group_layout
         
-        # 工具选择 - 使用自定义按钮
-        self.toolbar.addWidget(self.brush_button)
-        self.toolbar.addAction(self.crop_action)
+        # 文件操作组
+        file_group, file_layout = create_button_group()
+        open_btn = create_toolbar_button("打开", "打开图片 (Ctrl+O)")
+        open_btn.clicked.connect(self._open_file)
+        file_layout.addWidget(open_btn)
         
-        # 选择工具按钮（自定义以支持悬浮面板）
-        self.selection_tool_button = QPushButton("选择工具 (W)")
-        self.selection_tool_button.setCheckable(True)
-        self.selection_tool_button.setFlat(True)  # 扁平样式，类似 QAction
-        self.selection_tool_button.setEnabled(False)  # 初始状态为禁用
+        save_btn = create_toolbar_button("保存", "保存图片 (Ctrl+S)")
+        save_btn.clicked.connect(self._save_file)
+        file_layout.addWidget(save_btn)
+        self.save_action_btn = save_btn
+        toolbar_layout.addWidget(file_group)
+        
+        # 编辑操作组
+        edit_group, edit_layout = create_button_group()
+        undo_btn = create_toolbar_button("后退", "后退到上一步 (Ctrl+Z)")
+        undo_btn.clicked.connect(self._undo)
+        edit_layout.addWidget(undo_btn)
+        self.undo_action_btn = undo_btn
+        
+        redo_btn = create_toolbar_button("前进", "前进到下一步 (Ctrl+Y)")
+        redo_btn.clicked.connect(self._redo)
+        edit_layout.addWidget(redo_btn)
+        self.redo_action_btn = redo_btn
+        
+        reset_btn = create_toolbar_button("重置", "重置到初始状态 (Ctrl+R)")
+        reset_btn.clicked.connect(self._reset_to_initial)
+        edit_layout.addWidget(reset_btn)
+        self.reset_action_btn = reset_btn
+        toolbar_layout.addWidget(edit_group)
+        
+        # 工具选择组
+        tool_group, tool_layout = create_button_group()
+        self.brush_button = create_toolbar_button("画笔", "画笔工具 (B)", checkable=True)
+        self.brush_button.clicked.connect(self._select_brush_tool)
+        self.brush_button.installEventFilter(self)
+        tool_layout.addWidget(self.brush_button)
+        
+        self.crop_button = create_toolbar_button("裁剪", "裁剪工具 (C)", checkable=True)
+        self.crop_button.clicked.connect(self._select_crop_tool)
+        tool_layout.addWidget(self.crop_button)
+        
+        self.selection_tool_button = create_toolbar_button("选择", "选择工具 (W)", checkable=True)
+        self.selection_tool_button.setEnabled(False)
         self.selection_tool_button.clicked.connect(self._select_selection_tool)
         self.selection_tool_button.installEventFilter(self)
-        self.toolbar.addWidget(self.selection_tool_button)
+        tool_layout.addWidget(self.selection_tool_button)
+        toolbar_layout.addWidget(tool_group)
         
-        # 添加弹性空间，将后续内容推到右边
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        self.toolbar.addWidget(spacer)
+        # 添加弹性空间
+        toolbar_layout.addStretch()
         
-        # 当前工具显示（右对齐）
+        # 当前工具显示
         self.current_tool_label = QLabel("当前工具：无")
-        self.current_tool_label.setStyleSheet("padding: 0 10px; color: #666;")
-        self.toolbar.addWidget(self.current_tool_label)
+        self.current_tool_label.setStyleSheet("padding: 0 10px; color: #495057; font-size: 14px; font-weight: 500;")
+        toolbar_layout.addWidget(self.current_tool_label)
+        
+        # 将容器添加到工具栏
+        self.addToolBar(self.toolbar)
+        self.toolbar.addWidget(toolbar_container)
     
     def create_statusbar(self):
         """创建状态栏"""
@@ -229,6 +338,12 @@ class MainWindow(QMainWindow):
         
         # Canvas 文件拖放
         self.canvas.file_dropped.connect(self._load_file_from_path)
+        
+        # Canvas 缩放变化
+        self.canvas.zoom_changed.connect(self.properties_panel.set_zoom_level)
+        
+        # 属性面板工具设置信号
+        self._connect_tool_settings()
     
     def _create_menus(self):
         """创建菜单栏"""
@@ -263,11 +378,13 @@ class MainWindow(QMainWindow):
         
         self.canvas.set_tool(self.canvas.brush_tool)
         self.brush_button.setChecked(True)
-        self.crop_action.setChecked(False)
-        self.selection_tool_action.setChecked(False)
+        self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(False)
         self.current_tool_label.setText("当前工具：画笔")
         self.statusbar.showMessage("画笔工具已激活")
+        
+        # 显示画笔工具设置
+        self.properties_panel.show_brush_settings()
         
         # 确保 Canvas 获得焦点以接收键盘事件
         self.canvas.setFocus()
@@ -279,11 +396,13 @@ class MainWindow(QMainWindow):
         
         self.canvas.set_tool(self.canvas.crop_tool)
         self.brush_button.setChecked(False)
-        self.crop_action.setChecked(True)
-        self.selection_tool_action.setChecked(False)
+        self.crop_button.setChecked(True)
         self.selection_tool_button.setChecked(False)
         self.current_tool_label.setText("当前工具：裁剪")
         self.statusbar.showMessage("裁剪工具已激活")
+        
+        # 隐藏所有工具设置（裁剪工具没有设置）
+        self.properties_panel.hide_all_tool_settings()
     
     def _select_selection_tool(self):
         """选择选择工具"""
@@ -293,12 +412,14 @@ class MainWindow(QMainWindow):
         
         self.canvas.set_tool(self.canvas.selection_tool)
         self.brush_button.setChecked(False)
-        self.crop_action.setChecked(False)
-        self.selection_tool_action.setChecked(False)
+        self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(True)
         self.current_tool_label.setText("当前工具：选择")
         mode_text = "添加" if self.canvas.selection_tool.selection_mode == 'add' else "删除"
         self.statusbar.showMessage(f"选择工具已激活 - 模式：{mode_text}")
+        
+        # 显示选择工具设置
+        self.properties_panel.show_selection_settings()
         
         # 确保 Canvas 获得焦点以接收键盘事件
         self.canvas.setFocus()
@@ -314,6 +435,10 @@ class MainWindow(QMainWindow):
         pixels = self.image_data.get_current_pixels()
         self.canvas.tile_cache.set_image(pixels, None)
         self.canvas.update()
+        
+        # 保存到历史管理器
+        self.history_manager.push_state(self.image_data)
+        
         self._update_ui_state()  # 更新 UI 状态
         self.statusbar.showMessage("已取消选择")
     
@@ -332,6 +457,10 @@ class MainWindow(QMainWindow):
         pixels = self.image_data.get_current_pixels()
         self.canvas.tile_cache.set_image(pixels, self.image_data.selection_mask)
         self.canvas.update()
+        
+        # 保存到历史管理器（重要！）
+        self.history_manager.push_state(self.image_data)
+        
         self._update_ui_state()  # 更新 UI 状态
         self.statusbar.showMessage("已反选")
     
@@ -346,6 +475,10 @@ class MainWindow(QMainWindow):
         pixels = self.image_data.get_current_pixels()
         self.canvas.tile_cache.set_image(pixels, self.image_data.selection_mask)
         self.canvas.update()
+        
+        # 保存到历史管理器（重要！）
+        self.history_manager.push_state(self.image_data)
+        
         self._update_ui_state()  # 更新 UI 状态
         color_name = "黑色" if color == 0 else "白色"
         self.statusbar.showMessage(f"已选择所有{color_name}像素")
@@ -396,6 +529,9 @@ class MainWindow(QMainWindow):
             # 保存文件路径
             self.current_file_path = file_path
             self.saved_file_path = None  # 重置保存路径，新文件需要重新保存
+            
+            # 更新属性面板
+            self.properties_panel.set_image_info(self.image_data, file_path)
             
             # 更新状态
             self.statusbar.showMessage(f"已加载: {file_path}")
@@ -488,8 +624,15 @@ class MainWindow(QMainWindow):
         if self.history_manager.can_undo():
             self.image_data = self.history_manager.undo(self.image_data)
             self.canvas.set_image(self.image_data)
+            
+            # 同步选择工具的选区状态
+            if self.canvas.selection_tool:
+                self.canvas.selection_tool.selection_mask = self.image_data.selection_mask
+            
             self.statusbar.showMessage("已撤销")
             self._update_ui_state()
+            # 更新属性面板（撤销可能恢复裁剪前的尺寸）
+            self.properties_panel.set_image_info(self.image_data, self.current_file_path)
     
     def _redo(self):
         """重做"""
@@ -499,26 +642,111 @@ class MainWindow(QMainWindow):
         if self.history_manager.can_redo():
             self.image_data = self.history_manager.redo()
             self.canvas.set_image(self.image_data)
+            
+            # 同步选择工具的选区状态
+            if self.canvas.selection_tool:
+                self.canvas.selection_tool.selection_mask = self.image_data.selection_mask
+            
             self.statusbar.showMessage("已重做")
             self._update_ui_state()
+            # 更新属性面板（重做可能改变尺寸）
+            self.properties_panel.set_image_info(self.image_data, self.current_file_path)
+    
+    def _reset_to_initial(self):
+        """重置到初始状态"""
+        if self.image_data is None:
+            return
+        
+        # 检查是否有编辑内容
+        if not self._has_edits():
+            self.statusbar.showMessage("没有需要重置的编辑内容")
+            return
+        
+        # 弹窗确认
+        reply = QMessageBox.question(
+            self,
+            "确认重置",
+            "确定要重置到初始状态吗？\n\n这将清除所有画笔编辑和裁剪操作，恢复到刚打开图片时的二值化结果。\n此操作无法撤销。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            # 重新加载图片（最简单可靠的方式）
+            if self.current_file_path:
+                self._load_file_from_path(self.current_file_path)
+                self.statusbar.showMessage("已重置到初始状态")
+            else:
+                self.statusbar.showMessage("无法重置：未找到原始文件路径")
+    
+    def _has_edits(self) -> bool:
+        """
+        检查是否有编辑内容
+        
+        Returns:
+            True 如果有编辑内容（画笔编辑或裁剪），否则 False
+        """
+        if self.image_data is None:
+            return False
+        
+        # 检查是否有画笔编辑（转换为 Python bool）
+        has_brush_edits = (self.image_data.edit_mask is not None and 
+                          bool(self.image_data.edit_mask.any()))
+        
+        # 检查是否有裁剪（通过比较当前尺寸和原始尺寸）
+        has_crop = (self.image_data.pixels.shape != 
+                   self.image_data.original_pixels.shape)
+        
+        return has_brush_edits or has_crop
     
     def _on_parameters_changed(self, preprocess_params: dict, method: int, threshold: int):
-        """参数改变（预处理或二值化）"""
+        """参数改变（预处理或二值化）- 使用防抖和异步处理"""
+        if self.image_data is None:
+            return
+        
+        # 保存待处理的参数
+        self.pending_binarization_params = (preprocess_params, method, threshold)
+        
+        # 重启防抖定时器（150ms 延迟，避免频繁触发）
+        self.binarization_debounce_timer.start(150)
+        
+        # 显示处理中状态
+        self.statusbar.showMessage("处理中...")
+    
+    def _start_binarization(self):
+        """启动异步二值化处理"""
+        if self.image_data is None or self.pending_binarization_params is None:
+            return
+        
+        # 取消之前的工作线程
+        if self.binarization_worker is not None and self.binarization_worker.isRunning():
+            self.binarization_worker.cancel()
+            self.binarization_worker.wait()
+        
+        # 获取参数
+        preprocess_params, method, threshold = self.pending_binarization_params
+        
+        # 创建新的工作线程
+        self.binarization_worker = BinarizationWorker(
+            self.image_data.original_pixels,
+            preprocess_params,
+            method,
+            threshold
+        )
+        
+        # 连接信号
+        self.binarization_worker.finished.connect(self._on_binarization_finished)
+        self.binarization_worker.error.connect(self._on_binarization_error)
+        
+        # 启动线程
+        self.binarization_worker.start()
+    
+    def _on_binarization_finished(self, binary_pixels):
+        """二值化完成"""
         if self.image_data is None:
             return
         
         try:
-            # 先应用预处理
-            preprocessed = BinarizationEngine.apply_preprocess(
-                self.image_data.original_pixels.copy(),
-                **preprocess_params
-            )
-            
-            # 再应用二值化
-            binary_pixels = BinarizationEngine.apply_threshold(
-                preprocessed, method, threshold
-            )
-            
             # 只更新基础图层，保留编辑图层
             self.image_data.update_base_layer(binary_pixels)
             
@@ -527,9 +755,15 @@ class MainWindow(QMainWindow):
             self.canvas.tile_cache.set_image(pixels)
             
             self.canvas.update()
+            self.statusbar.showMessage("处理完成")
             
         except Exception as e:
-            QMessageBox.warning(self, "警告", f"图像处理失败:\n{str(e)}")
+            QMessageBox.warning(self, "警告", f"图像更新失败:\n{str(e)}")
+    
+    def _on_binarization_error(self, error_message: str):
+        """二值化出错"""
+        QMessageBox.warning(self, "警告", f"图像处理失败:\n{error_message}")
+        self.statusbar.showMessage("处理失败")
     
     def _on_image_modified(self):
         """图片被修改"""
@@ -537,26 +771,28 @@ class MainWindow(QMainWindow):
             # 保存到历史
             self.history_manager.push_state(self.image_data)
             self._update_ui_state()
+            
+            # 更新属性面板（裁剪后尺寸会变化）
+            self.properties_panel.set_image_info(self.image_data, self.current_file_path)
     
     def _update_ui_state(self):
         """更新 UI 状态"""
         has_image = self.image_data is not None
         
         # 文件操作
-        self.save_action.setEnabled(has_image)
-        self.save_as_action.setEnabled(has_image)
+        self.save_action_btn.setEnabled(has_image)
         
         # 编辑操作
-        self.undo_action.setEnabled(self.history_manager.can_undo())
-        self.redo_action.setEnabled(self.history_manager.can_redo())
+        self.undo_action_btn.setEnabled(self.history_manager.can_undo())
+        self.redo_action_btn.setEnabled(self.history_manager.can_redo())
+        self.reset_action_btn.setEnabled(has_image and self._has_edits())
         
         # 工具
         self.brush_button.setEnabled(has_image)
-        self.crop_action.setEnabled(has_image)
-        self.selection_tool_action.setEnabled(has_image)
-        self.selection_tool_button.setEnabled(has_image)  # 同步选择按钮状态
+        self.crop_button.setEnabled(has_image)
+        self.selection_tool_button.setEnabled(has_image)
         
-        # 选区操作
+        # 选区操作（保留 action 引用用于快捷键）
         has_selection = (self.image_data is not None and 
                         self.image_data.selection_mask is not None and
                         bool(self.image_data.selection_mask.any()))  # 转换为 Python bool
@@ -564,290 +800,6 @@ class MainWindow(QMainWindow):
         self.invert_selection_action.setEnabled(has_image)
         self.select_black_action.setEnabled(has_image)
         self.select_white_action.setEnabled(has_image)
-    
-    def _create_brush_settings_panel(self):
-        """创建画笔设置面板"""
-        self.brush_settings_panel = QFrame(self)
-        self.brush_settings_panel.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
-        self.brush_settings_panel.setAttribute(Qt.WA_TranslucentBackground, False)
-        self.brush_settings_panel.setStyleSheet("""
-            QFrame {
-                background-color: #f5f5f5;
-                border: 1px solid #d0d0d0;
-                border-radius: 6px;
-            }
-            QLabel {
-                color: #333;
-                font-size: 12px;
-                padding: 2px;
-                background: transparent;
-                border: none;
-            }
-            QSpinBox {
-                padding: 4px 8px;
-                border: 1px solid #ccc;
-                border-radius: 3px;
-                background-color: white;
-                min-width: 80px;
-            }
-            QSpinBox::up-button, QSpinBox::down-button {
-                width: 16px;
-                border: none;
-                background-color: #e0e0e0;
-            }
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-                background-color: #d0d0d0;
-            }
-            QRadioButton {
-                color: #333;
-                font-size: 12px;
-                spacing: 6px;
-                background: transparent;
-                border: none;
-            }
-            QRadioButton::indicator {
-                width: 16px;
-                height: 16px;
-            }
-        """)
-        
-        # 安装事件过滤器以检测鼠标离开
-        self.brush_settings_panel.installEventFilter(self)
-        
-        layout = QVBoxLayout(self.brush_settings_panel)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(12)
-        
-        # 大小设置
-        size_layout = QHBoxLayout()
-        size_layout.setSpacing(8)
-        size_label = QLabel("大小:")
-        size_label.setMinimumWidth(40)
-        self.brush_size_spinbox = QSpinBox()
-        self.brush_size_spinbox.setRange(1, 500)
-        self.brush_size_spinbox.setValue(10)  # 默认值
-        self.brush_size_spinbox.valueChanged.connect(self._on_brush_size_changed)
-        size_layout.addWidget(size_label)
-        size_layout.addWidget(self.brush_size_spinbox)
-        size_layout.addStretch()
-        layout.addLayout(size_layout)
-        
-        # 颜色设置 - 标题和选项在同一行
-        color_layout = QHBoxLayout()
-        color_layout.setSpacing(12)
-        color_label = QLabel("颜色:")
-        color_label.setMinimumWidth(40)
-        color_layout.addWidget(color_label)
-        
-        self.color_button_group = QButtonGroup(self)
-        
-        self.black_radio = QRadioButton("黑色")
-        self.white_radio = QRadioButton("白色")
-        
-        self.color_button_group.addButton(self.black_radio, 0)
-        self.color_button_group.addButton(self.white_radio, 255)
-        
-        # 设置初始选中状态（默认黑色）
-        self.black_radio.setChecked(True)
-        
-        self.color_button_group.buttonClicked.connect(self._on_brush_color_changed)
-        
-        color_layout.addWidget(self.black_radio)
-        color_layout.addWidget(self.white_radio)
-        color_layout.addStretch()
-        layout.addLayout(color_layout)
-        
-        self.brush_settings_panel.setLayout(layout)
-        self.brush_settings_panel.hide()
-    
-    def _on_brush_size_changed(self, value: int):
-        """画笔大小改变"""
-        self.canvas.brush_tool.size = float(value)
-    
-    def _on_brush_color_changed(self):
-        """画笔颜色改变"""
-        color = self.color_button_group.checkedId()
-        self.canvas.brush_tool.color = color
-    
-    def _create_selection_tool_settings_panel(self):
-        """创建选择设置面板"""
-        self.selection_tool_settings_panel = QFrame(self)
-        self.selection_tool_settings_panel.setWindowFlags(Qt.Popup | Qt.FramelessWindowHint)
-        self.selection_tool_settings_panel.setAttribute(Qt.WA_TranslucentBackground, False)
-        self.selection_tool_settings_panel.setStyleSheet("""
-            QFrame {
-                background-color: #f5f5f5;
-                border: 1px solid #d0d0d0;
-                border-radius: 6px;
-            }
-            QLabel {
-                color: #333;
-                font-size: 12px;
-                padding: 2px;
-                background: transparent;
-                border: none;
-            }
-            QSpinBox {
-                padding: 4px 8px;
-                border: 1px solid #ccc;
-                border-radius: 3px;
-                background-color: white;
-                min-width: 80px;
-            }
-            QSpinBox::up-button, QSpinBox::down-button {
-                width: 16px;
-                border: none;
-                background-color: #e0e0e0;
-            }
-            QSpinBox::up-button:hover, QSpinBox::down-button:hover {
-                background-color: #d0d0d0;
-            }
-            QRadioButton {
-                color: #333;
-                font-size: 12px;
-                spacing: 6px;
-                background: transparent;
-                border: none;
-            }
-            QRadioButton::indicator {
-                width: 16px;
-                height: 16px;
-            }
-            QPushButton {
-                padding: 6px 12px;
-                border: 1px solid #ccc;
-                border-radius: 3px;
-                background-color: white;
-                color: #333;
-                font-size: 12px;
-                min-width: 60px;
-            }
-            QPushButton:hover {
-                background-color: #f0f0f0;
-                border-color: #999;
-            }
-            QPushButton:pressed {
-                background-color: #e0e0e0;
-            }
-            QPushButton:disabled {
-                background-color: #f5f5f5;
-                color: #999;
-                border-color: #ddd;
-            }
-        """)
-        
-        # 安装事件过滤器以检测鼠标离开
-        self.selection_tool_settings_panel.installEventFilter(self)
-        
-        layout = QVBoxLayout(self.selection_tool_settings_panel)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(12)
-        
-        # 大小设置
-        size_layout = QHBoxLayout()
-        size_layout.setSpacing(8)
-        size_label = QLabel("范围:")
-        size_label.setMinimumWidth(40)
-        self.selection_tool_size_spinbox = QSpinBox()
-        self.selection_tool_size_spinbox.setRange(1, 500)
-        self.selection_tool_size_spinbox.setValue(50)  # 默认值
-        self.selection_tool_size_spinbox.valueChanged.connect(self._on_selection_tool_size_changed)
-        size_layout.addWidget(size_label)
-        size_layout.addWidget(self.selection_tool_size_spinbox)
-        size_layout.addStretch()
-        layout.addLayout(size_layout)
-        
-        # 模式设置
-        mode_layout = QHBoxLayout()
-        mode_layout.setSpacing(12)
-        mode_label = QLabel("模式:")
-        mode_label.setMinimumWidth(40)
-        mode_layout.addWidget(mode_label)
-        
-        self.mode_button_group = QButtonGroup(self)
-        
-        self.add_mode_radio = QRadioButton("添加")
-        self.subtract_mode_radio = QRadioButton("删除")
-        
-        self.mode_button_group.addButton(self.add_mode_radio, 0)
-        self.mode_button_group.addButton(self.subtract_mode_radio, 1)
-        
-        # 设置初始选中状态（默认添加模式）
-        self.add_mode_radio.setChecked(True)
-        
-        self.mode_button_group.buttonClicked.connect(self._on_selection_tool_mode_changed)
-        
-        mode_layout.addWidget(self.add_mode_radio)
-        mode_layout.addWidget(self.subtract_mode_radio)
-        mode_layout.addStretch()
-        layout.addLayout(mode_layout)
-        
-        # 颜色设置
-        color_layout = QHBoxLayout()
-        color_layout.setSpacing(12)
-        color_label = QLabel("颜色:")
-        color_label.setMinimumWidth(40)
-        color_layout.addWidget(color_label)
-        
-        self.wand_color_button_group = QButtonGroup(self)
-        
-        self.wand_black_radio = QRadioButton("黑色")
-        self.wand_white_radio = QRadioButton("白色")
-        
-        self.wand_color_button_group.addButton(self.wand_black_radio, 0)
-        self.wand_color_button_group.addButton(self.wand_white_radio, 1)
-        
-        # 设置初始选中状态（默认黑色）
-        self.wand_black_radio.setChecked(True)
-        
-        self.wand_color_button_group.buttonClicked.connect(self._on_selection_tool_color_changed)
-        
-        color_layout.addWidget(self.wand_black_radio)
-        color_layout.addWidget(self.wand_white_radio)
-        color_layout.addStretch()
-        layout.addLayout(color_layout)
-        
-        # 填充选区设置
-        fill_layout = QHBoxLayout()
-        fill_layout.setSpacing(12)
-        fill_label = QLabel("填充选区:")
-        fill_label.setMinimumWidth(40)
-        fill_layout.addWidget(fill_label)
-        
-        self.fill_black_button = QPushButton("填充黑色")
-        self.fill_black_button.clicked.connect(lambda: self._fill_selection(0))
-        fill_layout.addWidget(self.fill_black_button)
-        
-        self.fill_white_button = QPushButton("填充白色")
-        self.fill_white_button.clicked.connect(lambda: self._fill_selection(255))
-        fill_layout.addWidget(self.fill_white_button)
-        
-        fill_layout.addStretch()
-        layout.addLayout(fill_layout)
-        
-        self.selection_tool_settings_panel.setLayout(layout)
-        self.selection_tool_settings_panel.hide()
-    
-    def _on_selection_tool_size_changed(self, value: int):
-        """选择范围改变"""
-        self.canvas.selection_tool.size = float(value)
-        self.canvas.update()  # 更新光标显示
-    
-    def _on_selection_tool_color_changed(self, button):
-        """选择目标颜色改变"""
-        if button == self.wand_black_radio:
-            self.canvas.selection_tool.target_color = 0  # 黑色
-            self.statusbar.showMessage("选择目标颜色: 黑色")
-        else:
-            self.canvas.selection_tool.target_color = 255  # 白色
-            self.statusbar.showMessage("选择目标颜色: 白色")
-    
-    def _on_selection_tool_mode_changed(self):
-        """选择模式改变"""
-        button_id = self.mode_button_group.checkedId()
-        mode = 'add' if button_id == 0 else 'subtract'
-        self.canvas.selection_tool.selection_mode = mode
-        self.canvas.update()  # 更新光标显示
     
     def _fill_selection(self, color: int):
         """
@@ -909,138 +861,64 @@ class MainWindow(QMainWindow):
         color_name = "黑色" if color == 0 else "白色"
         self.statusbar.showMessage(f"已用{color_name}填充选区")
     
-    def eventFilter(self, obj, event):
-        """事件过滤器 - 处理画笔和选择按钮及设置面板的悬浮事件"""
-        if obj == self.brush_button:
-            event_type = event.type()
-            
-            # 不拦截鼠标点击事件，让按钮正常处理
-            if event_type == event.Type.Enter:
-                # 鼠标进入画笔按钮 - 延迟显示设置面板，避免干扰点击
-                from PySide6.QtCore import QTimer
-                if not hasattr(self, '_show_brush_timer'):
-                    self._show_brush_timer = QTimer()
-                    self._show_brush_timer.setSingleShot(True)
-                    self._show_brush_timer.timeout.connect(self._show_brush_settings)
-                self._show_brush_timer.start(500)  # 延迟500ms显示
-                return False
-            elif event_type == event.Type.Leave:
-                # 鼠标离开画笔按钮
-                if hasattr(self, '_show_brush_timer'):
-                    self._show_brush_timer.stop()
-                # 延迟检查是否需要隐藏
-                from PySide6.QtCore import QTimer
-                QTimer.singleShot(100, self._check_hide_brush_settings)
-                return False
+    def _fill_selection_opposite_color(self):
+        """
+        填充选区为相反颜色
         
-        elif obj == self.brush_settings_panel:
-            if event.type() == event.Type.Leave:
-                # 鼠标离开设置面板，延迟检查是否需要隐藏
-                from PySide6.QtCore import QTimer
-                QTimer.singleShot(100, self._check_hide_brush_settings)
-                return False
+        如果目标颜色是黑色（选择黑色区域），则填充白色
+        如果目标颜色是白色（选择白色区域），则填充黑色
+        """
+        target_color = self.canvas.selection_tool.target_color
+        # 填充相反的颜色
+        fill_color = 255 if target_color == 0 else 0
+        self._fill_selection(fill_color)
+   
+    def _connect_tool_settings(self):
+        """连接属性面板中的工具设置信号"""
+        # 画笔工具设置
+        self.properties_panel.brush_size_spinbox.valueChanged.connect(
+            lambda v: setattr(self.canvas.brush_tool, 'size', float(v))
+        )
+        self.properties_panel.brush_color_group.buttonClicked.connect(
+            lambda: setattr(self.canvas.brush_tool, 'color', 
+                          self.properties_panel.brush_color_group.checkedId())
+        )
         
-        elif hasattr(self, 'selection_tool_button') and obj == self.selection_tool_button:
-            event_type = event.type()
-            
-            if event_type == event.Type.Enter:
-                # 鼠标进入选择按钮
-                from PySide6.QtCore import QTimer
-                if not hasattr(self, '_show_wand_timer'):
-                    self._show_wand_timer = QTimer()
-                    self._show_wand_timer.setSingleShot(True)
-                    self._show_wand_timer.timeout.connect(self._show_selection_tool_settings)
-                self._show_wand_timer.start(500)
-                return False
-            elif event_type == event.Type.Leave:
-                # 鼠标离开选择按钮
-                if hasattr(self, '_show_wand_timer'):
-                    self._show_wand_timer.stop()
-                from PySide6.QtCore import QTimer
-                QTimer.singleShot(100, self._check_hide_selection_tool_settings)
-                return False
-        
-        elif obj == self.selection_tool_settings_panel:
-            if event.type() == event.Type.Leave:
-                from PySide6.QtCore import QTimer
-                QTimer.singleShot(100, self._check_hide_selection_tool_settings)
-                return False
-        
-        return super().eventFilter(obj, event)
+        # 选择工具设置
+        self.properties_panel.selection_size_spinbox.valueChanged.connect(
+            self._on_selection_size_changed_panel
+        )
+        self.properties_panel.selection_mode_group.buttonClicked.connect(
+            self._on_selection_mode_changed_panel
+        )
+        self.properties_panel.selection_color_group.buttonClicked.connect(
+            self._on_selection_color_changed_panel
+        )
+        self.properties_panel.fill_button.clicked.connect(
+            self._fill_selection_opposite_color
+        )
+        self.properties_panel.deselect_button.clicked.connect(self._deselect)
+        self.properties_panel.invert_button.clicked.connect(self._invert_selection)
     
-    def _check_hide_brush_settings(self):
-        """检查是否需要隐藏画笔设置面板"""
-        if not hasattr(self, 'brush_settings_panel'):
-            return
-        
-        # 获取鼠标全局位置
-        from PySide6.QtGui import QCursor
-        mouse_pos = QCursor.pos()
-        
-        # 检查鼠标是否在按钮或面板区域内
-        button_rect = self.brush_button.rect()
-        button_global_rect = button_rect.translated(self.brush_button.mapToGlobal(QPoint(0, 0)))
-        
-        panel_rect = self.brush_settings_panel.rect()
-        panel_global_rect = panel_rect.translated(self.brush_settings_panel.pos())
-        
-        # 如果鼠标不在按钮或面板内，隐藏面板
-        if not button_global_rect.contains(mouse_pos) and not panel_global_rect.contains(mouse_pos):
-            self.brush_settings_panel.hide()
+    def _on_selection_size_changed_panel(self, value: int):
+        """属性面板：选择范围改变"""
+        self.canvas.selection_tool.size = float(value)
+        self.canvas.update()
     
-    def _show_brush_settings(self):
-        """显示画笔设置面板"""
-        if self.image_data is None:
-            return
-        
-        # 更新设置值
-        self.brush_size_spinbox.setValue(int(self.canvas.brush_tool.size))
-        if self.canvas.brush_tool.color == 0:
-            self.black_radio.setChecked(True)
+    def _on_selection_mode_changed_panel(self):
+        """属性面板：选择模式改变"""
+        button_id = self.properties_panel.selection_mode_group.checkedId()
+        mode = 'add' if button_id == 0 else 'subtract'
+        self.canvas.selection_tool.selection_mode = mode
+        self.canvas.update()
+    
+    def _on_selection_color_changed_panel(self):
+        """属性面板：选择目标颜色改变"""
+        button_id = self.properties_panel.selection_color_group.checkedId()
+        self.canvas.selection_tool.target_color = button_id
+        # 更新填充按钮文本
+        if button_id == 0:
+            self.properties_panel.fill_button.setText("填充白色")
         else:
-            self.white_radio.setChecked(True)
-        
-        # 计算位置（在画笔按钮下方）
-        button_pos = self.brush_button.mapToGlobal(QPoint(0, 0))
-        panel_x = button_pos.x()
-        panel_y = button_pos.y() + self.brush_button.height()
-        
-        self.brush_settings_panel.move(panel_x, panel_y)
-        self.brush_settings_panel.show()
-    
-    def _check_hide_selection_tool_settings(self):
-        """检查是否需要隐藏选择设置面板"""
-        if not hasattr(self, 'selection_tool_settings_panel'):
-            return
-        
-        from PySide6.QtGui import QCursor
-        mouse_pos = QCursor.pos()
-        
-        button_rect = self.selection_tool_button.rect()
-        button_global_rect = button_rect.translated(self.selection_tool_button.mapToGlobal(QPoint(0, 0)))
-        
-        panel_rect = self.selection_tool_settings_panel.rect()
-        panel_global_rect = panel_rect.translated(self.selection_tool_settings_panel.pos())
-        
-        if not button_global_rect.contains(mouse_pos) and not panel_global_rect.contains(mouse_pos):
-            self.selection_tool_settings_panel.hide()
-    
-    def _show_selection_tool_settings(self):
-        """显示选择设置面板"""
-        if self.image_data is None:
-            return
-        
-        # 更新设置值
-        self.selection_tool_size_spinbox.setValue(int(self.canvas.selection_tool.size))
-        if self.canvas.selection_tool.selection_mode == 'add':
-            self.add_mode_radio.setChecked(True)
-        else:
-            self.subtract_mode_radio.setChecked(True)
-        
-        # 计算位置（在选择按钮下方）
-        button_pos = self.selection_tool_button.mapToGlobal(QPoint(0, 0))
-        panel_x = button_pos.x()
-        panel_y = button_pos.y() + self.selection_tool_button.height()
-        
-        self.selection_tool_settings_panel.move(panel_x, panel_y)
-        self.selection_tool_settings_panel.show()
+            self.properties_panel.fill_button.setText("填充黑色")
+        self.canvas.update()

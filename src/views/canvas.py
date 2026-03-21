@@ -29,6 +29,7 @@ class Canvas(QWidget):
     # 信号
     image_modified = Signal()  # 图片被修改时发射
     file_dropped = Signal(str)  # 文件拖放时发射，传递文件路径
+    zoom_changed = Signal(float)  # 缩放比例变化时发射
     
     def __init__(self, parent=None):
         """
@@ -347,6 +348,9 @@ class Canvas(QWidget):
             scale_factor
         )
         
+        # 发射缩放变化信号
+        self.zoom_changed.emit(self.view_transform.scale)
+        
         self.update()
     
     def keyPressEvent(self, event):
@@ -441,3 +445,6 @@ class Canvas(QWidget):
         view_height = self.image_data.height * scale
         self.view_transform.offset_x = (canvas_width - view_width) / 2
         self.view_transform.offset_y = (canvas_height - view_height) / 2
+        
+        # 发射缩放变化信号
+        self.zoom_changed.emit(self.view_transform.scale)

@@ -58,8 +58,8 @@ class ImageEnhancer:
                 1 - 中值滤波
                 2 - 双边滤波
                 3 - NLMeans降噪
-                4 - 形态学降噪（开运算）
-                5 - 形态学降噪（闭运算）
+                4 - 形态学-开运算
+                5 - 形态学-闭运算
             strength: 降噪强度 (0-100)
         
         Returns:
