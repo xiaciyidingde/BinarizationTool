@@ -198,11 +198,13 @@ class SelectionTool:
             height: 图片高度
         """
         if self.selection_mask is None:
-            self.select_all(width, height)
+            # 如果没有选区，创建全选
+            self.selection_mask = np.ones((height, width), dtype=bool)
         elif self.selection_mask.shape != (height, width):
-            # 尺寸不匹配（图片被裁剪了），重新全选
-            self.select_all(width, height)
+            # 尺寸不匹配（图片被裁剪了），创建全选
+            self.selection_mask = np.ones((height, width), dtype=bool)
         else:
+            # 反转选区
             self.selection_mask = ~self.selection_mask
     
     def start_drag_select(self, image_data: 'ImageData', x: int, y: int) -> tuple[int, int, int, int]:

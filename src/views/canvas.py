@@ -29,6 +29,7 @@ class Canvas(QWidget):
     # 信号
     image_modified = Signal()  # 图片被修改时发射
     file_dropped = Signal(str)  # 文件拖放时发射，传递文件路径
+    show_tool_settings = Signal(QPoint)  # 显示工具设置面板，传递全局坐标
     
     def __init__(self, parent=None):
         """
@@ -196,6 +197,13 @@ class Canvas(QWidget):
                             dirty_rect[3] - dirty_rect[1]
                         )
                     self.update()
+        
+        elif event.button() == Qt.RightButton:
+            # 右键：显示工具设置面板
+            if self.image_data is not None and self.current_tool is not None:
+                if isinstance(self.current_tool, (BrushTool, SelectionTool)):
+                    # 发射信号，通知主窗口显示设置面板
+                    self.show_tool_settings.emit(event.globalPosition().toPoint())
         
         elif event.button() == Qt.MiddleButton:
             # 中键平移

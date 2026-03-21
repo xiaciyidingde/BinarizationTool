@@ -19,6 +19,8 @@ from .binarization_panel import BinarizationPanel
 from .shortcut_handler import ShortcutHandler
 from ..models.image_data import ImageData
 from ..models.history_manager import HistoryManager
+from ..models.brush_tool import BrushTool
+from ..models.selection_tool import SelectionTool
 from ..utils.file_io import load_image, save_image
 from ..utils.binarization_engine import BinarizationEngine
 
@@ -229,6 +231,9 @@ class MainWindow(QMainWindow):
         
         # Canvas 文件拖放
         self.canvas.file_dropped.connect(self._load_file_from_path)
+        
+        # Canvas 显示工具设置
+        self.canvas.show_tool_settings.connect(self._show_tool_settings_at_pos)
     
     def _create_menus(self):
         """创建菜单栏"""
@@ -814,16 +819,37 @@ class MainWindow(QMainWindow):
         fill_label.setMinimumWidth(40)
         fill_layout.addWidget(fill_label)
         
-        self.fill_black_button = QPushButton("填充黑色")
-        self.fill_black_button.clicked.connect(lambda: self._fill_selection(0))
-        fill_layout.addWidget(self.fill_black_button)
-        
-        self.fill_white_button = QPushButton("填充白色")
-        self.fill_white_button.clicked.connect(lambda: self._fill_selection(255))
-        fill_layout.addWidget(self.fill_white_button)
+        # 只显示一个填充按钮，根据目标颜色动态调整
+        self.fill_selection_button = QPushButton("填充白色")
+        self.fill_selection_button.clicked.connect(self._fill_selection_opposite_color)
+        fill_layout.addWidget(self.fill_selection_button)
         
         fill_layout.addStretch()
         layout.addLayout(fill_layout)
+        
+        # 快捷操作（分隔线）
+        separator = QFrame()
+        separator.setFrameShape(QFrame.HLine)
+        separator.setFrameShadow(QFrame.Sunken)
+        layout.addWidget(separator)
+        
+        # 快捷操作按钮
+        quick_actions_layout = QHBoxLayout()
+        quick_actions_layout.setSpacing(8)
+        quick_actions_label = QLabel("快捷操作:")
+        quick_actions_label.setMinimumWidth(40)
+        quick_actions_layout.addWidget(quick_actions_label)
+        
+        self.deselect_button = QPushButton("取消选择")
+        self.deselect_button.clicked.connect(self._deselect)
+        quick_actions_layout.addWidget(self.deselect_button)
+        
+        self.invert_selection_button = QPushButton("反选")
+        self.invert_selection_button.clicked.connect(self._invert_selection)
+        quick_actions_layout.addWidget(self.invert_selection_button)
+        
+        quick_actions_layout.addStretch()
+        layout.addLayout(quick_actions_layout)
         
         self.selection_tool_settings_panel.setLayout(layout)
         self.selection_tool_settings_panel.hide()
@@ -837,9 +863,11 @@ class MainWindow(QMainWindow):
         """选择目标颜色改变"""
         if button == self.wand_black_radio:
             self.canvas.selection_tool.target_color = 0  # 黑色
+            self.fill_selection_button.setText("填充白色")  # 选择黑色，填充白色
             self.statusbar.showMessage("选择目标颜色: 黑色")
         else:
             self.canvas.selection_tool.target_color = 255  # 白色
+            self.fill_selection_button.setText("填充黑色")  # 选择白色，填充黑色
             self.statusbar.showMessage("选择目标颜色: 白色")
     
     def _on_selection_tool_mode_changed(self):
@@ -908,6 +936,18 @@ class MainWindow(QMainWindow):
         # 显示提示
         color_name = "黑色" if color == 0 else "白色"
         self.statusbar.showMessage(f"已用{color_name}填充选区")
+    
+    def _fill_selection_opposite_color(self):
+        """
+        填充选区为相反颜色
+        
+        如果目标颜色是黑色（选择黑色区域），则填充白色
+        如果目标颜色是白色（选择白色区域），则填充黑色
+        """
+        target_color = self.canvas.selection_tool.target_color
+        # 填充相反的颜色
+        fill_color = 255 if target_color == 0 else 0
+        self._fill_selection(fill_color)
     
     def eventFilter(self, obj, event):
         """事件过滤器 - 处理画笔和选择按钮及设置面板的悬浮事件"""
@@ -1036,6 +1076,12 @@ class MainWindow(QMainWindow):
             self.add_mode_radio.setChecked(True)
         else:
             self.subtract_mode_radio.setChecked(True)
+        if self.canvas.selection_tool.target_color == 0:
+            self.wand_black_radio.setChecked(True)
+            self.fill_selection_button.setText("填充白色")  # 选择黑色，填充白色
+        else:
+            self.wand_white_radio.setChecked(True)
+            self.fill_selection_button.setText("填充黑色")  # 选择白色，填充黑色
         
         # 计算位置（在选择按钮下方）
         button_pos = self.selection_tool_button.mapToGlobal(QPoint(0, 0))
@@ -1044,3 +1090,43 @@ class MainWindow(QMainWindow):
         
         self.selection_tool_settings_panel.move(panel_x, panel_y)
         self.selection_tool_settings_panel.show()
+
+    def _show_tool_settings_at_pos(self, global_pos: QPoint):
+        """
+        在指定位置显示工具设置面板（右键菜单）
+        
+        Args:
+            global_pos: 全局坐标位置
+        """
+        if self.image_data is None:
+            return
+        
+        if isinstance(self.canvas.current_tool, SelectionTool):
+            # 更新选择工具设置值
+            self.selection_tool_size_spinbox.setValue(int(self.canvas.selection_tool.size))
+            if self.canvas.selection_tool.selection_mode == 'add':
+                self.add_mode_radio.setChecked(True)
+            else:
+                self.subtract_mode_radio.setChecked(True)
+            if self.canvas.selection_tool.target_color == 0:
+                self.wand_black_radio.setChecked(True)
+                self.fill_selection_button.setText("填充白色")  # 选择黑色，填充白色
+            else:
+                self.wand_white_radio.setChecked(True)
+                self.fill_selection_button.setText("填充黑色")  # 选择白色，填充黑色
+            
+            # 在鼠标位置显示面板
+            self.selection_tool_settings_panel.move(global_pos)
+            self.selection_tool_settings_panel.show()
+        
+        elif isinstance(self.canvas.current_tool, BrushTool):
+            # 更新画笔工具设置值
+            self.brush_size_spinbox.setValue(int(self.canvas.brush_tool.size))
+            if self.canvas.brush_tool.color == 0:
+                self.black_radio.setChecked(True)
+            else:
+                self.white_radio.setChecked(True)
+            
+            # 在鼠标位置显示面板
+            self.brush_settings_panel.move(global_pos)
+            self.brush_settings_panel.show()
