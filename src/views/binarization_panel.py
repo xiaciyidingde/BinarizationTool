@@ -66,9 +66,26 @@ class BinarizationPanel(QWidget):
             "伽马:", 10, 300, 100, preprocess_layout, scale=0.01
         )
         
-        # 平滑/降噪
+        # 平滑
         self.smooth_slider = self._create_slider_with_label(
             "平滑:", 0, 100, 0, preprocess_layout
+        )
+        
+        # 降噪
+        denoise_label = QLabel("降噪方法:")
+        preprocess_layout.addWidget(denoise_label)
+        
+        self.denoise_method_combo = QComboBox()
+        self.denoise_method_combo.addItem("高斯降噪", 0)
+        self.denoise_method_combo.addItem("中值滤波", 1)
+        self.denoise_method_combo.addItem("双边滤波", 2)
+        self.denoise_method_combo.addItem("NLMeans降噪", 3)
+        self.denoise_method_combo.addItem("形态学-开运算（去噪点）", 4)
+        self.denoise_method_combo.addItem("形态学-闭运算（填孔）", 5)
+        preprocess_layout.addWidget(self.denoise_method_combo)
+        
+        self.denoise_slider = self._create_slider_with_label(
+            "降噪强度:", 0, 100, 0, preprocess_layout
         )
         
         preprocess_group.setLayout(preprocess_layout)
@@ -172,6 +189,8 @@ class BinarizationPanel(QWidget):
         self.sharpen_slider.valueChanged.connect(self._on_parameters_changed)
         self.gamma_slider.valueChanged.connect(self._on_parameters_changed)
         self.smooth_slider.valueChanged.connect(self._on_parameters_changed)
+        self.denoise_method_combo.currentIndexChanged.connect(self._on_parameters_changed)
+        self.denoise_slider.valueChanged.connect(self._on_parameters_changed)
     
     def _on_parameters_changed(self):
         """参数改变事件"""
@@ -211,6 +230,8 @@ class BinarizationPanel(QWidget):
             'sharpen': self.sharpen_slider.value(),
             'gamma': self.gamma_slider.value() * 0.01,
             'smooth': self.smooth_slider.value(),
+            'denoise_method': self.denoise_method_combo.currentData(),
+            'denoise': self.denoise_slider.value(),
         }
     
     def get_method(self) -> int:
@@ -265,6 +286,8 @@ class BinarizationPanel(QWidget):
         self.sharpen_slider.setEnabled(enabled)
         self.gamma_slider.setEnabled(enabled)
         self.smooth_slider.setEnabled(enabled)
+        self.denoise_method_combo.setEnabled(enabled)
+        self.denoise_slider.setEnabled(enabled)
         
         if enabled:
             self._update_threshold_enabled()

@@ -48,7 +48,23 @@ class ImageEnhancer:
 
     @staticmethod
     def apply_denoise(img, method=0, strength=0):
-        """降噪"""
+        """
+        降噪
+        
+        Args:
+            img: 输入图像
+            method: 降噪方法
+                0 - 高斯降噪
+                1 - 中值滤波
+                2 - 双边滤波
+                3 - NLMeans降噪
+                4 - 形态学降噪（开运算）
+                5 - 形态学降噪（闭运算）
+            strength: 降噪强度 (0-100)
+        
+        Returns:
+            降噪后的图像
+        """
         if strength <= 0:
             return img
             
@@ -68,6 +84,17 @@ class ImageEnhancer:
                                           h=h,
                                           templateWindowSize=7,
                                           searchWindowSize=21).astype(np.float32)
+        elif method == 4:  # 形态学降噪 - 开运算（去除小的孤立点）
+            kernel_size = int(strength / 20) + 1
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+            # 开运算 = 先腐蚀后膨胀，去除小的白色噪点
+            return cv2.morphologyEx(img.astype(np.uint8), cv2.MORPH_OPEN, kernel).astype(np.float32)
+        elif method == 5:  # 形态学降噪 - 闭运算（填充小孔）
+            kernel_size = int(strength / 20) + 1
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+            # 闭运算 = 先膨胀后腐蚀，填充小的黑色孔洞
+            return cv2.morphologyEx(img.astype(np.uint8), cv2.MORPH_CLOSE, kernel).astype(np.float32)
+        
         return img
 
     @staticmethod
@@ -156,13 +183,14 @@ class BinarizationEngine:
                 - contrast: 对比度 (-100 到 100)
                 - sharpen: 锐化 (0 到 100)
                 - gamma: 伽马校正 (0.1 到 3.0)
-                - smooth: 平滑/降噪强度 (0 到 100)
+                - smooth: 平滑强度 (0 到 100)
+                - denoise_method: 降噪方法 (0-6)
+                - denoise: 降噪强度 (0 到 100)
                 - equalize: 直方图均衡化 (bool)
                 - clahe: CLAHE增强 (bool)
                 - local_contrast: 局部对比度 (0 到 100)
                 - detail_enhance: 细节增强 (0 到 100)
                 - edge_enhance: 边缘增强 (0 到 100)
-                - denoise_method: 降噪方法 (0-3)
         
         Returns:
             预处理后的图像
@@ -186,11 +214,18 @@ class BinarizationEngine:
             edge_enhance=kwargs.get('edge_enhance', 0)
         )
         
-        # 降噪
+        # 平滑（简单的高斯模糊）
+        smooth_strength = kwargs.get('smooth', 0)
+        if smooth_strength > 0:
+            kernel_size = int(smooth_strength / 10) * 2 + 3
+            sigma = smooth_strength / 20.0
+            img = cv2.GaussianBlur(img, (kernel_size, kernel_size), sigma)
+        
+        # 降噪（高级降噪方法）
         img = enhancer.apply_denoise(
             img,
             method=kwargs.get('denoise_method', 0),
-            strength=kwargs.get('smooth', 0)
+            strength=kwargs.get('denoise', 0)
         )
         
         # 基础调整

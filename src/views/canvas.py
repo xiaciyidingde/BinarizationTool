@@ -6,13 +6,16 @@ Canvas 画布组件
 
 from typing import Optional
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, Signal, QPoint
-from PySide6.QtGui import QPainter, QPixmap, QImage, QPaintEvent, QMouseEvent, QWheelEvent
+from PySide6.QtCore import Qt, Signal, QPoint, QUrl
+from PySide6.QtGui import QPainter, QPixmap, QImage, QPaintEvent, QMouseEvent, QWheelEvent, QDragEnterEvent, QDropEvent
+import numpy as np
 
 from ..models.view_transform import ViewTransform
 from ..models.image_data import ImageData
 from ..models.brush_tool import BrushTool
 from ..models.crop_tool import CropTool
+from ..models.selection_tool import SelectionTool
+from ..models.tile_cache import TileCache
 
 
 class Canvas(QWidget):
@@ -25,6 +28,7 @@ class Canvas(QWidget):
     
     # 信号
     image_modified = Signal()  # 图片被修改时发射
+    file_dropped = Signal(str)  # 文件拖放时发射，传递文件路径
     
     def __init__(self, parent=None):
         """
@@ -40,13 +44,13 @@ class Canvas(QWidget):
         self.view_transform = ViewTransform()
         
         # 工具
-        self.current_tool: Optional[BrushTool | CropTool] = None
+        self.current_tool: Optional[BrushTool | CropTool | SelectionTool] = None
         self.brush_tool = BrushTool()
         self.crop_tool = CropTool()
+        self.selection_tool = SelectionTool()
         
-        # 渲染缓存
-        self.pixmap_cache: Optional[QPixmap] = None
-        self.cache_valid = False
+        # 分块渲染缓存
+        self.tile_cache = TileCache(tile_size=256, max_tiles=100)
         
         # 交互状态
         self.mouse_pos: Optional[QPoint] = None
@@ -54,9 +58,13 @@ class Canvas(QWidget):
         self.pan_start_pos: Optional[QPoint] = None
         self.space_pressed = False
         
+        # 画笔绘制优化：记录已光栅化的点数
+        self.rasterized_point_count = 0
+        
         # 设置
         self.setMouseTracking(True)  # 启用鼠标跟踪
         self.setFocusPolicy(Qt.StrongFocus)  # 接收键盘事件
+        self.setAcceptDrops(True)  # 启用拖放功能
     
     def set_image(self, image_data: ImageData):
         """
@@ -66,21 +74,40 @@ class Canvas(QWidget):
             image_data: ImageData 对象
         """
         self.image_data = image_data
-        self.cache_valid = False
+        
+        # 更新分块缓存
+        pixels = image_data.get_current_pixels()
+        selection_mask = image_data.selection_mask if hasattr(image_data, 'selection_mask') else None
+        self.tile_cache.set_image(pixels, selection_mask)
         
         # 自动适配缩放
         self._fit_image_to_view()
         
         self.update()
     
-    def set_tool(self, tool: Optional[BrushTool | CropTool]):
+    def set_tool(self, tool: Optional[BrushTool | CropTool | SelectionTool]):
         """
         设置当前工具
         
         Args:
-            tool: 工具对象（BrushTool 或 CropTool）
+            tool: 工具对象（BrushTool、CropTool 或 SelectionTool）
         """
         self.current_tool = tool
+        
+        # 根据工具类型设置光标
+        if isinstance(tool, BrushTool):
+            # 画笔工具：隐藏系统光标
+            self.setCursor(Qt.BlankCursor)
+        elif isinstance(tool, CropTool):
+            # 裁剪工具：十字光标
+            self.setCursor(Qt.CrossCursor)
+        elif isinstance(tool, SelectionTool):
+            # 选择工具：隐藏系统光标（显示自定义圆圈光标）
+            self.setCursor(Qt.BlankCursor)
+        else:
+            # 其他工具或无工具：恢复默认光标
+            self.setCursor(Qt.ArrowCursor)
+        
         self.update()
     
     def paintEvent(self, event: QPaintEvent):
@@ -114,6 +141,16 @@ class Canvas(QWidget):
                 self.mouse_pos.y(), 
                 view_size
             )
+        
+        # 渲染选择工具光标
+        if isinstance(self.current_tool, SelectionTool) and self.mouse_pos is not None:
+            view_size = self.view_transform.get_brush_view_size(self.current_tool.size)
+            self.current_tool.render_cursor(
+                painter,
+                self.mouse_pos.x(),
+                self.mouse_pos.y(),
+                view_size
+            )
     
     def mousePressEvent(self, event: QMouseEvent):
         """鼠标按下事件"""
@@ -132,13 +169,32 @@ class Canvas(QWidget):
                     # 开始画笔笔画
                     self.image_data.start_temp_layer()
                     stroke = self.current_tool.start_stroke(pixel_x, pixel_y)
-                    stroke.rasterize(self.image_data)
-                    self.cache_valid = False
+                    dirty_rect = stroke.rasterize(self.image_data)
+                    self.rasterized_point_count = len(stroke.points)
+                    # 更新分块缓存
+                    self._update_tile_cache()
                     self.update()
                 
                 elif isinstance(self.current_tool, CropTool):
                     # 开始裁剪选择
                     self.current_tool.start_selection(pixel_x, pixel_y)
+                    self.update()
+                
+                elif isinstance(self.current_tool, SelectionTool):
+                    # 开始拖动选择
+                    dirty_rect = self.current_tool.start_drag_select(self.image_data, pixel_x, pixel_y)
+                    # 将选区同步到 image_data
+                    self.image_data.selection_mask = self.current_tool.selection_mask
+                    # 更新分块缓存以显示选区
+                    pixels = self.image_data.get_current_pixels()
+                    self.tile_cache.update_image(pixels, self.image_data.selection_mask)
+                    # 使脏区域失效
+                    if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
+                        self.tile_cache.invalidate_region(
+                            dirty_rect[0], dirty_rect[1],
+                            dirty_rect[2] - dirty_rect[0],
+                            dirty_rect[3] - dirty_rect[1]
+                        )
                     self.update()
         
         elif event.button() == Qt.MiddleButton:
@@ -156,7 +212,6 @@ class Canvas(QWidget):
             delta_y = event.pos().y() - self.pan_start_pos.y()
             self.view_transform.translate(delta_x, delta_y)
             self.pan_start_pos = event.pos()
-            self.cache_valid = False
             self.update()
         
         elif self.image_data is not None and self.current_tool is not None:
@@ -166,16 +221,47 @@ class Canvas(QWidget):
             
             if isinstance(self.current_tool, BrushTool) and self.current_tool.is_drawing:
                 # 继续画笔笔画
+                old_point_count = self.rasterized_point_count
                 self.current_tool.continue_stroke(pixel_x, pixel_y)
                 if self.current_tool.current_stroke is not None:
-                    # 只光栅化新添加的点
-                    self.current_tool.current_stroke.rasterize(self.image_data)
-                self.cache_valid = False
-                self.update()
+                    # 只光栅化新添加的点（增量更新）
+                    dirty_rect = self.current_tool.current_stroke.rasterize(self.image_data, old_point_count)
+                    self.rasterized_point_count = len(self.current_tool.current_stroke.points)
+                    
+                    # 更新图片数据并使脏区域失效
+                    if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
+                        pixels = self.image_data.get_current_pixels()
+                        selection_mask = self.image_data.selection_mask if hasattr(self.image_data, 'selection_mask') else None
+                        self.tile_cache.update_image(pixels, selection_mask)
+                        self.tile_cache.invalidate_region(
+                            dirty_rect[0], dirty_rect[1], 
+                            dirty_rect[2] - dirty_rect[0], 
+                            dirty_rect[3] - dirty_rect[1]
+                        )
+                    
+                    self.update()
             
             elif isinstance(self.current_tool, CropTool) and self.current_tool.is_dragging:
                 # 更新裁剪选择
                 self.current_tool.update_selection(pixel_x, pixel_y)
+                self.update()
+            
+            elif isinstance(self.current_tool, SelectionTool) and self.current_tool.is_dragging:
+                # 继续拖动选择
+                dirty_rect = self.current_tool.continue_drag_select(self.image_data, pixel_x, pixel_y)
+                # 将选区同步到 image_data
+                self.image_data.selection_mask = self.current_tool.selection_mask
+                # 增量更新分块缓存
+                pixels = self.image_data.get_current_pixels()
+                self.tile_cache.update_image(pixels, self.image_data.selection_mask)
+                # 使脏区域失效（动态更新）
+                if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
+                    self.tile_cache.invalidate_region(
+                        dirty_rect[0], dirty_rect[1],
+                        dirty_rect[2] - dirty_rect[0],
+                        dirty_rect[3] - dirty_rect[1]
+                    )
+                # 只更新显示，不触发 image_modified 信号（避免卡顿）
                 self.update()
             
             else:
@@ -195,7 +281,9 @@ class Canvas(QWidget):
                     # 结束画笔笔画
                     self.current_tool.end_stroke()
                     self.image_data.commit_temp_layer()
-                    self.cache_valid = False
+                    self.rasterized_point_count = 0
+                    # 完全更新分块缓存
+                    self._update_tile_cache()
                     self.image_modified.emit()
                     self.update()
                 
@@ -217,10 +305,26 @@ class Canvas(QWidget):
                             # 重新适配视图
                             self._fit_image_to_view()
                             
+                            # 更新分块缓存
+                            pixels = self.image_data.get_current_pixels()
+                            selection_mask = self.image_data.selection_mask if hasattr(self.image_data, 'selection_mask') else None
+                            self.tile_cache.set_image(pixels, selection_mask)
+                            
                             # 通知图片已修改
-                            self.cache_valid = False
                             self.image_modified.emit()
                             self.update()
+                
+                elif isinstance(self.current_tool, SelectionTool) and self.current_tool.is_dragging:
+                    # 结束拖动选择
+                    self.current_tool.end_drag_select()
+                    # 将选区同步到 image_data
+                    self.image_data.selection_mask = self.current_tool.selection_mask
+                    # 更新分块缓存以显示选区（完整更新）
+                    pixels = self.image_data.get_current_pixels()
+                    self.tile_cache.set_image(pixels, self.image_data.selection_mask)
+                    # 通知选区已修改（用于更新 UI 状态）
+                    self.image_modified.emit()
+                    self.update()
         
         elif event.button() == Qt.MiddleButton:
             # 结束中键平移
@@ -243,7 +347,6 @@ class Canvas(QWidget):
             scale_factor
         )
         
-        self.cache_valid = False
         self.update()
     
     def keyPressEvent(self, event):
@@ -258,45 +361,62 @@ class Canvas(QWidget):
             self.space_pressed = False
             self.setCursor(Qt.ArrowCursor)
     
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        """拖动进入事件"""
+        if event.mimeData().hasUrls():
+            # 检查是否包含图片文件
+            urls = event.mimeData().urls()
+            if urls:
+                file_path = urls[0].toLocalFile()
+                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+    
+    def dropEvent(self, event: QDropEvent):
+        """拖放事件"""
+        if event.mimeData().hasUrls():
+            urls = event.mimeData().urls()
+            if urls:
+                file_path = urls[0].toLocalFile()
+                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+                    # 发射信号通知主窗口加载文件
+                    self.file_dropped.emit(file_path)
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+    
     def _render_image(self, painter: QPainter):
         """
-        渲染图片到画布
+        渲染图片到画布（使用分块渲染）
         
-        使用缓存提高性能。
+        只渲染视口内可见的块，大幅提升性能。
         """
-        if not self.cache_valid:
-            self._update_cache()
-        
-        if self.pixmap_cache is not None:
-            # 计算图片在视图中的位置
-            view_x, view_y = self.view_transform.pixel_to_view(0, 0)
-            painter.drawPixmap(int(view_x), int(view_y), self.pixmap_cache)
-    
-    def _update_cache(self):
-        """更新渲染缓存"""
         if self.image_data is None:
             return
         
-        # 获取当前像素数据
-        pixels = self.image_data.get_current_pixels()
+        # 更新缩放级别
+        self.tile_cache.set_scale(self.view_transform.scale)
         
-        # 转换为 QImage
-        height, width = pixels.shape
-        bytes_per_line = width
-        qimage = QImage(pixels.data, width, height, bytes_per_line, QImage.Format_Grayscale8)
-        
-        # 缩放到视图大小
-        scaled_width = int(width * self.view_transform.scale)
-        scaled_height = int(height * self.view_transform.scale)
-        
-        # 创建 QPixmap 缓存
-        self.pixmap_cache = QPixmap.fromImage(qimage).scaled(
-            scaled_width, scaled_height,
-            Qt.KeepAspectRatio,
-            Qt.SmoothTransformation if self.view_transform.scale < 1.0 else Qt.FastTransformation
+        # 获取视口内的所有块
+        view_x, view_y = self.view_transform.pixel_to_view(0, 0)
+        tiles = self.tile_cache.get_tiles_in_viewport(
+            view_x, view_y,
+            self.width(), self.height()
         )
         
-        self.cache_valid = True
+        # 绘制所有块
+        for tile_x, tile_y, draw_x, draw_y, draw_width, draw_height, pixmap in tiles:
+            painter.drawPixmap(int(draw_x), int(draw_y), pixmap)
+    
+    def _update_tile_cache(self):
+        """更新分块缓存的图片数据"""
+        if self.image_data is None:
+            return
+        
+        pixels = self.image_data.get_current_pixels()
+        selection_mask = self.image_data.selection_mask if hasattr(self.image_data, 'selection_mask') else None
+        self.tile_cache.set_image(pixels, selection_mask)
     
     def _fit_image_to_view(self):
         """自动适配图片到视图"""
