@@ -235,7 +235,7 @@ class SelectionTool:
     
     def continue_drag_select(self, image_data: 'ImageData', x: int, y: int) -> tuple[int, int, int, int]:
         """
-        继续拖动选择（复用画笔间距逻辑）
+        继续拖动选择（带插值，避免断点）
         
         Args:
             image_data: 图片数据
@@ -252,15 +252,24 @@ class SelectionTool:
         last_x, last_y = self.last_point
         dist = ((x - last_x) ** 2 + (y - last_y) ** 2) ** 0.5
         
-        # 间距控制（类似画笔）
+        # 间距控制
         spacing_threshold = self.size * self.spacing
         
         if dist >= spacing_threshold:
-            # 添加新点
-            self.current_stroke.add_point(x, y)
+            # 计算需要插入多少个中间点
+            num_steps = max(1, int(dist / spacing_threshold))
+            
+            # 记录开始索引
+            start_index = len(self.current_stroke.points)
+            
+            # 插值添加点
+            for i in range(1, num_steps + 1):
+                t = i / num_steps
+                interp_x = int(last_x + (x - last_x) * t)
+                interp_y = int(last_y + (y - last_y) * t)
+                self.current_stroke.add_point(interp_x, interp_y)
             
             # 增量光栅化（只处理新点）
-            start_index = len(self.current_stroke.points) - 1
             dirty_rect = self.current_stroke.rasterize(image_data, self.selection_mask, start_index)
             
             # 更新最后位置

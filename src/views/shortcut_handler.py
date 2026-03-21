@@ -84,13 +84,11 @@ class ShortcutHandler:
         new_color = 255 if current_color == 0 else 0
         self.canvas.brush_tool.color = new_color
         
-        # 更新设置面板（如果可见）
-        if hasattr(self.main_window, 'brush_settings_panel') and \
-           self.main_window.brush_settings_panel.isVisible():
-            if new_color == 0:
-                self.main_window.black_radio.setChecked(True)
-            else:
-                self.main_window.white_radio.setChecked(True)
+        # 更新属性面板
+        if new_color == 0:
+            self.main_window.properties_panel.brush_black_radio.setChecked(True)
+        else:
+            self.main_window.properties_panel.brush_white_radio.setChecked(True)
         
         self.main_window.statusbar.showMessage(
             f"画笔颜色: {'黑色' if new_color == 0 else '白色'}"
@@ -111,10 +109,8 @@ class ShortcutHandler:
         new_size = min(500, current_size + step)
         self.canvas.brush_tool.size = new_size
         
-        # 更新设置面板（如果可见）
-        if hasattr(self.main_window, 'brush_settings_panel') and \
-           self.main_window.brush_settings_panel.isVisible():
-            self.main_window.brush_size_spinbox.setValue(int(new_size))
+        # 更新属性面板
+        self.main_window.properties_panel.brush_size_spinbox.setValue(int(new_size))
         
         self.main_window.statusbar.showMessage(f"画笔大小: {int(new_size)}")
         self.canvas.update()  # 更新光标显示
@@ -134,10 +130,8 @@ class ShortcutHandler:
         new_size = max(1, current_size - step)
         self.canvas.brush_tool.size = new_size
         
-        # 更新设置面板（如果可见）
-        if hasattr(self.main_window, 'brush_settings_panel') and \
-           self.main_window.brush_settings_panel.isVisible():
-            self.main_window.brush_size_spinbox.setValue(int(new_size))
+        # 更新属性面板
+        self.main_window.properties_panel.brush_size_spinbox.setValue(int(new_size))
         
         self.main_window.statusbar.showMessage(f"画笔大小: {int(new_size)}")
         self.canvas.update()  # 更新光标显示
@@ -150,13 +144,11 @@ class ShortcutHandler:
         new_mode = 'subtract' if current_mode == 'add' else 'add'
         self.canvas.selection_tool.selection_mode = new_mode
         
-        # 更新设置面板（如果可见）
-        if hasattr(self.main_window, 'selection_tool_settings_panel') and \
-           self.main_window.selection_tool_settings_panel.isVisible():
-            if new_mode == 'add':
-                self.main_window.add_mode_radio.setChecked(True)
-            else:
-                self.main_window.subtract_mode_radio.setChecked(True)
+        # 更新属性面板
+        if new_mode == 'add':
+            self.main_window.properties_panel.add_mode_radio.setChecked(True)
+        else:
+            self.main_window.properties_panel.subtract_mode_radio.setChecked(True)
         
         mode_text = "添加" if new_mode == 'add' else "删除"
         self.main_window.statusbar.showMessage(f"选择模式: {mode_text}")
@@ -177,10 +169,8 @@ class ShortcutHandler:
         new_size = min(500, current_size + step)
         self.canvas.selection_tool.size = new_size
         
-        # 更新设置面板（如果可见）
-        if hasattr(self.main_window, 'selection_tool_settings_panel') and \
-           self.main_window.selection_tool_settings_panel.isVisible():
-            self.main_window.selection_tool_size_spinbox.setValue(int(new_size))
+        # 更新属性面板
+        self.main_window.properties_panel.selection_size_spinbox.setValue(int(new_size))
         
         self.main_window.statusbar.showMessage(f"选择范围: {int(new_size)}")
         self.canvas.update()  # 更新光标显示
@@ -200,10 +190,8 @@ class ShortcutHandler:
         new_size = max(1, current_size - step)
         self.canvas.selection_tool.size = new_size
         
-        # 更新设置面板（如果可见）
-        if hasattr(self.main_window, 'selection_tool_settings_panel') and \
-           self.main_window.selection_tool_settings_panel.isVisible():
-            self.main_window.selection_tool_size_spinbox.setValue(int(new_size))
+        # 更新属性面板
+        self.main_window.properties_panel.selection_size_spinbox.setValue(int(new_size))
         
         self.main_window.statusbar.showMessage(f"选择范围: {int(new_size)}")
         self.canvas.update()  # 更新光标显示
@@ -220,13 +208,13 @@ class ShortcutHandler:
         
         self.canvas.selection_tool.target_color = new_color
         
-        # 更新设置面板（如果可见）
-        if hasattr(self.main_window, 'selection_tool_settings_panel') and \
-           self.main_window.selection_tool_settings_panel.isVisible():
-            if new_color == 0:
-                self.main_window.wand_black_radio.setChecked(True)
-            else:
-                self.main_window.wand_white_radio.setChecked(True)
+        # 更新属性面板
+        if new_color == 0:
+            self.main_window.properties_panel.selection_black_radio.setChecked(True)
+            self.main_window.properties_panel.fill_button.setText("填充白色")
+        else:
+            self.main_window.properties_panel.selection_white_radio.setChecked(True)
+            self.main_window.properties_panel.fill_button.setText("填充黑色")
         
         color_text = "黑色" if new_color == 0 else "白色"
         self.main_window.statusbar.showMessage(f"选择目标颜色: {color_text}")

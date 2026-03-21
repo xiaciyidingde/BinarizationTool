@@ -29,7 +29,7 @@ class Canvas(QWidget):
     # 信号
     image_modified = Signal()  # 图片被修改时发射
     file_dropped = Signal(str)  # 文件拖放时发射，传递文件路径
-    show_tool_settings = Signal(QPoint)  # 显示工具设置面板，传递全局坐标
+    zoom_changed = Signal(float)  # 缩放比例变化时发射
     
     def __init__(self, parent=None):
         """
@@ -198,13 +198,6 @@ class Canvas(QWidget):
                         )
                     self.update()
         
-        elif event.button() == Qt.RightButton:
-            # 右键：显示工具设置面板
-            if self.image_data is not None and self.current_tool is not None:
-                if isinstance(self.current_tool, (BrushTool, SelectionTool)):
-                    # 发射信号，通知主窗口显示设置面板
-                    self.show_tool_settings.emit(event.globalPosition().toPoint())
-        
         elif event.button() == Qt.MiddleButton:
             # 中键平移
             self.is_panning = True
@@ -355,6 +348,9 @@ class Canvas(QWidget):
             scale_factor
         )
         
+        # 发射缩放变化信号
+        self.zoom_changed.emit(self.view_transform.scale)
+        
         self.update()
     
     def keyPressEvent(self, event):
@@ -449,3 +445,6 @@ class Canvas(QWidget):
         view_height = self.image_data.height * scale
         self.view_transform.offset_x = (canvas_width - view_width) / 2
         self.view_transform.offset_y = (canvas_height - view_height) / 2
+        
+        # 发射缩放变化信号
+        self.zoom_changed.emit(self.view_transform.scale)
