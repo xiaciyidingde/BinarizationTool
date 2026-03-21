@@ -47,6 +47,9 @@ class ImageData:
         
         # 临时编辑掩码：记录当前笔画中被编辑的像素
         self.temp_edit_mask: Optional[np.ndarray] = None
+        
+        # 选区蒙版：标记哪些像素被选中（True=选中）
+        self.selection_mask: Optional[np.ndarray] = None  # shape: (H, W), dtype=bool
     
     def get_pixel(self, x: int, y: int) -> int:
         """
@@ -218,6 +221,9 @@ class ImageData:
         
         # 清除临时图层
         self.temp_layer = None
+        
+        # 清除选区（裁剪后选区不再有效）
+        self.selection_mask = None
     
     def copy(self) -> 'ImageData':
         """
@@ -236,6 +242,8 @@ class ImageData:
             new_image.temp_layer = self.temp_layer.copy()
         if self.temp_edit_mask is not None:
             new_image.temp_edit_mask = self.temp_edit_mask.copy()
+        if self.selection_mask is not None:
+            new_image.selection_mask = self.selection_mask.copy()
         return new_image
     
     def get_current_pixels(self) -> np.ndarray:

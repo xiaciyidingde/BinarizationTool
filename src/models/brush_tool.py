@@ -117,7 +117,9 @@ class BrushTool:
         """
         渲染画笔光标
         
-        绘制圆形外圈显示画笔大小。当圆圈太小时在圆圈外显示红色十字准星。
+        绘制圆形外圈显示画笔大小。
+        颜色指示：红色=黑色画笔，绿色=白色画笔
+        当圆圈太小时在圆圈外显示十字准星。
         
         Args:
             painter: Qt QPainter 对象
@@ -131,24 +133,25 @@ class BrushTool:
         # 保存当前画笔状态
         old_pen = painter.pen()
         
-        # === 第一层：绘制圆形外圈 ===
-        pen = QPen(Qt.white, 1)
+        # 根据画笔颜色选择指示器颜色
+        # 黑色画笔(0) -> 红色指示器
+        # 白色画笔(255) -> 绿色指示器
+        if self.color == 0:
+            indicator_color = QColor(255, 0, 0)  # 红色
+        else:
+            indicator_color = QColor(0, 255, 0)  # 绿色
+        
+        # === 第一层：绘制彩色圆形外圈 ===
+        pen = QPen(indicator_color, 2)  # 使用指示器颜色，更粗的线条
         pen.setStyle(Qt.SolidLine)
         painter.setPen(pen)
         
         radius = view_size / 2.0
         painter.drawEllipse(QPointF(view_x, view_y), radius, radius)
         
-        # 绘制黑色虚线外圈（增强可见性）
-        pen.setColor(Qt.black)
-        pen.setWidth(1)
-        pen.setStyle(Qt.DashLine)
-        painter.setPen(pen)
-        painter.drawEllipse(QPointF(view_x, view_y), radius, radius)
-        
-        # === 第二层：绘制红色十字准星（在圆圈外，只在圆圈小时显示）===
+        # === 第二层：绘制十字准星（在圆圈外，只在圆圈小时显示）===
         if view_size < self.crosshair_threshold:
-            pen = QPen(QColor(255, 0, 0))  # 红色
+            pen = QPen(indicator_color)  # 使用相同的指示器颜色
             pen.setWidth(2)  # 更粗的线条
             pen.setStyle(Qt.SolidLine)
             painter.setPen(pen)
