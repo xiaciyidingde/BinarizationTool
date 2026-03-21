@@ -29,23 +29,63 @@ class PropertiesPanel(QWidget):
     
     def setup_ui(self):
         """设置 UI"""
-        # 主布局
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        # 创建滚动区域
+        from PySide6.QtWidgets import QScrollArea
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        # 外层容器（用于居中和限制宽度）
+        outer_container = QWidget()
+        outer_layout = QVBoxLayout(outer_container)
+        outer_layout.setContentsMargins(6, 6, 6, 6)
+        
+        # 内容容器（带背景和圆角）
+        content = QWidget()
+        content.setObjectName("propertiesPanelContent")
+        content.setStyleSheet("""
+            QWidget#propertiesPanelContent {
+                background-color: #ffffff;
+                border-radius: 8px;
+            }
+        """)
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
         
         # 创建选项卡
         self.tab_widget = QTabWidget()
-        # 设置透明背景
+        # 设置选项卡样式
         self.tab_widget.setStyleSheet("""
             QTabWidget::pane {
-                border: none;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
                 background: transparent;
+                top: -1px;
             }
             QTabBar::tab {
-                padding: 8px 16px;
+                background: #f8f9fa;
+                color: #6c757d;
+                padding: 8px 20px;
+                margin-right: 4px;
+                border: 1px solid #dee2e6;
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                font-size: 13px;
+            }
+            QTabBar::tab:selected {
+                background: #ffffff;
+                color: #495057;
+                font-weight: bold;
+                border-bottom: 1px solid #ffffff;
+                margin-bottom: -1px;
+            }
+            QTabBar::tab:hover:!selected {
+                background: #e9ecef;
             }
         """)
-        main_layout.addWidget(self.tab_widget)
+        layout.addWidget(self.tab_widget)
         
         # 第一页：属性
         self.properties_page = self._create_properties_page()
@@ -55,18 +95,49 @@ class PropertiesPanel(QWidget):
         self.tools_page = self._create_tools_page()
         self.tab_widget.addTab(self.tools_page, "工具")
         
+        # 将内容容器添加到外层布局
+        outer_layout.addWidget(content)
+        
+        # 设置滚动区域
+        scroll.setWidget(outer_container)
+        
+        # 主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+        
         # 设置面板尺寸
-        self.setMinimumWidth(200)
-        self.setMaximumWidth(300)
+        self.setMinimumWidth(250)
+        self.setMaximumWidth(250)
     
     def _create_properties_page(self) -> QWidget:
         """创建属性页"""
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
         
         # 图片属性分组
         image_group = QGroupBox("图片属性")
+        image_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 14px;
+                color: #495057;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 8px;
+                top: 0px;
+                padding: 0 4px;
+                background-color: #ffffff;
+            }
+        """)
         image_layout = QFormLayout()
         image_layout.setSpacing(8)
         
@@ -104,7 +175,7 @@ class PropertiesPanel(QWidget):
         page = QWidget()
         layout = QVBoxLayout(page)
         layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
+        layout.setSpacing(8)
         
         # 提示信息（默认显示）
         self.tool_hint_label = QLabel("请选择一个工具")
@@ -132,6 +203,25 @@ class PropertiesPanel(QWidget):
         from PySide6.QtWidgets import QSpinBox, QRadioButton, QButtonGroup, QHBoxLayout
         
         group = QGroupBox("基础设置")
+        group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 14px;
+                color: #495057;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 8px;
+                top: 0px;
+                padding: 0 4px;
+                background-color: #ffffff;
+            }
+        """)
         layout = QVBoxLayout()
         layout.setSpacing(12)
         
@@ -178,10 +268,29 @@ class PropertiesPanel(QWidget):
         container = QWidget()
         container_layout = QVBoxLayout(container)
         container_layout.setContentsMargins(0, 0, 0, 0)
-        container_layout.setSpacing(12)
+        container_layout.setSpacing(8)
         
         # 基础设置组
         basic_group = QGroupBox("基础设置")
+        basic_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 14px;
+                color: #495057;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 8px;
+                top: 0px;
+                padding: 0 4px;
+                background-color: #ffffff;
+            }
+        """)
         basic_layout = QVBoxLayout()
         basic_layout.setSpacing(12)
         
@@ -253,6 +362,25 @@ class PropertiesPanel(QWidget):
         
         # 快捷操作组
         actions_group = QGroupBox("快捷操作")
+        actions_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 14px;
+                color: #495057;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 8px;
+                top: 0px;
+                padding: 0 4px;
+                background-color: #ffffff;
+            }
+        """)
         actions_layout = QVBoxLayout()
         actions_layout.setSpacing(8)
         

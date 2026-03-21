@@ -24,6 +24,7 @@ from ..models.selection_tool import SelectionTool
 from ..utils.file_io import load_image, save_image
 from ..utils.binarization_engine import BinarizationEngine
 from ..utils.binarization_worker import BinarizationWorker
+from ..utils.theme_manager import ThemeManager
 
 
 class MainWindow(QMainWindow):
@@ -36,6 +37,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         """初始化主窗口"""
         super().__init__()
+        
+        # 主题管理器
+        self.theme_manager = ThemeManager()
         
         # 数据
         self.image_data: Optional[ImageData] = None
@@ -52,7 +56,7 @@ class MainWindow(QMainWindow):
         
         # 设置窗口
         self.setWindowTitle("BinarizationTool - 二值化图片编辑器")
-        self.setGeometry(100, 100, 1400, 800)
+        self.setGeometry(100, 100, 1450, 800)
         
         # 创建 UI
         self.setup_ui()
@@ -92,11 +96,13 @@ class MainWindow(QMainWindow):
         
         # 创建主分割器（左侧面板 + 中右部分）
         main_splitter = QSplitter(Qt.Horizontal)
+        main_splitter.setHandleWidth(0)  # 设置分隔条宽度为 0
+        main_splitter.setChildrenCollapsible(False)  # 禁止折叠
         
         # 左侧：二值化面板
         self.binarization_panel = BinarizationPanel()
-        self.binarization_panel.setMaximumWidth(300)
-        self.binarization_panel.setMinimumWidth(200)
+        self.binarization_panel.setMaximumWidth(290)
+        self.binarization_panel.setMinimumWidth(290)
         main_splitter.addWidget(self.binarization_panel)
         
         # 中右部分：Canvas + 属性面板
@@ -121,47 +127,62 @@ class MainWindow(QMainWindow):
         main_splitter.setStretchFactor(0, 0)  # 左侧面板固定
         main_splitter.setStretchFactor(1, 1)  # 中右部分可伸缩
         
+        # 禁用左侧面板的拖动（通过设置固定宽度已经实现）
+        main_splitter.handle(1).setEnabled(False)  # 禁用第一个分隔条
+        
         main_layout.addWidget(main_splitter)
     
     def create_actions(self):
         """创建动作"""
         # 文件菜单动作
-        self.open_action = QAction("打开 (Ctrl+O)", self)
+        self.open_action = QAction("打开", self)
         self.open_action.setShortcut("Ctrl+O")
+        self.open_action.setToolTip("打开图片 (Ctrl+O)")
         self.open_action.triggered.connect(self._open_file)
+        self.addAction(self.open_action)  # 添加到主窗口以启用快捷键
         
-        self.save_action = QAction("保存 (Ctrl+S)", self)
+        self.save_action = QAction("保存", self)
         self.save_action.setShortcut("Ctrl+S")
+        self.save_action.setToolTip("保存图片 (Ctrl+S)")
         self.save_action.triggered.connect(self._save_file)
+        self.addAction(self.save_action)  # 添加到主窗口以启用快捷键
         
-        self.save_as_action = QAction("另存为 (Ctrl+Shift+S)", self)
+        self.save_as_action = QAction("另存为", self)
         self.save_as_action.setShortcut("Ctrl+Shift+S")
+        self.save_as_action.setToolTip("另存为 (Ctrl+Shift+S)")
         self.save_as_action.triggered.connect(self._save_file_as)
+        self.addAction(self.save_as_action)  # 添加到主窗口以启用快捷键
         
-        self.exit_action = QAction("退出 (Ctrl+Q)", self)
+        self.exit_action = QAction("退出", self)
         self.exit_action.setShortcut("Ctrl+Q")
+        self.exit_action.setToolTip("退出程序 (Ctrl+Q)")
         self.exit_action.triggered.connect(self.close)
+        self.addAction(self.exit_action)  # 添加到主窗口以启用快捷键
         
         # 编辑菜单动作
-        self.undo_action = QAction("后退 (Ctrl+Z)", self)
+        self.undo_action = QAction("后退", self)
         self.undo_action.setShortcut("Ctrl+Z")
         self.undo_action.setToolTip("后退到上一步 (Ctrl+Z)")
         self.undo_action.triggered.connect(self._undo)
+        self.addAction(self.undo_action)  # 添加到主窗口以启用快捷键
         
-        self.redo_action = QAction("前进 (Ctrl+Y)", self)
+        self.redo_action = QAction("前进", self)
         self.redo_action.setShortcut("Ctrl+Y")
         self.redo_action.setToolTip("前进到下一步 (Ctrl+Y)")
         self.redo_action.triggered.connect(self._redo)
+        self.addAction(self.redo_action)  # 添加到主窗口以启用快捷键
         
-        self.reset_action = QAction("重置 (Ctrl+R)", self)
+        self.reset_action = QAction("重置", self)
         self.reset_action.setShortcut("Ctrl+R")
         self.reset_action.setToolTip("重置到初始状态 (Ctrl+R)")
         self.reset_action.triggered.connect(self._reset_to_initial)
+        self.addAction(self.reset_action)  # 添加到主窗口以启用快捷键
         
         # 工具动作 - 创建自定义按钮以支持悬浮事件
-        self.brush_button = QPushButton("画笔工具 (B)")
+        self.brush_button = QPushButton("画笔工具")
         self.brush_button.setCheckable(True)
         self.brush_button.setFlat(True)  # 扁平样式，类似 QAction
+        self.brush_button.setToolTip("画笔工具 (B)")
         self.brush_button.clicked.connect(self._select_brush_tool)
         self.brush_button.installEventFilter(self)
         
@@ -174,15 +195,17 @@ class MainWindow(QMainWindow):
         # 初始化快捷键处理器（统一管理工具快捷键）
         self.shortcut_handler = ShortcutHandler(self)
         
-        self.crop_action = QAction("裁剪工具 (C)", self)
+        self.crop_action = QAction("裁剪工具", self)
         self.crop_action.setShortcut("C")
         self.crop_action.setCheckable(True)
+        self.crop_action.setToolTip("裁剪工具 (C)")
         self.crop_action.triggered.connect(self._select_crop_tool)
         
         # 选择工具动作
-        self.selection_tool_action = QAction("选择工具 (W)", self)
+        self.selection_tool_action = QAction("选择工具", self)
         self.selection_tool_action.setShortcut("W")
         self.selection_tool_action.setCheckable(True)
+        self.selection_tool_action.setToolTip("选择工具 (W)")
         self.selection_tool_action.triggered.connect(self._select_selection_tool)
         self.addAction(self.selection_tool_action)  # 添加到主窗口以启用快捷键
         
@@ -190,10 +213,12 @@ class MainWindow(QMainWindow):
         self.deselect_action = QAction("取消选择 (Ctrl+D)", self)
         self.deselect_action.setShortcut("Ctrl+D")
         self.deselect_action.triggered.connect(self._deselect)
+        self.addAction(self.deselect_action)  # 添加到主窗口以启用快捷键
         
         self.invert_selection_action = QAction("反选 (Ctrl+Shift+I)", self)
         self.invert_selection_action.setShortcut("Ctrl+Shift+I")
         self.invert_selection_action.triggered.connect(self._invert_selection)
+        self.addAction(self.invert_selection_action)  # 添加到主窗口以启用快捷键
         
         self.select_black_action = QAction("选择黑色", self)
         self.select_black_action.triggered.connect(lambda: self._select_by_color(0))
@@ -206,41 +231,92 @@ class MainWindow(QMainWindow):
         self.toolbar = QToolBar("工具")
         self.toolbar.setMovable(False)
         self.toolbar.setContextMenuPolicy(Qt.PreventContextMenu)  # 禁用右键菜单
-        self.addToolBar(self.toolbar)
         
-        # 文件操作
-        self.toolbar.addAction(self.open_action)
-        self.toolbar.addAction(self.save_action)
-        self.toolbar.addSeparator()
+        # 创建工具栏容器
+        toolbar_container = QWidget()
+        toolbar_layout = QHBoxLayout(toolbar_container)
+        toolbar_layout.setContentsMargins(8, 4, 8, 4)
+        toolbar_layout.setSpacing(8)
         
-        # 编辑操作 - 后退/前进/重置
-        self.toolbar.addAction(self.undo_action)
-        self.toolbar.addAction(self.redo_action)
-        self.toolbar.addAction(self.reset_action)
-        self.toolbar.addSeparator()
+        # 创建按钮辅助函数
+        def create_toolbar_button(text, tooltip, checkable=False):
+            btn = QPushButton(text)
+            btn.setCheckable(checkable)
+            btn.setToolTip(tooltip)
+            btn.setMinimumHeight(28)
+            btn.setMaximumHeight(28)
+            return btn
         
-        # 工具选择 - 使用自定义按钮
-        self.toolbar.addWidget(self.brush_button)
-        self.toolbar.addAction(self.crop_action)
+        # 创建按钮组容器辅助函数
+        def create_button_group():
+            group = QFrame()
+            group.setObjectName("toolbarButtonGroup")
+            group_layout = QHBoxLayout(group)
+            group_layout.setContentsMargins(3, 1, 3, 1)
+            group_layout.setSpacing(0)
+            return group, group_layout
+            group_layout.setSpacing(0)
+            return group, group_layout
         
-        # 选择工具按钮（自定义以支持悬浮面板）
-        self.selection_tool_button = QPushButton("选择工具 (W)")
-        self.selection_tool_button.setCheckable(True)
-        self.selection_tool_button.setFlat(True)  # 扁平样式，类似 QAction
-        self.selection_tool_button.setEnabled(False)  # 初始状态为禁用
+        # 文件操作组
+        file_group, file_layout = create_button_group()
+        open_btn = create_toolbar_button("打开", "打开图片 (Ctrl+O)")
+        open_btn.clicked.connect(self._open_file)
+        file_layout.addWidget(open_btn)
+        
+        save_btn = create_toolbar_button("保存", "保存图片 (Ctrl+S)")
+        save_btn.clicked.connect(self._save_file)
+        file_layout.addWidget(save_btn)
+        self.save_action_btn = save_btn
+        toolbar_layout.addWidget(file_group)
+        
+        # 编辑操作组
+        edit_group, edit_layout = create_button_group()
+        undo_btn = create_toolbar_button("后退", "后退到上一步 (Ctrl+Z)")
+        undo_btn.clicked.connect(self._undo)
+        edit_layout.addWidget(undo_btn)
+        self.undo_action_btn = undo_btn
+        
+        redo_btn = create_toolbar_button("前进", "前进到下一步 (Ctrl+Y)")
+        redo_btn.clicked.connect(self._redo)
+        edit_layout.addWidget(redo_btn)
+        self.redo_action_btn = redo_btn
+        
+        reset_btn = create_toolbar_button("重置", "重置到初始状态 (Ctrl+R)")
+        reset_btn.clicked.connect(self._reset_to_initial)
+        edit_layout.addWidget(reset_btn)
+        self.reset_action_btn = reset_btn
+        toolbar_layout.addWidget(edit_group)
+        
+        # 工具选择组
+        tool_group, tool_layout = create_button_group()
+        self.brush_button = create_toolbar_button("画笔", "画笔工具 (B)", checkable=True)
+        self.brush_button.clicked.connect(self._select_brush_tool)
+        self.brush_button.installEventFilter(self)
+        tool_layout.addWidget(self.brush_button)
+        
+        self.crop_button = create_toolbar_button("裁剪", "裁剪工具 (C)", checkable=True)
+        self.crop_button.clicked.connect(self._select_crop_tool)
+        tool_layout.addWidget(self.crop_button)
+        
+        self.selection_tool_button = create_toolbar_button("选择", "选择工具 (W)", checkable=True)
+        self.selection_tool_button.setEnabled(False)
         self.selection_tool_button.clicked.connect(self._select_selection_tool)
         self.selection_tool_button.installEventFilter(self)
-        self.toolbar.addWidget(self.selection_tool_button)
+        tool_layout.addWidget(self.selection_tool_button)
+        toolbar_layout.addWidget(tool_group)
         
-        # 添加弹性空间，将后续内容推到右边
-        spacer = QWidget()
-        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        self.toolbar.addWidget(spacer)
+        # 添加弹性空间
+        toolbar_layout.addStretch()
         
-        # 当前工具显示（右对齐）
+        # 当前工具显示
         self.current_tool_label = QLabel("当前工具：无")
-        self.current_tool_label.setStyleSheet("padding: 0 10px; color: #666;")
-        self.toolbar.addWidget(self.current_tool_label)
+        self.current_tool_label.setStyleSheet("padding: 0 10px; color: #495057; font-size: 14px; font-weight: 500;")
+        toolbar_layout.addWidget(self.current_tool_label)
+        
+        # 将容器添加到工具栏
+        self.addToolBar(self.toolbar)
+        self.toolbar.addWidget(toolbar_container)
     
     def create_statusbar(self):
         """创建状态栏"""
@@ -302,8 +378,7 @@ class MainWindow(QMainWindow):
         
         self.canvas.set_tool(self.canvas.brush_tool)
         self.brush_button.setChecked(True)
-        self.crop_action.setChecked(False)
-        self.selection_tool_action.setChecked(False)
+        self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(False)
         self.current_tool_label.setText("当前工具：画笔")
         self.statusbar.showMessage("画笔工具已激活")
@@ -321,8 +396,7 @@ class MainWindow(QMainWindow):
         
         self.canvas.set_tool(self.canvas.crop_tool)
         self.brush_button.setChecked(False)
-        self.crop_action.setChecked(True)
-        self.selection_tool_action.setChecked(False)
+        self.crop_button.setChecked(True)
         self.selection_tool_button.setChecked(False)
         self.current_tool_label.setText("当前工具：裁剪")
         self.statusbar.showMessage("裁剪工具已激活")
@@ -338,8 +412,7 @@ class MainWindow(QMainWindow):
         
         self.canvas.set_tool(self.canvas.selection_tool)
         self.brush_button.setChecked(False)
-        self.crop_action.setChecked(False)
-        self.selection_tool_action.setChecked(False)
+        self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(True)
         self.current_tool_label.setText("当前工具：选择")
         mode_text = "添加" if self.canvas.selection_tool.selection_mode == 'add' else "删除"
@@ -362,6 +435,10 @@ class MainWindow(QMainWindow):
         pixels = self.image_data.get_current_pixels()
         self.canvas.tile_cache.set_image(pixels, None)
         self.canvas.update()
+        
+        # 保存到历史管理器
+        self.history_manager.push_state(self.image_data)
+        
         self._update_ui_state()  # 更新 UI 状态
         self.statusbar.showMessage("已取消选择")
     
@@ -380,6 +457,10 @@ class MainWindow(QMainWindow):
         pixels = self.image_data.get_current_pixels()
         self.canvas.tile_cache.set_image(pixels, self.image_data.selection_mask)
         self.canvas.update()
+        
+        # 保存到历史管理器（重要！）
+        self.history_manager.push_state(self.image_data)
+        
         self._update_ui_state()  # 更新 UI 状态
         self.statusbar.showMessage("已反选")
     
@@ -394,6 +475,10 @@ class MainWindow(QMainWindow):
         pixels = self.image_data.get_current_pixels()
         self.canvas.tile_cache.set_image(pixels, self.image_data.selection_mask)
         self.canvas.update()
+        
+        # 保存到历史管理器（重要！）
+        self.history_manager.push_state(self.image_data)
+        
         self._update_ui_state()  # 更新 UI 状态
         color_name = "黑色" if color == 0 else "白色"
         self.statusbar.showMessage(f"已选择所有{color_name}像素")
@@ -539,6 +624,11 @@ class MainWindow(QMainWindow):
         if self.history_manager.can_undo():
             self.image_data = self.history_manager.undo(self.image_data)
             self.canvas.set_image(self.image_data)
+            
+            # 同步选择工具的选区状态
+            if self.canvas.selection_tool:
+                self.canvas.selection_tool.selection_mask = self.image_data.selection_mask
+            
             self.statusbar.showMessage("已撤销")
             self._update_ui_state()
             # 更新属性面板（撤销可能恢复裁剪前的尺寸）
@@ -552,6 +642,11 @@ class MainWindow(QMainWindow):
         if self.history_manager.can_redo():
             self.image_data = self.history_manager.redo()
             self.canvas.set_image(self.image_data)
+            
+            # 同步选择工具的选区状态
+            if self.canvas.selection_tool:
+                self.canvas.selection_tool.selection_mask = self.image_data.selection_mask
+            
             self.statusbar.showMessage("已重做")
             self._update_ui_state()
             # 更新属性面板（重做可能改变尺寸）
@@ -685,21 +780,19 @@ class MainWindow(QMainWindow):
         has_image = self.image_data is not None
         
         # 文件操作
-        self.save_action.setEnabled(has_image)
-        self.save_as_action.setEnabled(has_image)
+        self.save_action_btn.setEnabled(has_image)
         
         # 编辑操作
-        self.undo_action.setEnabled(self.history_manager.can_undo())
-        self.redo_action.setEnabled(self.history_manager.can_redo())
-        self.reset_action.setEnabled(has_image and self._has_edits())
+        self.undo_action_btn.setEnabled(self.history_manager.can_undo())
+        self.redo_action_btn.setEnabled(self.history_manager.can_redo())
+        self.reset_action_btn.setEnabled(has_image and self._has_edits())
         
         # 工具
         self.brush_button.setEnabled(has_image)
-        self.crop_action.setEnabled(has_image)
-        self.selection_tool_action.setEnabled(has_image)
-        self.selection_tool_button.setEnabled(has_image)  # 同步选择按钮状态
+        self.crop_button.setEnabled(has_image)
+        self.selection_tool_button.setEnabled(has_image)
         
-        # 选区操作
+        # 选区操作（保留 action 引用用于快捷键）
         has_selection = (self.image_data is not None and 
                         self.image_data.selection_mask is not None and
                         bool(self.image_data.selection_mask.any()))  # 转换为 Python bool

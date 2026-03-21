@@ -2,7 +2,7 @@
 
 基于 PySide6 的二值化图片编辑应用程序，提供类似 Photoshop 的编辑功能。
 
-**版本**: v1.1.4.0  
+**版本**: v1.2.0.0  
 
 **许可证**：MIT License
 
@@ -224,18 +224,27 @@ pyinstaller image-brush-editor.spec
 │   │   ├── brush_stroke.py      # 画笔笔画
 │   │   ├── brush_tool.py        # 画笔工具
 │   │   ├── crop_tool.py         # 裁剪工具
+│   │   ├── selection_tool.py    # 选择工具
+│   │   ├── tile_cache.py        # 分块缓存
 │   │   └── history_manager.py   # 历史管理
 │   ├── views/           # UI 组件
 │   │   ├── canvas.py            # 画布组件
 │   │   ├── binarization_panel.py # 二值化面板
+│   │   ├── properties_panel.py  # 属性面板
+│   │   ├── shortcut_handler.py  # 快捷键处理
 │   │   └── main_window.py       # 主窗口
 │   └── utils/           # 工具函数
 │       ├── binarization_engine.py # 二值化引擎
+│       ├── binarization_worker.py # 异步二值化
+│       ├── theme_manager.py     # 主题管理
+│       ├── resources.py         # 资源管理
 │       └── file_io.py           # 文件 I/O
+├── themes/              # 主题文件
+│   └── light_theme.qss  # 浅色主题
 ├── tests/               # 测试文件
 ├── main.py              # 应用入口
 ├── requirements.txt     # 依赖列表
-└── README.md            # 本文件
+└── README.md
 ```
 
 ## 技术栈
@@ -269,6 +278,7 @@ pyinstaller image-brush-editor.spec
 
 ## 版本历史
 
+- **v1.2.0.0** (2026-03-21): 界面优化（左右面板样式统一、分区标题、边框美化），快捷键修复，选区历史管理修复，主题系统
 - **v1.1.4.0** (2026-03-21): 异步二值化处理（性能优化），命令行支持，属性面板尺寸修复
 - **v1.1.3.0** (2026-03-21): 重置功能，一键恢复到初始状态
 - **v1.1.2.0** (2026-03-21): 右侧属性面板，三栏布局，工具设置整合，选择工具优化
