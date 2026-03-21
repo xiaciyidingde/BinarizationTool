@@ -131,6 +131,11 @@ class MainWindow(QMainWindow):
         self.redo_action.setToolTip("前进到下一步 (Ctrl+Y)")
         self.redo_action.triggered.connect(self._redo)
         
+        self.reset_action = QAction("重置 (Ctrl+R)", self)
+        self.reset_action.setShortcut("Ctrl+R")
+        self.reset_action.setToolTip("重置到初始状态 (Ctrl+R)")
+        self.reset_action.triggered.connect(self._reset_to_initial)
+        
         # 工具动作 - 创建自定义按钮以支持悬浮事件
         self.brush_button = QPushButton("画笔工具 (B)")
         self.brush_button.setCheckable(True)
@@ -186,9 +191,10 @@ class MainWindow(QMainWindow):
         self.toolbar.addAction(self.save_action)
         self.toolbar.addSeparator()
         
-        # 编辑操作 - 后退/前进
+        # 编辑操作 - 后退/前进/重置
         self.toolbar.addAction(self.undo_action)
         self.toolbar.addAction(self.redo_action)
+        self.toolbar.addAction(self.reset_action)
         self.toolbar.addSeparator()
         
         # 工具选择 - 使用自定义按钮
@@ -525,6 +531,53 @@ class MainWindow(QMainWindow):
             self.statusbar.showMessage("已重做")
             self._update_ui_state()
     
+    def _reset_to_initial(self):
+        """重置到初始状态"""
+        if self.image_data is None:
+            return
+        
+        # 检查是否有编辑内容
+        if not self._has_edits():
+            self.statusbar.showMessage("没有需要重置的编辑内容")
+            return
+        
+        # 弹窗确认
+        reply = QMessageBox.question(
+            self,
+            "确认重置",
+            "确定要重置到初始状态吗？\n\n这将清除所有画笔编辑和裁剪操作，恢复到刚打开图片时的二值化结果。\n此操作无法撤销。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            # 重新加载图片（最简单可靠的方式）
+            if self.current_file_path:
+                self._load_file_from_path(self.current_file_path)
+                self.statusbar.showMessage("已重置到初始状态")
+            else:
+                self.statusbar.showMessage("无法重置：未找到原始文件路径")
+    
+    def _has_edits(self) -> bool:
+        """
+        检查是否有编辑内容
+        
+        Returns:
+            True 如果有编辑内容（画笔编辑或裁剪），否则 False
+        """
+        if self.image_data is None:
+            return False
+        
+        # 检查是否有画笔编辑（转换为 Python bool）
+        has_brush_edits = (self.image_data.edit_mask is not None and 
+                          bool(self.image_data.edit_mask.any()))
+        
+        # 检查是否有裁剪（通过比较当前尺寸和原始尺寸）
+        has_crop = (self.image_data.pixels.shape != 
+                   self.image_data.original_pixels.shape)
+        
+        return has_brush_edits or has_crop
+    
     def _on_parameters_changed(self, preprocess_params: dict, method: int, threshold: int):
         """参数改变（预处理或二值化）"""
         if self.image_data is None:
@@ -572,6 +625,7 @@ class MainWindow(QMainWindow):
         # 编辑操作
         self.undo_action.setEnabled(self.history_manager.can_undo())
         self.redo_action.setEnabled(self.history_manager.can_redo())
+        self.reset_action.setEnabled(has_image and self._has_edits())
         
         # 工具
         self.brush_button.setEnabled(has_image)
