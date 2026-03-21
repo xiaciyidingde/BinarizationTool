@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout,
                                 QSplitter, QToolBar, QFileDialog, QMessageBox,
                                 QPushButton, QLabel, QStatusBar, QSizePolicy,
                                 QSpinBox, QRadioButton, QButtonGroup, QFrame)
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, QTimer
 from PySide6.QtGui import QAction, QIcon, QEnterEvent
 
 from .canvas import Canvas
@@ -23,6 +23,7 @@ from ..models.brush_tool import BrushTool
 from ..models.selection_tool import SelectionTool
 from ..utils.file_io import load_image, save_image
 from ..utils.binarization_engine import BinarizationEngine
+from ..utils.binarization_worker import BinarizationWorker
 
 
 class MainWindow(QMainWindow):
@@ -42,6 +43,13 @@ class MainWindow(QMainWindow):
         self.current_file_path: Optional[str] = None
         self.saved_file_path: Optional[str] = None  # 记录已保存的文件路径
         
+        # 异步二值化
+        self.binarization_worker: Optional[BinarizationWorker] = None
+        self.pending_binarization_params: Optional[tuple] = None  # (preprocess_params, method, threshold)
+        self.binarization_debounce_timer = QTimer()
+        self.binarization_debounce_timer.setSingleShot(True)
+        self.binarization_debounce_timer.timeout.connect(self._start_binarization)
+        
         # 设置窗口
         self.setWindowTitle("BinarizationTool - 二值化图片编辑器")
         self.setGeometry(100, 100, 1400, 800)
@@ -57,6 +65,20 @@ class MainWindow(QMainWindow):
         
         # 初始状态
         self._update_ui_state()
+    
+    def closeEvent(self, event):
+        """窗口关闭事件 - 清理资源"""
+        # 停止防抖定时器
+        if self.binarization_debounce_timer.isActive():
+            self.binarization_debounce_timer.stop()
+        
+        # 取消并等待后台线程完成
+        if self.binarization_worker is not None and self.binarization_worker.isRunning():
+            self.binarization_worker.cancel()
+            self.binarization_worker.wait(1000)  # 最多等待1秒
+        
+        # 接受关闭事件
+        event.accept()
     
     def setup_ui(self):
         """设置 UI 布局"""
@@ -519,6 +541,8 @@ class MainWindow(QMainWindow):
             self.canvas.set_image(self.image_data)
             self.statusbar.showMessage("已撤销")
             self._update_ui_state()
+            # 更新属性面板（撤销可能恢复裁剪前的尺寸）
+            self.properties_panel.set_image_info(self.image_data, self.current_file_path)
     
     def _redo(self):
         """重做"""
@@ -530,6 +554,8 @@ class MainWindow(QMainWindow):
             self.canvas.set_image(self.image_data)
             self.statusbar.showMessage("已重做")
             self._update_ui_state()
+            # 更新属性面板（重做可能改变尺寸）
+            self.properties_panel.set_image_info(self.image_data, self.current_file_path)
     
     def _reset_to_initial(self):
         """重置到初始状态"""
@@ -579,22 +605,53 @@ class MainWindow(QMainWindow):
         return has_brush_edits or has_crop
     
     def _on_parameters_changed(self, preprocess_params: dict, method: int, threshold: int):
-        """参数改变（预处理或二值化）"""
+        """参数改变（预处理或二值化）- 使用防抖和异步处理"""
+        if self.image_data is None:
+            return
+        
+        # 保存待处理的参数
+        self.pending_binarization_params = (preprocess_params, method, threshold)
+        
+        # 重启防抖定时器（150ms 延迟，避免频繁触发）
+        self.binarization_debounce_timer.start(150)
+        
+        # 显示处理中状态
+        self.statusbar.showMessage("处理中...")
+    
+    def _start_binarization(self):
+        """启动异步二值化处理"""
+        if self.image_data is None or self.pending_binarization_params is None:
+            return
+        
+        # 取消之前的工作线程
+        if self.binarization_worker is not None and self.binarization_worker.isRunning():
+            self.binarization_worker.cancel()
+            self.binarization_worker.wait()
+        
+        # 获取参数
+        preprocess_params, method, threshold = self.pending_binarization_params
+        
+        # 创建新的工作线程
+        self.binarization_worker = BinarizationWorker(
+            self.image_data.original_pixels,
+            preprocess_params,
+            method,
+            threshold
+        )
+        
+        # 连接信号
+        self.binarization_worker.finished.connect(self._on_binarization_finished)
+        self.binarization_worker.error.connect(self._on_binarization_error)
+        
+        # 启动线程
+        self.binarization_worker.start()
+    
+    def _on_binarization_finished(self, binary_pixels):
+        """二值化完成"""
         if self.image_data is None:
             return
         
         try:
-            # 先应用预处理
-            preprocessed = BinarizationEngine.apply_preprocess(
-                self.image_data.original_pixels.copy(),
-                **preprocess_params
-            )
-            
-            # 再应用二值化
-            binary_pixels = BinarizationEngine.apply_threshold(
-                preprocessed, method, threshold
-            )
-            
             # 只更新基础图层，保留编辑图层
             self.image_data.update_base_layer(binary_pixels)
             
@@ -603,9 +660,15 @@ class MainWindow(QMainWindow):
             self.canvas.tile_cache.set_image(pixels)
             
             self.canvas.update()
+            self.statusbar.showMessage("处理完成")
             
         except Exception as e:
-            QMessageBox.warning(self, "警告", f"图像处理失败:\n{str(e)}")
+            QMessageBox.warning(self, "警告", f"图像更新失败:\n{str(e)}")
+    
+    def _on_binarization_error(self, error_message: str):
+        """二值化出错"""
+        QMessageBox.warning(self, "警告", f"图像处理失败:\n{error_message}")
+        self.statusbar.showMessage("处理失败")
     
     def _on_image_modified(self):
         """图片被修改"""
@@ -613,6 +676,9 @@ class MainWindow(QMainWindow):
             # 保存到历史
             self.history_manager.push_state(self.image_data)
             self._update_ui_state()
+            
+            # 更新属性面板（裁剪后尺寸会变化）
+            self.properties_panel.set_image_info(self.image_data, self.current_file_path)
     
     def _update_ui_state(self):
         """更新 UI 状态"""
