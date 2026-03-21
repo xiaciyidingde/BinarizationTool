@@ -67,25 +67,28 @@ QToolBar QLabel {
 
 /* ========== 按钮样式 ========== */
 QPushButton {
-    background-color: #007bff;
-    color: white;
+    background-color: #f8f9fa;
+    color: #495057;
     font-weight: 500;
     padding: 8px 16px;
-    border: none;
+    border: 1px solid #dee2e6;
     border-radius: 6px;
 }
 
 QPushButton:hover {
-    background-color: #0069d9;
+    background-color: #e9ecef;
+    border-color: #adb5bd;
 }
 
 QPushButton:pressed {
-    background-color: #0062cc;
+    background-color: #dee2e6;
+    border-color: #6c757d;
 }
 
 QPushButton:disabled {
     background-color: #e9ecef;
     color: #adb5bd;
+    border-color: #e9ecef;
 }
 
 /* ========== 输入框样式 ========== */
