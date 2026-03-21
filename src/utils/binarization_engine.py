@@ -228,6 +228,24 @@ class BinarizationEngine:
             strength=kwargs.get('denoise', 0)
         )
         
+        # RGB 通道调整
+        red_adjust = kwargs.get('red_channel', 0)
+        green_adjust = kwargs.get('green_channel', 0)
+        blue_adjust = kwargs.get('blue_channel', 0)
+        
+        if red_adjust != 0 or green_adjust != 0 or blue_adjust != 0:
+            # 确保图像是彩色的（如果是灰度图，转换为 RGB）
+            if len(img.shape) == 2:
+                img = cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_GRAY2RGB).astype(np.float32)
+            
+            # 调整各通道
+            if red_adjust != 0:
+                img[:, :, 2] = np.clip(img[:, :, 2] + red_adjust * 2.55, 0, 255)
+            if green_adjust != 0:
+                img[:, :, 1] = np.clip(img[:, :, 1] + green_adjust * 2.55, 0, 255)
+            if blue_adjust != 0:
+                img[:, :, 0] = np.clip(img[:, :, 0] + blue_adjust * 2.55, 0, 255)
+        
         # 基础调整
         img = enhancer.apply_basic_adjustments(
             img,

@@ -115,6 +115,48 @@ class BinarizationPanel(QWidget):
         preprocess_group.setLayout(preprocess_layout)
         layout.addWidget(preprocess_group)
         
+        # === RGB 通道调整 ===
+        rgb_group = QGroupBox("RGB 通道")
+        rgb_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 14px;
+                color: #495057;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 8px;
+                top: 0px;
+                padding: 0 4px;
+                background-color: #ffffff;
+            }
+        """)
+        rgb_layout = QVBoxLayout()
+        rgb_layout.setSpacing(6)
+        
+        # 红色通道
+        self.red_channel_slider = self._create_slider_with_label(
+            "红色通道:", -100, 100, 0, rgb_layout
+        )
+        
+        # 绿色通道
+        self.green_channel_slider = self._create_slider_with_label(
+            "绿色通道:", -100, 100, 0, rgb_layout
+        )
+        
+        # 蓝色通道
+        self.blue_channel_slider = self._create_slider_with_label(
+            "蓝色通道:", -100, 100, 0, rgb_layout
+        )
+        
+        rgb_group.setLayout(rgb_layout)
+        layout.addWidget(rgb_group)
+        
         # === 二值化方法 ===
         binarization_group = QGroupBox("二值化")
         binarization_group.setStyleSheet("""
@@ -347,6 +389,13 @@ class BinarizationPanel(QWidget):
         self.sharpen_slider.valueChanged.connect(self._on_parameters_changed)
         self.gamma_slider.valueChanged.connect(self._on_parameters_changed)
         self.smooth_slider.valueChanged.connect(self._on_parameters_changed)
+        
+        # RGB 通道调整信号
+        self.red_channel_slider.valueChanged.connect(self._on_parameters_changed)
+        self.green_channel_slider.valueChanged.connect(self._on_parameters_changed)
+        self.blue_channel_slider.valueChanged.connect(self._on_parameters_changed)
+        
+        # 降噪参数信号
         self.denoise_method_combo.currentIndexChanged.connect(self._on_parameters_changed)
         self.denoise_slider.valueChanged.connect(self._on_parameters_changed)
     
@@ -388,6 +437,9 @@ class BinarizationPanel(QWidget):
             'sharpen': self.sharpen_slider.value(),
             'gamma': self.gamma_slider.value() * 0.01,
             'smooth': self.smooth_slider.value(),
+            'red_channel': self.red_channel_slider.value(),
+            'green_channel': self.green_channel_slider.value(),
+            'blue_channel': self.blue_channel_slider.value(),
             'denoise_method': self.denoise_method_combo.currentData(),
             'denoise': self.denoise_slider.value(),
         }
@@ -444,6 +496,9 @@ class BinarizationPanel(QWidget):
         self.sharpen_slider.setEnabled(enabled)
         self.gamma_slider.setEnabled(enabled)
         self.smooth_slider.setEnabled(enabled)
+        self.red_channel_slider.setEnabled(enabled)
+        self.green_channel_slider.setEnabled(enabled)
+        self.blue_channel_slider.setEnabled(enabled)
         self.denoise_method_combo.setEnabled(enabled)
         self.denoise_slider.setEnabled(enabled)
         
