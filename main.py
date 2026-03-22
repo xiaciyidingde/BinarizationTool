@@ -51,12 +51,12 @@ def main():
         # 检查文件是否存在且是支持的图片格式
         if os.path.exists(image_path):
             ext = os.path.splitext(image_path)[1].lower()
-            if ext in ['.png', '.jpg', '.jpeg', '.bmp']:
+            if ext in ['.png', '.jpg', '.jpeg', '.bmp', '.webp']:
                 # 使用 QTimer 延迟加载，确保窗口已完全显示
                 QTimer.singleShot(100, lambda: window._load_file_from_path(image_path))
             else:
                 print(f"不支持的文件格式: {ext}")
-                print("支持的格式: .png, .jpg, .jpeg, .bmp")
+                print("支持的格式: .png, .jpg, .jpeg, .bmp, .webp")
         else:
             print(f"文件不存在: {image_path}")
     

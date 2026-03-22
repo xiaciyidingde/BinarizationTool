@@ -56,7 +56,7 @@ class MainWindow(QMainWindow):
         
         # 设置窗口
         self.setWindowTitle("BinarizationTool - 二值化图片编辑器")
-        self.setGeometry(100, 100, 1450, 800)
+        self.setGeometry(100, 100, 1550, 800)  # 宽度从 1450 增加到 1550
         
         # 创建 UI
         self.setup_ui()
@@ -486,7 +486,7 @@ class MainWindow(QMainWindow):
             self,
             "打开图片",
             "",
-            "图片文件 (*.png *.jpg *.jpeg *.bmp);;所有文件 (*.*)"
+            "图片文件 (*.png *.jpg *.jpeg *.bmp *.webp);;所有文件 (*.*)"
         )
         
         if file_path:

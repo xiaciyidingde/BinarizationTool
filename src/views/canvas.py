@@ -6,7 +6,7 @@ Canvas 画布组件
 
 from typing import Optional
 from PySide6.QtWidgets import QWidget
-from PySide6.QtCore import Qt, Signal, QPoint, QUrl
+from PySide6.QtCore import Qt, Signal, QPoint, QUrl, QTimer
 from PySide6.QtGui import QPainter, QPixmap, QImage, QPaintEvent, QMouseEvent, QWheelEvent, QDragEnterEvent, QDropEvent
 import numpy as np
 
@@ -51,7 +51,18 @@ class Canvas(QWidget):
         self.selection_tool = SelectionTool()
         
         # 分块渲染缓存
-        self.tile_cache = TileCache(tile_size=256, max_tiles=100)
+        # 提高缓存数量以支持大缩放时的流畅绘制
+        # 在 10x 缩放时，一个 1920x1080 的视口大约需要 80-100 个 tiles
+        # 设置为 1000 可以支持更大的图片和更流畅的拖动/缩放
+        # 内存占用约 250MB（每个 tile 约 250KB）
+        self.tile_cache = TileCache(tile_size=256, max_tiles=1000)
+        
+        # 拖动节流定时器（用于优化大图拖动性能）
+        self.pan_update_timer = QTimer()
+        self.pan_update_timer.setSingleShot(True)
+        self.pan_update_timer.timeout.connect(self._do_pan_update)
+        self.pan_throttle_interval = 16  # 16ms = 60fps
+        self.pending_pan_update = False
         
         # 交互状态
         self.mouse_pos: Optional[QPoint] = None
@@ -216,7 +227,13 @@ class Canvas(QWidget):
             delta_y = event.pos().y() - self.pan_start_pos.y()
             self.view_transform.translate(delta_x, delta_y)
             self.pan_start_pos = event.pos()
-            self.update()
+            
+            # 使用节流优化：不立即更新，而是标记需要更新
+            self.pending_pan_update = True
+            if not self.pan_update_timer.isActive():
+                # 立即更新第一次，然后启动定时器
+                self.update()
+                self.pan_update_timer.start(self.pan_throttle_interval)
         
         elif self.image_data is not None and self.current_tool is not None:
             pixel_x, pixel_y = self.view_transform.view_to_pixel(
@@ -279,6 +296,13 @@ class Canvas(QWidget):
                 # 结束平移
                 self.is_panning = False
                 self.pan_start_pos = None
+                
+                # 停止节流定时器并执行最后一次更新
+                if self.pan_update_timer.isActive():
+                    self.pan_update_timer.stop()
+                if self.pending_pan_update:
+                    self.pending_pan_update = False
+                    self.update()
             
             elif self.image_data is not None and self.current_tool is not None:
                 if isinstance(self.current_tool, BrushTool) and self.current_tool.is_drawing:
@@ -340,6 +364,23 @@ class Canvas(QWidget):
             # 结束中键平移
             self.is_panning = False
             self.pan_start_pos = None
+            
+            # 停止节流定时器并执行最后一次更新
+            if self.pan_update_timer.isActive():
+                self.pan_update_timer.stop()
+            if self.pending_pan_update:
+                self.pending_pan_update = False
+                self.update()
+    
+    def _do_pan_update(self):
+        """节流定时器回调：执行延迟的平移更新"""
+        if self.pending_pan_update:
+            self.pending_pan_update = False
+            self.update()
+            
+            # 如果还在拖动，继续定时器
+            if self.is_panning:
+                self.pan_update_timer.start(self.pan_throttle_interval)
     
     def wheelEvent(self, event: QWheelEvent):
         """滚轮事件 - 缩放"""
@@ -381,7 +422,7 @@ class Canvas(QWidget):
             urls = event.mimeData().urls()
             if urls:
                 file_path = urls[0].toLocalFile()
-                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.webp')):
                     event.acceptProposedAction()
                     return
         event.ignore()
@@ -392,7 +433,7 @@ class Canvas(QWidget):
             urls = event.mimeData().urls()
             if urls:
                 file_path = urls[0].toLocalFile()
-                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp')):
+                if file_path.lower().endswith(('.png', '.jpg', '.jpeg', '.bmp', '.webp')):
                     # 发射信号通知主窗口加载文件
                     self.file_dropped.emit(file_path)
                     event.acceptProposedAction()

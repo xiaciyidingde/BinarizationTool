@@ -107,8 +107,8 @@ class PropertiesPanel(QWidget):
         main_layout.addWidget(scroll)
         
         # 设置面板尺寸
-        self.setMinimumWidth(250)
-        self.setMaximumWidth(250)
+        self.setMinimumWidth(270)  # 从 250 增加到 270
+        self.setMaximumWidth(270)
     
     def _create_properties_page(self) -> QWidget:
         """创建属性页"""
@@ -141,11 +141,25 @@ class PropertiesPanel(QWidget):
         image_layout = QFormLayout()
         image_layout.setSpacing(8)
         
-        # 文件名
+        # 文件名（使用容器限制宽度，文本省略）
+        filename_container = QWidget()
+        filename_container_layout = QHBoxLayout(filename_container)
+        filename_container_layout.setContentsMargins(0, 0, 0, 0)
+        filename_container_layout.setSpacing(0)
+        
         self.filename_label = QLabel("未加载")
-        self.filename_label.setWordWrap(True)
+        self.filename_label.setWordWrap(False)  # 禁用自动换行
         self.filename_label.setStyleSheet("color: #333;")
-        image_layout.addRow("文件名:", self.filename_label)
+        self.filename_label.setMaximumWidth(180)  # 限制最大宽度（从 160 增加到 180）
+        self.filename_label.setTextFormat(Qt.PlainText)
+        self.filename_label.setTextInteractionFlags(Qt.TextSelectableByMouse)  # 允许选择复制
+        # 使用省略号模式
+        from PySide6.QtWidgets import QSizePolicy
+        self.filename_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        
+        filename_container_layout.addWidget(self.filename_label)
+        
+        image_layout.addRow("文件名:", filename_container)
         
         # 图片尺寸
         self.size_label = QLabel("-")
@@ -410,12 +424,24 @@ class PropertiesPanel(QWidget):
             self.clear_info()
             return
         
-        # 文件名
+        # 文件名（手动处理省略）
         if file_path:
             filename = os.path.basename(file_path)
-            self.filename_label.setText(filename)
+            # 如果文件名太长，手动截断
+            max_length = 23  # 最大字符数（从 20 增加到 23）
+            if len(filename) > max_length:
+                # 保留前10个字符和后8个字符，中间用...连接
+                name_part = filename[:10]
+                ext_part = filename[-8:]
+                display_name = f"{name_part}...{ext_part}"
+            else:
+                display_name = filename
+            
+            self.filename_label.setText(display_name)
+            self.filename_label.setToolTip(filename)  # 完整文件名显示在工具提示中
         else:
             self.filename_label.setText("未保存")
+            self.filename_label.setToolTip("")
         
         # 图片尺寸
         size_text = f"{image_data.width} x {image_data.height} 像素"

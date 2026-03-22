@@ -19,13 +19,13 @@ class TileCache:
     使用 LRU 策略管理内存，只渲染可见区域的块。
     """
     
-    def __init__(self, tile_size: int = 256, max_tiles: int = 100):
+    def __init__(self, tile_size: int = 256, max_tiles: int = 1000):
         """
         初始化分块缓存
         
         Args:
             tile_size: 块的大小（像素单位），默认 256x256
-            max_tiles: 最大缓存块数量，默认 100（约 25MB 内存）
+            max_tiles: 最大缓存块数量，默认 1000（约 250MB 内存用于缓存）
         """
         self.tile_size = tile_size
         self.max_tiles = max_tiles
