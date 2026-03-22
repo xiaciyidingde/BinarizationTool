@@ -173,7 +173,7 @@ class SelectionTool:
         # 拖动选择状态（复用画笔逻辑）
         self.is_dragging: bool = False
         self.current_stroke: Optional[SelectionStroke] = None
-        self.spacing: float = 0.25  # 间距因子（相对于笔刷大小）
+        self.spacing: float = 0.1  # 间距因子（相对于笔刷大小）- 降低以获得更平滑的曲线
         self.last_point: Optional[tuple[int, int]] = None
     
     def has_selection(self) -> bool:
@@ -255,7 +255,8 @@ class SelectionTool:
         # 间距控制
         spacing_threshold = self.size * self.spacing
         
-        if dist >= spacing_threshold:
+        # 总是处理鼠标移动，即使距离很小
+        if dist > 0:
             # 计算需要插入多少个中间点
             num_steps = max(1, int(dist / spacing_threshold))
             

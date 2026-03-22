@@ -64,6 +64,13 @@ class Canvas(QWidget):
         self.pan_throttle_interval = 16  # 16ms = 60fps
         self.pending_pan_update = False
         
+        # 选择工具更新节流定时器（优化选择工具性能）
+        self.selection_update_timer = QTimer()
+        self.selection_update_timer.setSingleShot(True)
+        self.selection_update_timer.timeout.connect(self._do_selection_update)
+        self.selection_throttle_interval = 16  # 16ms = 60fps
+        self.pending_selection_dirty_rect = (0, 0, 0, 0)
+        
         # 交互状态
         self.mouse_pos: Optional[QPoint] = None
         self.is_panning = False
@@ -200,9 +207,8 @@ class Canvas(QWidget):
                     dirty_rect = self.current_tool.start_drag_select(self.image_data, pixel_x, pixel_y)
                     # 将选区同步到 image_data
                     self.image_data.selection_mask = self.current_tool.selection_mask
-                    # 更新分块缓存以显示选区
-                    pixels = self.image_data.get_current_pixels()
-                    self.tile_cache.update_image(pixels, self.image_data.selection_mask)
+                    # 直接更新 tile_cache 的选区引用（避免复制整个图像）
+                    self.tile_cache.selection_mask = self.current_tool.selection_mask
                     # 使脏区域失效
                     if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
                         self.tile_cache.invalidate_region(
@@ -268,22 +274,35 @@ class Canvas(QWidget):
                 self.update()
             
             elif isinstance(self.current_tool, SelectionTool) and self.current_tool.is_dragging:
-                # 继续拖动选择
+                # 继续拖动选择（优化版本）
                 dirty_rect = self.current_tool.continue_drag_select(self.image_data, pixel_x, pixel_y)
-                # 将选区同步到 image_data
-                self.image_data.selection_mask = self.current_tool.selection_mask
-                # 增量更新分块缓存
-                pixels = self.image_data.get_current_pixels()
-                self.tile_cache.update_image(pixels, self.image_data.selection_mask)
-                # 使脏区域失效（动态更新）
+                
+                # 只在有实际更新时处理
                 if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
-                    self.tile_cache.invalidate_region(
-                        dirty_rect[0], dirty_rect[1],
-                        dirty_rect[2] - dirty_rect[0],
-                        dirty_rect[3] - dirty_rect[1]
-                    )
-                # 只更新显示，不触发 image_modified 信号（避免卡顿）
-                self.update()
+                    # 将选区同步到 image_data（引用，不复制）
+                    self.image_data.selection_mask = self.current_tool.selection_mask
+                    # 直接更新 tile_cache 的选区引用（避免复制整个图像）
+                    self.tile_cache.selection_mask = self.current_tool.selection_mask
+                    
+                    # 累积脏区域用于批量失效
+                    if self.pending_selection_dirty_rect[2] > self.pending_selection_dirty_rect[0]:
+                        # 合并脏区域
+                        old_rect = self.pending_selection_dirty_rect
+                        self.pending_selection_dirty_rect = (
+                            min(old_rect[0], dirty_rect[0]),
+                            min(old_rect[1], dirty_rect[1]),
+                            max(old_rect[2], dirty_rect[2]),
+                            max(old_rect[3], dirty_rect[3])
+                        )
+                    else:
+                        self.pending_selection_dirty_rect = dirty_rect
+                    
+                    # 立即触发重绘（保持流畅），但延迟失效瓦片（减少计算）
+                    self.update()
+                    
+                    # 使用节流来批量失效瓦片
+                    if not self.selection_update_timer.isActive():
+                        self.selection_update_timer.start(self.selection_throttle_interval)
             
             else:
                 # 更新光标显示
@@ -348,14 +367,19 @@ class Canvas(QWidget):
                 elif isinstance(self.current_tool, SelectionTool) and self.current_tool.is_dragging:
                     # 结束拖动选择
                     self.current_tool.end_drag_select()
-                    # 将选区同步到 image_data
+                    
+                    # 停止节流定时器并执行最后一次失效
+                    if self.selection_update_timer.isActive():
+                        self.selection_update_timer.stop()
+                    # 失效最后的累积区域
+                    if self.pending_selection_dirty_rect[2] > self.pending_selection_dirty_rect[0]:
+                        self._do_selection_update()
+                    
+                    # 将选区同步到 image_data（引用，不复制）
                     self.image_data.selection_mask = self.current_tool.selection_mask
-                    # 更新分块缓存以显示选区（完整更新）
-                    pixels = self.image_data.get_current_pixels()
+                    # 确保 tile_cache 引用最新的选区
+                    self.tile_cache.selection_mask = self.current_tool.selection_mask
                     
-                    # 注意：不再强制转换为灰度图，TileCache 现在支持彩色图像
-                    
-                    self.tile_cache.set_image(pixels, self.image_data.selection_mask)
                     # 通知选区已修改（用于更新 UI 状态）
                     self.image_modified.emit()
                     self.update()
@@ -381,6 +405,19 @@ class Canvas(QWidget):
             # 如果还在拖动，继续定时器
             if self.is_panning:
                 self.pan_update_timer.start(self.pan_throttle_interval)
+    
+    def _do_selection_update(self):
+        """节流定时器回调：批量失效累积的脏区域"""
+        if self.pending_selection_dirty_rect[2] > self.pending_selection_dirty_rect[0]:
+            # 使累积的脏区域失效
+            dirty_rect = self.pending_selection_dirty_rect
+            self.tile_cache.invalidate_region(
+                dirty_rect[0], dirty_rect[1],
+                dirty_rect[2] - dirty_rect[0],
+                dirty_rect[3] - dirty_rect[1]
+            )
+            # 重置脏区域
+            self.pending_selection_dirty_rect = (0, 0, 0, 0)
     
     def wheelEvent(self, event: QWheelEvent):
         """滚轮事件 - 缩放"""
