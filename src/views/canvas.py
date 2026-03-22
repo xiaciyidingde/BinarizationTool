@@ -78,6 +78,9 @@ class Canvas(QWidget):
         
         # 更新分块缓存
         pixels = image_data.get_current_pixels()
+        
+        # 注意：不再强制转换为灰度图，TileCache 现在支持彩色图像
+        
         selection_mask = image_data.selection_mask if hasattr(image_data, 'selection_mask') else None
         self.tile_cache.set_image(pixels, selection_mask)
         
@@ -308,6 +311,9 @@ class Canvas(QWidget):
                             
                             # 更新分块缓存
                             pixels = self.image_data.get_current_pixels()
+                            
+                            # 注意：不再强制转换为灰度图，TileCache 现在支持彩色图像
+                            
                             selection_mask = self.image_data.selection_mask if hasattr(self.image_data, 'selection_mask') else None
                             self.tile_cache.set_image(pixels, selection_mask)
                             
@@ -322,6 +328,9 @@ class Canvas(QWidget):
                     self.image_data.selection_mask = self.current_tool.selection_mask
                     # 更新分块缓存以显示选区（完整更新）
                     pixels = self.image_data.get_current_pixels()
+                    
+                    # 注意：不再强制转换为灰度图，TileCache 现在支持彩色图像
+                    
                     self.tile_cache.set_image(pixels, self.image_data.selection_mask)
                     # 通知选区已修改（用于更新 UI 状态）
                     self.image_modified.emit()
@@ -419,6 +428,9 @@ class Canvas(QWidget):
             return
         
         pixels = self.image_data.get_current_pixels()
+        
+        # 注意：不再强制转换为灰度图，TileCache 现在支持彩色图像
+        
         selection_mask = self.image_data.selection_mask if hasattr(self.image_data, 'selection_mask') else None
         self.tile_cache.set_image(pixels, selection_mask)
     

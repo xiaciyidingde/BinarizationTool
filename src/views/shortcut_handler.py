@@ -54,6 +54,30 @@ class ShortcutHandler:
         self.wand_color_toggle.setShortcut("Ctrl+Shift+X")
         self.wand_color_toggle.triggered.connect(self._toggle_wand_color)
         self.main_window.addAction(self.wand_color_toggle)
+        
+        # Ctrl+1: 切换到原图模式
+        self.view_mode_original = QAction(self.main_window)
+        self.view_mode_original.setShortcut("Ctrl+1")
+        self.view_mode_original.triggered.connect(lambda: self._switch_view_mode('original'))
+        self.main_window.addAction(self.view_mode_original)
+        
+        # Ctrl+2: 切换到预处理模式
+        self.view_mode_preprocessed = QAction(self.main_window)
+        self.view_mode_preprocessed.setShortcut("Ctrl+2")
+        self.view_mode_preprocessed.triggered.connect(lambda: self._switch_view_mode('preprocessed'))
+        self.main_window.addAction(self.view_mode_preprocessed)
+        
+        # Ctrl+3: 切换到二值化模式
+        self.view_mode_binary = QAction(self.main_window)
+        self.view_mode_binary.setShortcut("Ctrl+3")
+        self.view_mode_binary.triggered.connect(lambda: self._switch_view_mode('binary'))
+        self.main_window.addAction(self.view_mode_binary)
+        
+        # Tab: 循环切换视图模式
+        self.view_mode_cycle = QAction(self.main_window)
+        self.view_mode_cycle.setShortcut("Tab")
+        self.view_mode_cycle.triggered.connect(self._cycle_view_mode)
+        self.main_window.addAction(self.view_mode_cycle)
     
     def _handle_tool_toggle(self):
         """处理 Ctrl+X：根据当前工具切换颜色或模式"""
@@ -219,3 +243,38 @@ class ShortcutHandler:
         color_text = "黑色" if new_color == 0 else "白色"
         self.main_window.statusbar.showMessage(f"选择目标颜色: {color_text}")
         self.canvas.update()  # 更新光标显示
+    
+    # ========== 视图模式切换快捷键 ==========
+    
+    def _switch_view_mode(self, mode: str):
+        """
+        切换到指定的视图模式
+        
+        Args:
+            mode: 目标模式 ('original', 'preprocessed', 'binary')
+        """
+        if self.main_window.image_data is None:
+            return
+        
+        # 通过 BinarizationPanel 的 ViewModeSwitcher 切换模式
+        view_switcher = self.main_window.binarization_panel.view_mode_switcher
+        if view_switcher.get_current_mode() != mode:
+            view_switcher.set_mode(mode)
+            view_switcher.mode_changed.emit(mode)
+    
+    def _cycle_view_mode(self):
+        """循环切换视图模式（原图 → 预处理 → 二值化 → 原图）"""
+        if self.main_window.image_data is None:
+            return
+        
+        view_switcher = self.main_window.binarization_panel.view_mode_switcher
+        current_mode = view_switcher.get_current_mode()
+        
+        # 定义循环顺序
+        mode_cycle = ['original', 'preprocessed', 'binary']
+        current_index = mode_cycle.index(current_mode)
+        next_index = (current_index + 1) % len(mode_cycle)
+        next_mode = mode_cycle[next_index]
+        
+        view_switcher.set_mode(next_mode)
+        view_switcher.mode_changed.emit(next_mode)
