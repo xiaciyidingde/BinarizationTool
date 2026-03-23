@@ -49,7 +49,7 @@ class MainWindow(QMainWindow):
         
         # 异步二值化
         self.binarization_worker: Optional[BinarizationWorker] = None
-        self.pending_binarization_params: Optional[tuple] = None  # (preprocess_params, method, threshold)
+        self.pending_binarization_params: Optional[tuple] = None  # (preprocess_params, method, threshold, method_params)
         self.binarization_debounce_timer = QTimer()
         self.binarization_debounce_timer.setSingleShot(True)
         self.binarization_debounce_timer.timeout.connect(self._start_binarization)
@@ -507,6 +507,7 @@ class MainWindow(QMainWindow):
             preprocess_params = self.binarization_panel.get_preprocess_params()
             method = self.binarization_panel.get_method()
             threshold = self.binarization_panel.get_threshold()
+            method_params = self.binarization_panel.get_method_params()
             
             # 预处理
             preprocessed = BinarizationEngine.apply_preprocess(
@@ -516,7 +517,7 @@ class MainWindow(QMainWindow):
             
             # 二值化
             binary_pixels = BinarizationEngine.apply_threshold(
-                preprocessed, method, threshold
+                preprocessed, method, threshold, **method_params
             )
             
             self.image_data.pixels = binary_pixels
@@ -724,8 +725,11 @@ class MainWindow(QMainWindow):
             # 二值化模式：使缓存失效并重新计算二值化结果
             self.image_data.invalidate_preprocessed_cache()
             
+            # 获取方法特定参数
+            method_params = self.binarization_panel.get_method_params()
+            
             # 保存待处理的参数
-            self.pending_binarization_params = (preprocess_params, method, threshold)
+            self.pending_binarization_params = (preprocess_params, method, threshold, method_params)
             
             # 重启防抖定时器（150ms 延迟，避免频繁触发）
             self.binarization_debounce_timer.start(150)
@@ -744,14 +748,15 @@ class MainWindow(QMainWindow):
             self.binarization_worker.wait()
         
         # 获取参数
-        preprocess_params, method, threshold = self.pending_binarization_params
+        preprocess_params, method, threshold, method_params = self.pending_binarization_params
         
         # 创建新的工作线程
         self.binarization_worker = BinarizationWorker(
             self.image_data.original_pixels,
             preprocess_params,
             method,
-            threshold
+            threshold,
+            method_params
         )
         
         # 连接信号

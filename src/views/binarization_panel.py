@@ -324,6 +324,26 @@ class BinarizationPanel(QWidget):
         self.threshold_container.setLayout(self.threshold_row)
         binarization_layout.addWidget(self.threshold_container)
         
+        # === 自适应阈值参数 ===
+        self.adaptive_params_container = self._create_adaptive_params()
+        binarization_layout.addWidget(self.adaptive_params_container)
+        
+        # === Sauvola 参数 ===
+        self.sauvola_params_container = self._create_sauvola_params()
+        binarization_layout.addWidget(self.sauvola_params_container)
+        
+        # === Wolf 参数 ===
+        self.wolf_params_container = self._create_wolf_params()
+        binarization_layout.addWidget(self.wolf_params_container)
+        
+        # === Nick 参数 ===
+        self.nick_params_container = self._create_nick_params()
+        binarization_layout.addWidget(self.nick_params_container)
+        
+        # === Bernsen 参数 ===
+        self.bernsen_params_container = self._create_bernsen_params()
+        binarization_layout.addWidget(self.bernsen_params_container)
+        
         binarization_group.setLayout(binarization_layout)
         settings_layout.addWidget(binarization_group)
         
@@ -435,6 +455,101 @@ class BinarizationPanel(QWidget):
         
         return slider
     
+    def _create_adaptive_params(self):
+        """创建自适应阈值参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 块大小
+        self.adaptive_block_size_slider = self._create_slider_with_label(
+            "块大小:", 3, 51, 11, layout
+        )
+        
+        return container
+    
+    def _create_sauvola_params(self):
+        """创建 Sauvola 参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 窗口大小
+        self.sauvola_window_slider = self._create_slider_with_label(
+            "窗口大小:", 3, 51, 15, layout
+        )
+        
+        # k 参数
+        self.sauvola_k_slider = self._create_slider_with_label(
+            "k 参数:", 0, 100, 20, layout, scale=0.01
+        )
+        
+        # R 参数
+        self.sauvola_r_slider = self._create_slider_with_label(
+            "R 参数:", 0, 255, 128, layout
+        )
+        
+        return container
+    
+    def _create_wolf_params(self):
+        """创建 Wolf 参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 窗口大小
+        self.wolf_window_slider = self._create_slider_with_label(
+            "窗口大小:", 3, 51, 15, layout
+        )
+        
+        # k 参数
+        self.wolf_k_slider = self._create_slider_with_label(
+            "k 参数:", 0, 100, 50, layout, scale=0.01
+        )
+        
+        return container
+    
+    def _create_nick_params(self):
+        """创建 Nick 参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 窗口大小
+        self.nick_window_slider = self._create_slider_with_label(
+            "窗口大小:", 3, 51, 15, layout
+        )
+        
+        # k 参数 (-1.0 到 0.0)
+        self.nick_k_slider = self._create_slider_with_label(
+            "k 参数:", -100, 0, -10, layout, scale=0.01
+        )
+        
+        return container
+    
+    def _create_bernsen_params(self):
+        """创建 Bernsen 参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 窗口大小
+        self.bernsen_window_slider = self._create_slider_with_label(
+            "窗口大小:", 3, 51, 15, layout
+        )
+        
+        # 对比度阈值
+        self.bernsen_contrast_slider = self._create_slider_with_label(
+            "对比度阈值:", 0, 255, 15, layout
+        )
+        
+        return container
+    
     def connect_signals(self):
         """连接信号"""
         self.method_combo.currentIndexChanged.connect(self._on_parameters_changed)
@@ -456,6 +571,18 @@ class BinarizationPanel(QWidget):
         self.edge_mode_combo.currentIndexChanged.connect(self._on_edge_mode_changed)
         self.edge_strength_slider.valueChanged.connect(self._on_parameters_changed)
         self.edge_threshold_slider.valueChanged.connect(self._on_parameters_changed)
+        
+        # 二值化方法参数信号
+        self.adaptive_block_size_slider.valueChanged.connect(self._on_parameters_changed)
+        self.sauvola_window_slider.valueChanged.connect(self._on_parameters_changed)
+        self.sauvola_k_slider.valueChanged.connect(self._on_parameters_changed)
+        self.sauvola_r_slider.valueChanged.connect(self._on_parameters_changed)
+        self.wolf_window_slider.valueChanged.connect(self._on_parameters_changed)
+        self.wolf_k_slider.valueChanged.connect(self._on_parameters_changed)
+        self.nick_window_slider.valueChanged.connect(self._on_parameters_changed)
+        self.nick_k_slider.valueChanged.connect(self._on_parameters_changed)
+        self.bernsen_window_slider.valueChanged.connect(self._on_parameters_changed)
+        self.bernsen_contrast_slider.valueChanged.connect(self._on_parameters_changed)
         
         # 降噪参数信号
         self.denoise_method_combo.currentIndexChanged.connect(self._on_parameters_changed)
@@ -485,11 +612,33 @@ class BinarizationPanel(QWidget):
         self.view_mode_changed.emit(mode)
     
     def _update_threshold_enabled(self):
-        """更新阈值控件的显示状态"""
+        """更新二值化方法参数的显示状态"""
         method = self.method_combo.currentData()
-        # 固定阈值(0)和自适应阈值(1)显示阈值参数
-        visible = (method == 0 or method == 1)
-        self.threshold_container.setVisible(visible)
+        
+        # 隐藏所有参数容器
+        self.threshold_container.setVisible(False)
+        self.adaptive_params_container.setVisible(False)
+        self.sauvola_params_container.setVisible(False)
+        self.wolf_params_container.setVisible(False)
+        self.nick_params_container.setVisible(False)
+        self.bernsen_params_container.setVisible(False)
+        
+        # 根据方法显示对应的参数
+        if method == 0:  # 固定阈值
+            self.threshold_container.setVisible(True)
+        elif method == 1:  # 自适应阈值
+            self.threshold_container.setVisible(True)
+            self.adaptive_params_container.setVisible(True)
+        elif method == 2:  # Otsu - 无参数
+            pass
+        elif method == 3:  # Sauvola
+            self.sauvola_params_container.setVisible(True)
+        elif method == 4:  # Wolf
+            self.wolf_params_container.setVisible(True)
+        elif method == 5:  # Nick
+            self.nick_params_container.setVisible(True)
+        elif method == 6:  # Bernsen
+            self.bernsen_params_container.setVisible(True)
     
     def _update_edge_threshold_enabled(self):
         """更新边缘阈值控件的显示状态"""
@@ -504,6 +653,34 @@ class BinarizationPanel(QWidget):
         method = self.get_method()
         threshold = self.get_threshold()
         self.parameters_changed.emit(preprocess_params, method, threshold)
+    
+    def get_method_params(self) -> dict:
+        """
+        获取当前二值化方法的特定参数
+        
+        Returns:
+            方法参数字典
+        """
+        method = self.get_method()
+        params = {}
+        
+        if method == 1:  # 自适应阈值
+            params['block_size'] = self.adaptive_block_size_slider.value()
+        elif method == 3:  # Sauvola
+            params['window_size'] = self.sauvola_window_slider.value()
+            params['sauvola_k'] = self.sauvola_k_slider.value() * 0.01
+            params['sauvola_r'] = self.sauvola_r_slider.value()
+        elif method == 4:  # Wolf
+            params['window_size'] = self.wolf_window_slider.value()
+            params['wolf_k'] = self.wolf_k_slider.value() * 0.01
+        elif method == 5:  # Nick
+            params['window_size'] = self.nick_window_slider.value()
+            params['nick_k'] = self.nick_k_slider.value() * 0.01
+        elif method == 6:  # Bernsen
+            params['window_size'] = self.bernsen_window_slider.value()
+            params['bernsen_contrast'] = self.bernsen_contrast_slider.value()
+        
+        return params
     
     def get_preprocess_params(self) -> dict:
         """

@@ -343,7 +343,7 @@ class BinarizationEngine:
     
     @staticmethod
     def apply_threshold(image: np.ndarray, threshold_method: int = 1, 
-                       threshold_value: int = 150) -> np.ndarray:
+                       threshold_value: int = 150, **kwargs) -> np.ndarray:
         """
         应用阈值处理（支持多种方法）
         
@@ -358,6 +358,14 @@ class BinarizationEngine:
                 5 - Nick 阈值
                 6 - Bernsen 阈值
             threshold_value: 阈值参数（用于固定阈值和自适应阈值的 C 参数）
+            **kwargs: 额外参数
+                - block_size: 自适应阈值的块大小 (3-51奇数，默认自动计算)
+                - window_size: Sauvola/Wolf/Nick/Bernsen的窗口大小 (3-51奇数，默认自动计算)
+                - sauvola_k: Sauvola的k参数 (0.0-1.0，默认0.2)
+                - sauvola_r: Sauvola的R参数 (0-255，默认128)
+                - wolf_k: Wolf的k参数 (0.0-1.0，默认0.5)
+                - nick_k: Nick的k参数 (-1.0-0.0，默认-0.1)
+                - bernsen_contrast: Bernsen的对比度阈值 (0-255，默认15)
         
         Returns:
             二值化图片
@@ -369,11 +377,13 @@ class BinarizationEngine:
             return cv2.threshold(img, threshold_value, 255, cv2.THRESH_BINARY)[1]
         
         elif threshold_method == 1:  # 自适应阈值
-            # 计算合适的块大小
-            block_size = min(img.shape) // 8
-            if block_size % 2 == 0:
-                block_size += 1
-            block_size = max(3, min(block_size, 51))
+            # 获取块大小参数，如果未指定则自动计算
+            block_size = kwargs.get('block_size', None)
+            if block_size is None or block_size == 0:
+                block_size = min(img.shape) // 8
+                if block_size % 2 == 0:
+                    block_size += 1
+                block_size = max(3, min(block_size, 51))
             
             # 优化自适应阈值参数
             C = max(0, threshold_value / 10 - 10)
@@ -387,38 +397,42 @@ class BinarizationEngine:
                                cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
         
         elif threshold_method == 3:  # Sauvola阈值
-            # 计算窗口大小
-            window = min(img.shape) // 8
-            if window % 2 == 0:
-                window += 1
-            window = max(3, min(window, 51))
+            # 获取窗口大小参数，如果未指定则自动计算
+            window = kwargs.get('window_size', None)
+            if window is None or window == 0:
+                window = min(img.shape) // 8
+                if window % 2 == 0:
+                    window += 1
+                window = max(3, min(window, 51))
             
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
             mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
             std = np.sqrt(mean_square - mean**2)
             
-            # Sauvola参数
-            k = 0.2
-            R = 128
+            # Sauvola参数（可自定义）
+            k = kwargs.get('sauvola_k', 0.2)
+            R = kwargs.get('sauvola_r', 128)
             threshold = mean * (1 + k * ((std / R) - 1))
             
             return np.where(img >= threshold, 255, 0).astype(np.uint8)
         
         elif threshold_method == 4:  # Wolf阈值
-            # 计算窗口大小
-            window = min(img.shape) // 8
-            if window % 2 == 0:
-                window += 1
-            window = max(3, min(window, 51))
+            # 获取窗口大小参数，如果未指定则自动计算
+            window = kwargs.get('window_size', None)
+            if window is None or window == 0:
+                window = min(img.shape) // 8
+                if window % 2 == 0:
+                    window += 1
+                window = max(3, min(window, 51))
             
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
             mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
             std = np.sqrt(mean_square - mean**2)
             
-            # Wolf参数
-            k = 0.5
+            # Wolf参数（可自定义）
+            k = kwargs.get('wolf_k', 0.5)
             R = 128
             min_std = 2
             threshold = mean - k * std * (1 - std/(R * np.clip(std, min_std, None)))
@@ -426,37 +440,41 @@ class BinarizationEngine:
             return np.where(img >= threshold, 255, 0).astype(np.uint8)
         
         elif threshold_method == 5:  # Nick阈值
-            # 计算窗口大小
-            window = min(img.shape) // 8
-            if window % 2 == 0:
-                window += 1
-            window = max(3, min(window, 51))
+            # 获取窗口大小参数，如果未指定则自动计算
+            window = kwargs.get('window_size', None)
+            if window is None or window == 0:
+                window = min(img.shape) // 8
+                if window % 2 == 0:
+                    window += 1
+                window = max(3, min(window, 51))
             
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
             mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
             std = np.sqrt(mean_square - mean**2)
             
-            # Nick参数
-            k = -0.1
+            # Nick参数（可自定义）
+            k = kwargs.get('nick_k', -0.1)
             threshold = mean + k * std
             
             return np.where(img >= threshold, 255, 0).astype(np.uint8)
         
         elif threshold_method == 6:  # Bernsen阈值
-            # 计算窗口大小
-            window = min(img.shape) // 8
-            if window % 2 == 0:
-                window += 1
-            window = max(3, min(window, 51))
+            # 获取窗口大小参数，如果未指定则自动计算
+            window = kwargs.get('window_size', None)
+            if window is None or window == 0:
+                window = min(img.shape) // 8
+                if window % 2 == 0:
+                    window += 1
+                window = max(3, min(window, 51))
             
             # 计算局部最大值和最小值
             kernel = np.ones((window, window), np.uint8)
             local_max = cv2.dilate(img, kernel)
             local_min = cv2.erode(img, kernel)
             
-            # Bernsen参数
-            contrast_threshold = 15
+            # Bernsen参数（可自定义）
+            contrast_threshold = kwargs.get('bernsen_contrast', 15)
             local_contrast = local_max - local_min
             local_mean = (local_max + local_min) / 2
             

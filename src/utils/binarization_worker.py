@@ -23,7 +23,7 @@ class BinarizationWorker(QThread):
     error = Signal(str)
     
     def __init__(self, original_pixels: np.ndarray, preprocess_params: dict, 
-                 method: int, threshold: int):
+                 method: int, threshold: int, method_params: dict = None):
         """
         初始化工作线程
         
@@ -32,12 +32,14 @@ class BinarizationWorker(QThread):
             preprocess_params: 预处理参数
             method: 二值化方法
             threshold: 阈值参数
+            method_params: 方法特定参数
         """
         super().__init__()
         self.original_pixels = original_pixels.copy()
         self.preprocess_params = preprocess_params
         self.method = method
         self.threshold = threshold
+        self.method_params = method_params or {}
         self._is_cancelled = False
     
     def run(self):
@@ -59,7 +61,7 @@ class BinarizationWorker(QThread):
             
             # 二值化
             binary_pixels = BinarizationEngine.apply_threshold(
-                preprocessed, self.method, self.threshold
+                preprocessed, self.method, self.threshold, **self.method_params
             )
             
             # 检查是否已取消
