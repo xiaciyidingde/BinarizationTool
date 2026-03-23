@@ -8,6 +8,7 @@
 from typing import Optional, TYPE_CHECKING
 from .brush_stroke import BrushStroke
 from ..utils.cursor_renderer import CursorRenderer
+from ..utils.stroke_interpolator import StrokeInterpolator
 
 if TYPE_CHECKING:
     from PySide6.QtGui import QPainter
@@ -74,28 +75,26 @@ class BrushTool:
             self.last_draw_pos = (pixel_x, pixel_y)
             return
         
-        # 计算距离
-        distance = self._calculate_distance(self.last_draw_pos, (pixel_x, pixel_y))
-        step_distance = self.size * self.spacing
+        # 使用 StrokeInterpolator 计算插值点
+        interpolated_points = StrokeInterpolator.interpolate_points(
+            self.last_draw_pos,
+            (pixel_x, pixel_y),
+            self.size,
+            self.spacing
+        )
         
-        if distance >= step_distance:
-            # 在路径上插值点以保持均匀间距
-            num_steps = int(distance / step_distance)
-            
-            for i in range(1, num_steps + 1):
-                t = (i * step_distance) / distance
-                interp_x = int(self.last_draw_pos[0] + t * (pixel_x - self.last_draw_pos[0]))
-                interp_y = int(self.last_draw_pos[1] + t * (pixel_y - self.last_draw_pos[1]))
-                self.current_stroke.add_point(interp_x, interp_y)
-            
-            # 更新最后绘制位置为最后一个插值点
-            # 这样可以保持精确的间距
-            if num_steps > 0:
-                t = (num_steps * step_distance) / distance
-                self.last_draw_pos = (
-                    int(self.last_draw_pos[0] + t * (pixel_x - self.last_draw_pos[0])),
-                    int(self.last_draw_pos[1] + t * (pixel_y - self.last_draw_pos[1]))
-                )
+        # 添加所有插值点
+        for point in interpolated_points:
+            self.current_stroke.add_point(point[0], point[1])
+        
+        # 更新最后绘制位置为最后一个插值点（保持精确间距）
+        if len(interpolated_points) > 0:
+            self.last_draw_pos = StrokeInterpolator.calculate_last_interpolated_position(
+                self.last_draw_pos,
+                (pixel_x, pixel_y),
+                self.size,
+                self.spacing
+            )
     
     def end_stroke(self) -> Optional[BrushStroke]:
         """
@@ -149,18 +148,3 @@ class BrushTool:
             show_crosshair=True,
             crosshair_threshold=self.crosshair_threshold
         )
-    
-    def _calculate_distance(self, p1: tuple[int, int], p2: tuple[int, int]) -> float:
-        """
-        计算两点之间的欧几里得距离
-        
-        Args:
-            p1: 第一个点 (x, y)
-            p2: 第二个点 (x, y)
-            
-        Returns:
-            距离值
-        """
-        dx = p2[0] - p1[0]
-        dy = p2[1] - p1[1]
-        return (dx * dx + dy * dy) ** 0.5

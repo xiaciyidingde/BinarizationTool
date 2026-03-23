@@ -2,7 +2,7 @@
 
 基于 PySide6 的二值化图片编辑应用程序，提供类似 Photoshop 的编辑功能。
 
-**版本**: v1.3.0.0  
+**版本**: v1.3.1.0  
 
 **许可证**：MIT License
 
@@ -266,6 +266,7 @@ pyinstaller image-brush-editor.spec
 │       ├── binarization_engine.py # 二值化引擎
 │       ├── binarization_worker.py # 异步二值化
 │       ├── cursor_renderer.py   # 光标渲染器
+│       ├── stroke_interpolator.py # 笔画插值器
 │       ├── theme_manager.py     # 主题管理
 │       ├── resources.py         # 资源管理
 │       └── file_io.py           # 文件 I/O
@@ -308,6 +309,7 @@ pyinstaller image-brush-editor.spec
 
 ## 版本历史
 
+- **v1.3.1.0** (2026-03-23): 涂抹类封装优化（StrokeInterpolator 工具类）
 - **v1.3.0.0** (2026-03-22): 矩形框选模式，代码重构（RectSelector、CursorRenderer 基类）
 - **v1.2.5.0** (2026-03-22): 选择工具性能优化，节流机制，TileCache 优化
 - **v1.2.4.0** (2026-03-22): WebP 格式支持，tile 缓存容量提升，大图拖动优化

@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 from .rect_selector import RectSelector
 from ..utils.cursor_renderer import CursorRenderer
+from ..utils.stroke_interpolator import StrokeInterpolator
 
 
 class SelectionStroke:
@@ -255,32 +256,27 @@ class SelectionTool:
         if not self.is_dragging or self.current_stroke is None or self.last_point is None:
             return (0, 0, 0, 0)
         
-        # 计算距离
-        last_x, last_y = self.last_point
-        dist = ((x - last_x) ** 2 + (y - last_y) ** 2) ** 0.5
+        # 使用 StrokeInterpolator 计算插值点
+        interpolated_points = StrokeInterpolator.interpolate_points(
+            self.last_point,
+            (x, y),
+            self.size,
+            self.spacing
+        )
         
-        # 间距控制
-        spacing_threshold = self.size * self.spacing
-        
-        # 总是处理鼠标移动，即使距离很小
-        if dist > 0:
-            # 计算需要插入多少个中间点
-            num_steps = max(1, int(dist / spacing_threshold))
-            
+        # 如果有插值点，添加并光栅化
+        if len(interpolated_points) > 0:
             # 记录开始索引
             start_index = len(self.current_stroke.points)
             
-            # 插值添加点
-            for i in range(1, num_steps + 1):
-                t = i / num_steps
-                interp_x = int(last_x + (x - last_x) * t)
-                interp_y = int(last_y + (y - last_y) * t)
-                self.current_stroke.add_point(interp_x, interp_y)
+            # 添加所有插值点
+            for point in interpolated_points:
+                self.current_stroke.add_point(point[0], point[1])
             
             # 增量光栅化（只处理新点）
             dirty_rect = self.current_stroke.rasterize(image_data, self.selection_mask, start_index)
             
-            # 更新最后位置
+            # 更新最后位置为当前鼠标位置（简化版本）
             self.last_point = (x, y)
             
             return dirty_rect

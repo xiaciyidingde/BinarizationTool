@@ -1,5 +1,24 @@
 ﻿# 更新日志
 
+## [v1.3.1.0] - 2026-03-23
+
+### 代码重构
+- **涂抹类封装优化**：
+  - 创建 `StrokeInterpolator` 工具类统一管理插值逻辑
+  - 重构 `BrushTool` 使用 `StrokeInterpolator`
+  - 重构 `SelectionTool` 使用 `StrokeInterpolator`
+  - 消除约 40 行重复的插值代码
+  - 提供三个静态方法：
+    - `calculate_distance()` - 计算两点距离
+    - `interpolate_points()` - 插值生成中间点
+    - `calculate_last_interpolated_position()` - 计算最后插值点位置
+
+### 技术改进
+- 统一涂抹操作的插值算法
+- 提高代码可维护性和可测试性
+- 简化工具类代码，降低复杂度
+- 所有测试通过，功能完全保持
+
 ## [v1.3.0.0] - 2026-03-22
 
 ### 新增功能
