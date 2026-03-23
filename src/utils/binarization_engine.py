@@ -138,6 +138,72 @@ class ImageEnhancer:
         
         return cv2.filter2D(img, -1, kernel)
 
+    @staticmethod
+    def apply_edge_detection(img, mode=0, strength=50, threshold2=150):
+        """
+        边缘检测增强
+        
+        Args:
+            img: 输入图像
+            mode: 边缘检测模式
+                0 - 关闭
+                1 - Canny 边缘检测
+                2 - 边缘增强
+                3 - 轮廓保留
+            strength: 边缘强度 (0-100)
+                - Canny 模式：控制低阈值
+                - 增强模式：控制叠加权重
+                - 轮廓模式：控制形态学核大小
+            threshold2: Canny 高阈值 (仅 Canny 模式使用)
+        
+        Returns:
+            处理后的图像
+        """
+        if mode == 0 or strength <= 0:
+            return img
+        
+        img_uint8 = img.astype(np.uint8)
+        
+        if mode == 1:  # Canny 边缘检测
+            # 计算阈值
+            threshold1 = int(strength * 2.55)  # 0-100 映射到 0-255
+            threshold2 = max(threshold1 + 50, threshold2)  # 确保高阈值大于低阈值
+            
+            # Canny 边缘检测
+            edges = cv2.Canny(img_uint8, threshold1, threshold2)
+            
+            # 将边缘叠加到原图（白色边缘）
+            result = img.copy()
+            result[edges > 0] = 255
+            return result
+        
+        elif mode == 2:  # 边缘增强（叠加到原图）
+            # 使用 Sobel 算子检测边缘
+            sobelx = cv2.Sobel(img_uint8, cv2.CV_32F, 1, 0, ksize=3)
+            sobely = cv2.Sobel(img_uint8, cv2.CV_32F, 0, 1, ksize=3)
+            gradient = cv2.magnitude(sobelx, sobely)
+            gradient = cv2.normalize(gradient, None, 0, 255, cv2.NORM_MINMAX)
+            
+            # 根据强度叠加边缘
+            weight = strength / 100.0
+            result = cv2.addWeighted(img, 1.0, gradient, weight, 0)
+            return result
+        
+        elif mode == 3:  # 轮廓保留（形态学梯度）
+            # 计算核大小
+            kernel_size = max(3, int(strength / 20) * 2 + 1)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+            
+            # 形态学梯度 = 膨胀 - 腐蚀
+            gradient = cv2.morphologyEx(img_uint8, cv2.MORPH_GRADIENT, kernel)
+            
+            # 叠加到原图
+            weight = min(1.0, strength / 50.0)
+            result = cv2.addWeighted(img, 1.0, gradient.astype(np.float32), weight, 0)
+            return result
+        
+        return img
+
 
 class BinarizationEngine:
     """
@@ -191,6 +257,9 @@ class BinarizationEngine:
                 - local_contrast: 局部对比度 (0 到 100)
                 - detail_enhance: 细节增强 (0 到 100)
                 - edge_enhance: 边缘增强 (0 到 100)
+                - edge_mode: 边缘检测模式 (0-3)
+                - edge_strength: 边缘检测强度 (0 到 100)
+                - edge_threshold: Canny 高阈值 (0 到 255)
         
         Returns:
             预处理后的图像
@@ -252,6 +321,14 @@ class BinarizationEngine:
             exposure=kwargs.get('exposure', 0),
             contrast=kwargs.get('contrast', 0),
             gamma=kwargs.get('gamma', 1.0)
+        )
+        
+        # 边缘检测
+        img = enhancer.apply_edge_detection(
+            img,
+            mode=kwargs.get('edge_mode', 0),
+            strength=kwargs.get('edge_strength', 50),
+            threshold2=kwargs.get('edge_threshold', 150)
         )
         
         # 锐化

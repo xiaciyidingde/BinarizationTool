@@ -174,6 +174,85 @@ class BinarizationPanel(QWidget):
         rgb_group.setLayout(rgb_layout)
         settings_layout.addWidget(rgb_group)
         
+        # === 边缘检测 ===
+        edge_group = QGroupBox("边缘检测")
+        edge_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 14px;
+                color: #495057;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 8px;
+                top: 0px;
+                padding: 0 4px;
+                background-color: #ffffff;
+            }
+        """)
+        edge_layout = QVBoxLayout()
+        edge_layout.setSpacing(6)
+        
+        # 边缘模式（左右布局）
+        edge_mode_row = QHBoxLayout()
+        edge_mode_label = QLabel("边缘模式:")
+        edge_mode_label.setMinimumWidth(70)
+        edge_mode_row.addWidget(edge_mode_label)
+        
+        # 添加占位空间（对齐数值标签位置）
+        edge_mode_row.addSpacing(25)
+        
+        self.edge_mode_combo = QComboBox()
+        self.edge_mode_combo.setFixedWidth(120)
+        self.edge_mode_combo.addItem("关闭", 0)
+        self.edge_mode_combo.addItem("Canny 边缘", 1)
+        self.edge_mode_combo.addItem("边缘增强", 2)
+        self.edge_mode_combo.addItem("轮廓保留", 3)
+        
+        edge_mode_row.addWidget(self.edge_mode_combo)
+        edge_mode_row.addStretch()
+        edge_layout.addLayout(edge_mode_row)
+        
+        # 边缘强度
+        self.edge_strength_slider = self._create_slider_with_label(
+            "边缘强度:", 0, 100, 50, edge_layout
+        )
+        
+        # 边缘阈值（仅 Canny 模式显示）- 手动创建以便隐藏整行
+        self.edge_threshold_row = QHBoxLayout()
+        
+        edge_threshold_label = QLabel("边缘阈值:")
+        edge_threshold_label.setMinimumWidth(70)
+        self.edge_threshold_row.addWidget(edge_threshold_label)
+        
+        self.edge_threshold_value_label = QLabel("150")
+        self.edge_threshold_value_label.setMinimumWidth(25)
+        self.edge_threshold_value_label.setMaximumWidth(25)
+        self.edge_threshold_value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.edge_threshold_row.addWidget(self.edge_threshold_value_label)
+        
+        self.edge_threshold_slider = QSlider(Qt.Horizontal)
+        self.edge_threshold_slider.setMinimum(0)
+        self.edge_threshold_slider.setMaximum(255)
+        self.edge_threshold_slider.setValue(150)
+        self.edge_threshold_slider.valueChanged.connect(
+            lambda v: self.edge_threshold_value_label.setText(str(v))
+        )
+        self.edge_threshold_row.addWidget(self.edge_threshold_slider, 1)
+        
+        # 创建一个容器 widget 来包装边缘阈值行，方便隐藏
+        self.edge_threshold_container = QWidget()
+        self.edge_threshold_container.setLayout(self.edge_threshold_row)
+        edge_layout.addWidget(self.edge_threshold_container)
+        
+        edge_group.setLayout(edge_layout)
+        settings_layout.addWidget(edge_group)
+        
         # === 二值化方法 ===
         binarization_group = QGroupBox("二值化")
         binarization_group.setStyleSheet("""
@@ -222,24 +301,28 @@ class BinarizationPanel(QWidget):
         method_row.addStretch()
         binarization_layout.addLayout(method_row)
         
-        # 阈值（左右布局）
-        threshold_row = QHBoxLayout()
+        # 阈值（左右布局）- 手动创建以便隐藏整行
+        self.threshold_row = QHBoxLayout()
         threshold_label_text = QLabel("阈值:")
         threshold_label_text.setMinimumWidth(70)
-        threshold_row.addWidget(threshold_label_text)
+        self.threshold_row.addWidget(threshold_label_text)
         
         self.threshold_label = QLabel("127")
         self.threshold_label.setMinimumWidth(25)
         self.threshold_label.setMaximumWidth(25)
         self.threshold_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        threshold_row.addWidget(self.threshold_label)
+        self.threshold_row.addWidget(self.threshold_label)
         
         self.threshold_slider = QSlider(Qt.Horizontal)
         self.threshold_slider.setMinimum(0)
         self.threshold_slider.setMaximum(255)
         self.threshold_slider.setValue(127)
-        threshold_row.addWidget(self.threshold_slider, 1)
-        binarization_layout.addLayout(threshold_row)
+        self.threshold_row.addWidget(self.threshold_slider, 1)
+        
+        # 创建一个容器 widget 来包装阈值行，方便隐藏
+        self.threshold_container = QWidget()
+        self.threshold_container.setLayout(self.threshold_row)
+        binarization_layout.addWidget(self.threshold_container)
         
         binarization_group.setLayout(binarization_layout)
         settings_layout.addWidget(binarization_group)
@@ -313,6 +396,7 @@ class BinarizationPanel(QWidget):
         
         # 初始状态:固定阈值控件启用
         self._update_threshold_enabled()
+        self._update_edge_threshold_enabled()
     
     def _create_slider_with_label(self, label_text, min_val, max_val, default_val, 
                                   parent_layout, scale=1.0):
@@ -368,6 +452,11 @@ class BinarizationPanel(QWidget):
         self.green_channel_slider.valueChanged.connect(self._on_parameters_changed)
         self.blue_channel_slider.valueChanged.connect(self._on_parameters_changed)
         
+        # 边缘检测参数信号
+        self.edge_mode_combo.currentIndexChanged.connect(self._on_edge_mode_changed)
+        self.edge_strength_slider.valueChanged.connect(self._on_parameters_changed)
+        self.edge_threshold_slider.valueChanged.connect(self._on_parameters_changed)
+        
         # 降噪参数信号
         self.denoise_method_combo.currentIndexChanged.connect(self._on_parameters_changed)
         self.denoise_slider.valueChanged.connect(self._on_parameters_changed)
@@ -378,6 +467,12 @@ class BinarizationPanel(QWidget):
     def _on_parameters_changed(self):
         """参数改变事件"""
         self._update_threshold_enabled()
+        self._update_edge_threshold_enabled()
+        self._emit_change()
+    
+    def _on_edge_mode_changed(self):
+        """边缘模式改变事件"""
+        self._update_edge_threshold_enabled()
         self._emit_change()
     
     def _on_threshold_changed(self, value):
@@ -390,12 +485,18 @@ class BinarizationPanel(QWidget):
         self.view_mode_changed.emit(mode)
     
     def _update_threshold_enabled(self):
-        """更新阈值控件的启用状态"""
+        """更新阈值控件的显示状态"""
         method = self.method_combo.currentData()
-        # 固定阈值(0)和自适应阈值(1)需要手动设置阈值参数
-        enabled = (method == 0 or method == 1)
-        self.threshold_slider.setEnabled(enabled)
-        self.threshold_label.setEnabled(enabled)
+        # 固定阈值(0)和自适应阈值(1)显示阈值参数
+        visible = (method == 0 or method == 1)
+        self.threshold_container.setVisible(visible)
+    
+    def _update_edge_threshold_enabled(self):
+        """更新边缘阈值控件的显示状态"""
+        edge_mode = self.edge_mode_combo.currentData()
+        # 仅 Canny 模式(1)显示边缘阈值
+        visible = (edge_mode == 1)
+        self.edge_threshold_container.setVisible(visible)
     
     def _emit_change(self):
         """发射参数改变信号"""
@@ -420,6 +521,9 @@ class BinarizationPanel(QWidget):
             'red_channel': self.red_channel_slider.value(),
             'green_channel': self.green_channel_slider.value(),
             'blue_channel': self.blue_channel_slider.value(),
+            'edge_mode': self.edge_mode_combo.currentData(),
+            'edge_strength': self.edge_strength_slider.value(),
+            'edge_threshold': self.edge_threshold_slider.value(),
             'denoise_method': self.denoise_method_combo.currentData(),
             'denoise': self.denoise_slider.value(),
         }
@@ -479,10 +583,13 @@ class BinarizationPanel(QWidget):
         self.red_channel_slider.setEnabled(enabled)
         self.green_channel_slider.setEnabled(enabled)
         self.blue_channel_slider.setEnabled(enabled)
+        self.edge_mode_combo.setEnabled(enabled)
+        self.edge_strength_slider.setEnabled(enabled)
+        self.edge_threshold_slider.setEnabled(enabled)
+        self.threshold_slider.setEnabled(enabled)
         self.denoise_method_combo.setEnabled(enabled)
         self.denoise_slider.setEnabled(enabled)
         
         if enabled:
             self._update_threshold_enabled()
-        else:
-            self.threshold_slider.setEnabled(False)
+            self._update_edge_threshold_enabled()

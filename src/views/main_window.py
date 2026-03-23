@@ -758,11 +758,17 @@ class MainWindow(QMainWindow):
         self.binarization_worker.finished.connect(self._on_binarization_finished)
         self.binarization_worker.error.connect(self._on_binarization_error)
         
+        # 设置画布处理状态
+        self.canvas.set_processing(True)
+        
         # 启动线程
         self.binarization_worker.start()
     
     def _on_binarization_finished(self, binary_pixels):
         """二值化完成"""
+        # 清除画布处理状态
+        self.canvas.set_processing(False)
+        
         if self.image_data is None:
             return
         
@@ -780,6 +786,9 @@ class MainWindow(QMainWindow):
     
     def _on_binarization_error(self, error_message: str):
         """二值化出错"""
+        # 清除画布处理状态
+        self.canvas.set_processing(False)
+        
         QMessageBox.warning(self, "警告", f"图像处理失败:\n{error_message}")
         self.statusbar.showMessage("处理失败")
     
