@@ -6,6 +6,9 @@
 
 from typing import Optional
 from pathlib import Path
+import tempfile
+import os
+from .resources import THREE_BARS_BYTES
 
 
 class ThemeManager:
@@ -27,6 +30,27 @@ class ThemeManager:
         """初始化主题管理器"""
         self.current_theme = "light"
         self._stylesheet_cache = {}
+        self._icon_temp_path = None
+        self._setup_temp_icons()
+    
+    def _setup_temp_icons(self):
+        """设置临时图标文件"""
+        try:
+            # 创建临时目录
+            temp_dir = tempfile.gettempdir()
+            icon_path = os.path.join(temp_dir, "kiro_three_bars_icon.png")
+            
+            # 写入图标数据
+            with open(icon_path, 'wb') as f:
+                f.write(THREE_BARS_BYTES)
+            
+            # 保存路径（使用 Path 对象转换为 URL 格式，跨平台兼容）
+            from pathlib import Path
+            self._icon_temp_path = Path(icon_path).as_posix()
+            
+        except Exception as e:
+            print(f"设置临时图标失败: {e}")
+            self._icon_temp_path = None
     
     def load_theme(self, theme_name: str) -> Optional[str]:
         """
@@ -43,22 +67,30 @@ class ThemeManager:
         
         # 检查缓存
         if theme_name in self._stylesheet_cache:
-            return self._stylesheet_cache[theme_name]
-        
-        # 读取样式表文件
-        theme_file = self.THEMES_DIR / self.AVAILABLE_THEMES[theme_name]
-        
-        try:
-            with open(theme_file, 'r', encoding='utf-8') as f:
-                stylesheet = f.read()
+            stylesheet = self._stylesheet_cache[theme_name]
+        else:
+            # 读取样式表文件
+            theme_file = self.THEMES_DIR / self.AVAILABLE_THEMES[theme_name]
             
-            # 缓存样式表
-            self._stylesheet_cache[theme_name] = stylesheet
-            return stylesheet
-            
-        except Exception as e:
-            print(f"加载主题失败: {e}")
-            return None
+            try:
+                with open(theme_file, 'r', encoding='utf-8') as f:
+                    stylesheet = f.read()
+                
+                # 缓存样式表
+                self._stylesheet_cache[theme_name] = stylesheet
+                
+            except Exception as e:
+                print(f"加载主题失败: {e}")
+                return None
+        
+        # 注入图标路径
+        if self._icon_temp_path:
+            stylesheet = stylesheet.replace(
+                '{{THREE_BARS_ICON_PATH}}',
+                self._icon_temp_path
+            )
+        
+        return stylesheet
     
     def apply_theme(self, app, theme_name: str) -> bool:
         """

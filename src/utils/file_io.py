@@ -39,7 +39,7 @@ def load_image(file_path: str, binarize: bool = True,
         raise FileNotFoundError(f"文件不存在: {file_path}")
     
     # 检查文件格式
-    supported_formats = {'.png', '.jpg', '.jpeg', '.bmp'}
+    supported_formats = {'.png', '.jpg', '.jpeg', '.bmp', '.webp'}
     if path.suffix.lower() not in supported_formats:
         raise ValueError(f"不支持的文件格式: {path.suffix}。支持的格式: {', '.join(supported_formats)}")
     

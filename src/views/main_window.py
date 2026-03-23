@@ -1,4 +1,4 @@
-﻿"""
+"""
 主窗口模块
 
 应用程序的主窗口，包含菜单栏、工具栏和主要布局。
@@ -56,7 +56,7 @@ class MainWindow(QMainWindow):
         
         # 设置窗口
         self.setWindowTitle("BinarizationTool - 二值化图片编辑器")
-        self.setGeometry(100, 100, 1450, 800)
+        self.setGeometry(100, 100, 1550, 800)  # 宽度从 1450 增加到 1550
         
         # 创建 UI
         self.setup_ui()
@@ -333,6 +333,9 @@ class MainWindow(QMainWindow):
         # 二值化参数改变
         self.binarization_panel.parameters_changed.connect(self._on_parameters_changed)
         
+        # 视图模式切换
+        self.binarization_panel.view_mode_changed.connect(self._on_view_mode_changed)
+        
         # Canvas 图片修改
         self.canvas.image_modified.connect(self._on_image_modified)
         
@@ -432,9 +435,7 @@ class MainWindow(QMainWindow):
         self.canvas.selection_tool.clear_selection()
         self.image_data.selection_mask = None
         # 更新分块缓存以清除选区
-        pixels = self.image_data.get_current_pixels()
-        self.canvas.tile_cache.set_image(pixels, None)
-        self.canvas.update()
+        self._safe_update_tile_cache(None)
         
         # 保存到历史管理器
         self.history_manager.push_state(self.image_data)
@@ -454,9 +455,7 @@ class MainWindow(QMainWindow):
         )
         self.image_data.selection_mask = self.canvas.selection_tool.selection_mask
         # 更新分块缓存以显示选区
-        pixels = self.image_data.get_current_pixels()
-        self.canvas.tile_cache.set_image(pixels, self.image_data.selection_mask)
-        self.canvas.update()
+        self._safe_update_tile_cache(self.image_data.selection_mask)
         
         # 保存到历史管理器（重要！）
         self.history_manager.push_state(self.image_data)
@@ -472,9 +471,7 @@ class MainWindow(QMainWindow):
         self.canvas.selection_tool.select_by_color(self.image_data, color)
         self.image_data.selection_mask = self.canvas.selection_tool.selection_mask
         # 更新分块缓存以显示选区
-        pixels = self.image_data.get_current_pixels()
-        self.canvas.tile_cache.set_image(pixels, self.image_data.selection_mask)
-        self.canvas.update()
+        self._safe_update_tile_cache(self.image_data.selection_mask)
         
         # 保存到历史管理器（重要！）
         self.history_manager.push_state(self.image_data)
@@ -489,7 +486,7 @@ class MainWindow(QMainWindow):
             self,
             "打开图片",
             "",
-            "图片文件 (*.png *.jpg *.jpeg *.bmp);;所有文件 (*.*)"
+            "图片文件 (*.png *.jpg *.jpeg *.bmp *.webp);;所有文件 (*.*)"
         )
         
         if file_path:
@@ -500,6 +497,10 @@ class MainWindow(QMainWindow):
         try:
             # 加载图片（不自动二值化）
             self.image_data = load_image(file_path, binarize=False)
+            
+            # 设置初始视图模式为二值化
+            self.image_data.set_view_mode('binary')
+            self.binarization_panel.view_mode_switcher.set_mode('binary')
             
             # 应用预处理和二值化
             preprocess_params = self.binarization_panel.get_preprocess_params()
@@ -700,18 +701,36 @@ class MainWindow(QMainWindow):
         return has_brush_edits or has_crop
     
     def _on_parameters_changed(self, preprocess_params: dict, method: int, threshold: int):
-        """参数改变（预处理或二值化）- 使用防抖和异步处理"""
+        """参数改变（预处理或二值化）- 根据当前模式决定是否重新计算"""
         if self.image_data is None:
             return
         
-        # 保存待处理的参数
-        self.pending_binarization_params = (preprocess_params, method, threshold)
+        mode = self.image_data.view_mode
         
-        # 重启防抖定时器（150ms 延迟，避免频繁触发）
-        self.binarization_debounce_timer.start(150)
+        # 根据模式决定是否重新计算
+        if mode == 'original':
+            # 原图模式：只使缓存失效，不重新计算
+            self.image_data.invalidate_preprocessed_cache()
+            return
         
-        # 显示处理中状态
-        self.statusbar.showMessage("处理中...")
+        elif mode == 'preprocessed':
+            # 预处理模式：使缓存失效并重新计算预处理结果
+            self.image_data.invalidate_preprocessed_cache()
+            self._compute_preprocessed_pixels()
+            self._update_canvas_display()
+        
+        elif mode == 'binary':
+            # 二值化模式：使缓存失效并重新计算二值化结果
+            self.image_data.invalidate_preprocessed_cache()
+            
+            # 保存待处理的参数
+            self.pending_binarization_params = (preprocess_params, method, threshold)
+            
+            # 重启防抖定时器（150ms 延迟，避免频繁触发）
+            self.binarization_debounce_timer.start(150)
+            
+            # 显示处理中状态
+            self.statusbar.showMessage("处理中...")
     
     def _start_binarization(self):
         """启动异步二值化处理"""
@@ -751,10 +770,8 @@ class MainWindow(QMainWindow):
             self.image_data.update_base_layer(binary_pixels)
             
             # 更新分块缓存
-            pixels = self.image_data.get_current_pixels()
-            self.canvas.tile_cache.set_image(pixels)
+            self._safe_update_tile_cache(self.image_data.selection_mask)
             
-            self.canvas.update()
             self.statusbar.showMessage("处理完成")
             
         except Exception as e:
@@ -768,6 +785,9 @@ class MainWindow(QMainWindow):
     def _on_image_modified(self):
         """图片被修改"""
         if self.image_data is not None:
+            # 使预处理缓存失效（裁剪等操作会修改原图）
+            self.image_data.invalidate_preprocessed_cache()
+            
             # 保存到历史
             self.history_manager.push_state(self.image_data)
             self._update_ui_state()
@@ -824,8 +844,7 @@ class MainWindow(QMainWindow):
             self.statusbar.showMessage("选区尺寸不匹配，已清除选区")
             self.canvas.selection_tool.clear_selection()
             self.image_data.selection_mask = None
-            self.canvas.tile_cache.set_image(self.image_data.get_current_pixels(), None)
-            self.canvas.update()
+            self._safe_update_tile_cache(None)
             return
         
         # 开始临时图层（用于编辑）
@@ -845,8 +864,7 @@ class MainWindow(QMainWindow):
         self.image_data.selection_mask = None
         
         # 更新分块缓存（不显示选区）
-        pixels = self.image_data.get_current_pixels()
-        self.canvas.tile_cache.set_image(pixels, None)
+        self._safe_update_tile_cache(None)
         
         # 保存到历史管理器（支持撤销/重做）
         self.history_manager.push_state(self.image_data)
@@ -891,6 +909,9 @@ class MainWindow(QMainWindow):
         self.properties_panel.selection_mode_group.buttonClicked.connect(
             self._on_selection_mode_changed_panel
         )
+        self.properties_panel.selection_method_group.buttonClicked.connect(
+            self._on_selection_method_changed_panel
+        )
         self.properties_panel.selection_color_group.buttonClicked.connect(
             self._on_selection_color_changed_panel
         )
@@ -922,3 +943,136 @@ class MainWindow(QMainWindow):
         else:
             self.properties_panel.fill_button.setText("填充黑色")
         self.canvas.update()
+    
+    def _on_selection_method_changed_panel(self):
+        """属性面板：选择方式改变（涂抹/框选）"""
+        button_id = self.properties_panel.selection_method_group.checkedId()
+        is_rect_mode = (button_id == 1)  # 0=涂抹, 1=框选
+        self.canvas.selection_tool.rect_select_mode = is_rect_mode
+        
+        # 更新光标
+        if is_rect_mode:
+            self.canvas.setCursor(Qt.CrossCursor)
+            self.statusbar.showMessage("矩形框选模式已启用")
+        else:
+            self.canvas.setCursor(Qt.BlankCursor)
+            self.statusbar.showMessage("涂抹选择模式已启用")
+        
+        self.canvas.update()
+    
+    def _on_view_mode_changed(self, mode: str):
+        """
+        处理视图模式切换
+        
+        Args:
+            mode: 新的视图模式 ('original', 'preprocessed', 'binary')
+        """
+        if self.image_data is None:
+            return
+        
+        # 更新 ImageData 的视图模式
+        self.image_data.set_view_mode(mode)
+        
+        # 根据模式更新显示
+        if mode == 'original':
+            # 显示原图
+            self._update_canvas_display()
+        
+        elif mode == 'preprocessed':
+            # 显示预处理结果
+            if self.image_data.preprocessed_pixels is None:
+                # 缓存不存在，计算预处理结果
+                self._compute_preprocessed_pixels()
+            self._update_canvas_display()
+        
+        elif mode == 'binary':
+            # 显示二值化结果
+            self._update_canvas_display()
+        
+        # 更新工具状态
+        self._update_tool_states()
+        
+        self.statusbar.showMessage(f"已切换到{self._get_mode_display_name(mode)}模式")
+    
+    def _compute_preprocessed_pixels(self):
+        """计算并缓存预处理结果"""
+        if self.image_data is None:
+            return
+        
+        try:
+            preprocess_params = self.binarization_panel.get_preprocess_params()
+            preprocessed = BinarizationEngine.apply_preprocess(
+                self.image_data.original_pixels.copy(),
+                **preprocess_params
+            )
+            self.image_data.set_preprocessed_pixels(preprocessed)
+        except MemoryError:
+            QMessageBox.critical(self, "内存不足", 
+                "图像太大，无法缓存预处理结果。\n建议使用较小的图像或关闭预处理模式。")
+            self.image_data.invalidate_preprocessed_cache()
+            # 切换回原图模式
+            self.image_data.set_view_mode('original')
+            self.binarization_panel.view_mode_switcher.set_mode('original')
+        except Exception as e:
+            QMessageBox.warning(self, "错误", f"预处理失败:\n{str(e)}")
+            # 保持当前模式不变
+            self.binarization_panel.view_mode_switcher.set_mode(self.image_data.view_mode)
+    
+    def _update_canvas_display(self):
+        """更新 Canvas 显示"""
+        if self.image_data is None:
+            return
+        
+        self._safe_update_tile_cache(self.image_data.selection_mask)
+    
+    def _safe_update_tile_cache(self, selection_mask=None):
+        """
+        安全地更新 tile_cache
+        
+        Args:
+            selection_mask: 选区蒙版（可选）
+        """
+        if self.image_data is None:
+            return
+        
+        pixels = self.image_data.get_current_pixels()
+        
+        # 注意：不再强制转换为灰度图，TileCache 现在支持彩色图像
+        
+        self.canvas.tile_cache.set_image(pixels, selection_mask)
+        self.canvas.update()
+    
+    def _update_tool_states(self):
+        """根据当前视图模式更新工具状态"""
+        if self.image_data is None:
+            return
+        
+        mode = self.image_data.view_mode
+        
+        # 画笔工具：仅在二值化模式下可用
+        brush_enabled = (mode == 'binary')
+        self.brush_button.setEnabled(brush_enabled)
+        if not brush_enabled and self.canvas.current_tool == self.canvas.brush_tool:
+            self.canvas.set_tool(None)
+            self.brush_button.setChecked(False)
+            self.current_tool_label.setText("当前工具：无")
+        
+        # 选择工具：仅在二值化模式下可用
+        selection_enabled = (mode == 'binary')
+        self.selection_tool_button.setEnabled(selection_enabled)
+        if not selection_enabled and self.canvas.current_tool == self.canvas.selection_tool:
+            self.canvas.set_tool(None)
+            self.selection_tool_button.setChecked(False)
+            self.current_tool_label.setText("当前工具：无")
+        
+        # 裁剪工具：在所有模式下可用
+        # （无需修改）
+    
+    def _get_mode_display_name(self, mode: str) -> str:
+        """获取模式的显示名称"""
+        names = {
+            'original': '原图',
+            'preprocessed': '预处理',
+            'binary': '二值化'
+        }
+        return names.get(mode, mode)

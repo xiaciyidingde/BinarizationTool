@@ -15,6 +15,10 @@ if TYPE_CHECKING:
     from PySide6.QtGui import QPainter
     from .image_data import ImageData
 
+from .rect_selector import RectSelector
+from ..utils.cursor_renderer import CursorRenderer
+from ..utils.stroke_interpolator import StrokeInterpolator
+
 
 class SelectionStroke:
     """
@@ -173,8 +177,12 @@ class SelectionTool:
         # 拖动选择状态（复用画笔逻辑）
         self.is_dragging: bool = False
         self.current_stroke: Optional[SelectionStroke] = None
-        self.spacing: float = 0.25  # 间距因子（相对于笔刷大小）
+        self.spacing: float = 0.1  # 间距因子（相对于笔刷大小）- 降低以获得更平滑的曲线
         self.last_point: Optional[tuple[int, int]] = None
+        
+        # 矩形框选模式（使用 RectSelector）
+        self.rect_select_mode: bool = False  # 是否启用矩形框选模式
+        self.rect_selector = RectSelector()
     
     def has_selection(self) -> bool:
         """
@@ -248,31 +256,27 @@ class SelectionTool:
         if not self.is_dragging or self.current_stroke is None or self.last_point is None:
             return (0, 0, 0, 0)
         
-        # 计算距离
-        last_x, last_y = self.last_point
-        dist = ((x - last_x) ** 2 + (y - last_y) ** 2) ** 0.5
+        # 使用 StrokeInterpolator 计算插值点
+        interpolated_points = StrokeInterpolator.interpolate_points(
+            self.last_point,
+            (x, y),
+            self.size,
+            self.spacing
+        )
         
-        # 间距控制
-        spacing_threshold = self.size * self.spacing
-        
-        if dist >= spacing_threshold:
-            # 计算需要插入多少个中间点
-            num_steps = max(1, int(dist / spacing_threshold))
-            
+        # 如果有插值点，添加并光栅化
+        if len(interpolated_points) > 0:
             # 记录开始索引
             start_index = len(self.current_stroke.points)
             
-            # 插值添加点
-            for i in range(1, num_steps + 1):
-                t = i / num_steps
-                interp_x = int(last_x + (x - last_x) * t)
-                interp_y = int(last_y + (y - last_y) * t)
-                self.current_stroke.add_point(interp_x, interp_y)
+            # 添加所有插值点
+            for point in interpolated_points:
+                self.current_stroke.add_point(point[0], point[1])
             
             # 增量光栅化（只处理新点）
             dirty_rect = self.current_stroke.rasterize(image_data, self.selection_mask, start_index)
             
-            # 更新最后位置
+            # 更新最后位置为当前鼠标位置（简化版本）
             self.last_point = (x, y)
             
             return dirty_rect
@@ -284,6 +288,91 @@ class SelectionTool:
         self.is_dragging = False
         self.current_stroke = None
         self.last_point = None
+    
+    def start_rect_select(self, x: int, y: int):
+        """
+        开始矩形框选
+        
+        Args:
+            x: 起始 X 坐标（像素）
+            y: 起始 Y 坐标（像素）
+        """
+        self.rect_selector.start(x, y)
+        self.is_dragging = True
+    
+    def continue_rect_select(self, x: int, y: int):
+        """
+        继续矩形框选
+        
+        Args:
+            x: 当前 X 坐标（像素）
+            y: 当前 Y 坐标（像素）
+        """
+        if self.is_dragging:
+            self.rect_selector.update(x, y)
+    
+    def end_rect_select(self, image_data: 'ImageData'):
+        """
+        结束矩形框选，创建选区
+        
+        Args:
+            image_data: 图片数据
+        """
+        if not self.is_dragging or not self.rect_selector.is_active():
+            return
+        
+        self.is_dragging = False
+        
+        # 获取矩形范围
+        rect = self.rect_selector.get_rect()
+        if rect is None:
+            return
+        
+        x, y, width, height = rect
+        
+        # 限制在图片范围内
+        x_min = max(0, x)
+        y_min = max(0, y)
+        x_max = min(image_data.width, x + width)
+        y_max = min(image_data.height, y + height)
+        
+        # 创建矩形选区，但只选择匹配目标颜色的像素
+        if self.selection_mask is None or self.selection_mask.shape != (image_data.height, image_data.width):
+            self.selection_mask = np.zeros((image_data.height, image_data.width), dtype=bool)
+        
+        # 获取像素数据
+        pixels = image_data.get_current_pixels()
+        
+        # 创建矩形区域的颜色匹配掩码
+        rect_mask = np.zeros((image_data.height, image_data.width), dtype=bool)
+        rect_region = pixels[y_min:y_max, x_min:x_max]
+        
+        # 只选择匹配目标颜色的像素
+        color_match = (rect_region == self.target_color)
+        rect_mask[y_min:y_max, x_min:x_max] = color_match
+        
+        # 根据模式合并选区
+        if self.selection_mode == 'add':
+            self.selection_mask = self.selection_mask | rect_mask
+        elif self.selection_mode == 'subtract':
+            self.selection_mask = self.selection_mask & ~rect_mask
+        
+        # 清除矩形选择状态
+        self.rect_selector.cancel()
+    
+    def cancel_rect_select(self):
+        """取消矩形框选"""
+        self.is_dragging = False
+        self.rect_selector.cancel()
+    
+    def get_rect_select_rect(self) -> Optional[tuple[int, int, int, int]]:
+        """
+        获取矩形框选的矩形范围（用于渲染）
+        
+        Returns:
+            (x, y, width, height) 或 None
+        """
+        return self.rect_selector.get_rect()
     
     def select_by_color(self, image_data: 'ImageData', color: int):
         """
@@ -319,12 +408,7 @@ class SelectionTool:
             view_y: 光标中心 Y 坐标（视图坐标）
             view_size: 选择范围大小（视图坐标）
         """
-        from PySide6.QtCore import Qt, QPointF
-        from PySide6.QtGui import QPen, QColor, QBrush
-        
-        # 保存当前画笔状态
-        old_pen = painter.pen()
-        old_brush = painter.brush()
+        from PySide6.QtGui import QColor
         
         # 根据模式选择外圈颜色
         if self.selection_mode == 'add':
@@ -338,63 +422,38 @@ class SelectionTool:
         else:
             center_color = QColor(255, 255, 255)  # 白色 - 选择白色块
         
-        radius = view_size / 2.0
+        # 使用 CursorRenderer 渲染光标
+        CursorRenderer.render_circle_cursor(
+            painter, view_x, view_y, view_size,
+            ring_color=ring_color,
+            center_color=center_color,
+            show_crosshair=True,
+            crosshair_threshold=self.crosshair_threshold
+        )
+    
+    def render_rect_select_overlay(self, painter: 'QPainter', view_transform):
+        """
+        渲染矩形框选覆盖层
         
-        # === 第一层：绘制彩色圆形外圈 ===
-        pen = QPen(ring_color, 2)
-        pen.setStyle(Qt.SolidLine)
-        painter.setPen(pen)
-        painter.setBrush(Qt.NoBrush)
-        painter.drawEllipse(QPointF(view_x, view_y), radius, radius)
+        Args:
+            painter: Qt QPainter 对象
+            view_transform: ViewTransform 对象用于坐标转换
+        """
+        from PySide6.QtGui import QColor
         
-        # === 第二层：绘制中心指示点 ===
-        center_radius = min(6, radius * 0.3)  # 中心点大小，最大6像素
-        if center_radius >= 2:  # 只有当足够大时才显示
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(QBrush(center_color))
-            painter.drawEllipse(QPointF(view_x, view_y), center_radius, center_radius)
-            
-            # 给中心点添加边框以增强可见性
-            border_color = QColor(128, 128, 128)  # 灰色边框
-            pen = QPen(border_color, 1)
-            painter.setPen(pen)
-            painter.setBrush(Qt.NoBrush)
-            painter.drawEllipse(QPointF(view_x, view_y), center_radius, center_radius)
+        # 根据模式选择颜色
+        if self.selection_mode == 'add':
+            border_color = QColor(0, 255, 0)  # 绿色 - 添加
+        else:
+            border_color = QColor(255, 0, 0)  # 红色 - 减去
         
-        # === 第三层：绘制十字准星（在圆圈外，只在圆圈小时显示）===
-        if view_size < self.crosshair_threshold:
-            pen = QPen(ring_color)
-            pen.setWidth(2)
-            pen.setStyle(Qt.SolidLine)
-            painter.setPen(pen)
-            
-            # 十字准星从圆圈边缘开始，向外延伸
-            gap = 2
-            crosshair_length = 8
-            
-            # 水平线
-            painter.drawLine(
-                int(view_x - radius - gap - crosshair_length), int(view_y),
-                int(view_x - radius - gap), int(view_y)
-            )
-            painter.drawLine(
-                int(view_x + radius + gap), int(view_y),
-                int(view_x + radius + gap + crosshair_length), int(view_y)
-            )
-            
-            # 垂直线
-            painter.drawLine(
-                int(view_x), int(view_y - radius - gap - crosshair_length),
-                int(view_x), int(view_y - radius - gap)
-            )
-            painter.drawLine(
-                int(view_x), int(view_y + radius + gap),
-                int(view_x), int(view_y + radius + gap + crosshair_length)
-            )
-        
-        # 恢复画笔状态
-        painter.setPen(old_pen)
-        painter.setBrush(old_brush)
+        # 使用 RectSelector 渲染覆盖层
+        self.rect_selector.render_overlay(
+            painter, view_transform,
+            border_color=border_color,
+            show_handles=True,
+            dash_style=True
+        )
     
     def _global_color_select(self, pixels: np.ndarray, mask: np.ndarray, 
                             target_color: int) -> np.ndarray:

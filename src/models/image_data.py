@@ -50,6 +50,12 @@ class ImageData:
         
         # 选区蒙版：标记哪些像素被选中（True=选中）
         self.selection_mask: Optional[np.ndarray] = None  # shape: (H, W), dtype=bool
+        
+        # 视图模式：'original', 'preprocessed', 'binary'
+        self.view_mode: str = 'binary'
+        
+        # 预处理结果缓存
+        self.preprocessed_pixels: Optional[np.ndarray] = None
     
     def get_pixel(self, x: int, y: int) -> int:
         """
@@ -244,20 +250,37 @@ class ImageData:
             new_image.temp_edit_mask = self.temp_edit_mask.copy()
         if self.selection_mask is not None:
             new_image.selection_mask = self.selection_mask.copy()
+        # 复制视图模式和预处理缓存
+        new_image.view_mode = self.view_mode
+        if self.preprocessed_pixels is not None:
+            new_image.preprocessed_pixels = self.preprocessed_pixels.copy()
         return new_image
     
     def get_current_pixels(self) -> np.ndarray:
         """
         获取当前显示的像素数据
         
-        优先级：临时层 > 合成结果（编辑层 + 基础层）
+        根据视图模式返回对应的像素数据：
+        - 原图模式：返回 original_pixels
+        - 预处理模式：返回 preprocessed_pixels（如果已缓存）
+        - 二值化模式：返回临时层或合成结果
         
         Returns:
             当前像素数据（可能是副本）
         """
-        if self.temp_layer is not None:
-            return self.temp_layer
-        return self._get_composite_pixels()
+        if self.view_mode == 'original':
+            return self.original_pixels
+        elif self.view_mode == 'preprocessed':
+            if self.preprocessed_pixels is not None:
+                return self.preprocessed_pixels
+            else:
+                # 如果缓存不存在，返回原图（由 MainWindow 负责计算）
+                return self.original_pixels
+        else:  # 'binary'
+            # 原有逻辑：返回临时层或合成结果
+            if self.temp_layer is not None:
+                return self.temp_layer
+            return self._get_composite_pixels()
     
     def _get_composite_pixels(self) -> np.ndarray:
         """
@@ -290,3 +313,27 @@ class ImageData:
             raise ValueError("新像素数据的尺寸必须与当前图片一致")
         
         self.pixels = new_pixels.copy()
+    
+    def set_view_mode(self, mode: str):
+        """
+        设置视图模式
+        
+        Args:
+            mode: 'original', 'preprocessed', 或 'binary'
+        """
+        if mode not in ['original', 'preprocessed', 'binary']:
+            raise ValueError(f"Invalid view mode: {mode}")
+        self.view_mode = mode
+    
+    def set_preprocessed_pixels(self, pixels: np.ndarray):
+        """
+        设置预处理结果缓存
+        
+        Args:
+            pixels: 预处理后的像素数据
+        """
+        self.preprocessed_pixels = pixels.copy()
+    
+    def invalidate_preprocessed_cache(self):
+        """使预处理缓存失效"""
+        self.preprocessed_pixels = None

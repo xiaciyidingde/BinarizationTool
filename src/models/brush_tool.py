@@ -7,6 +7,8 @@
 
 from typing import Optional, TYPE_CHECKING
 from .brush_stroke import BrushStroke
+from ..utils.cursor_renderer import CursorRenderer
+from ..utils.stroke_interpolator import StrokeInterpolator
 
 if TYPE_CHECKING:
     from PySide6.QtGui import QPainter
@@ -73,28 +75,26 @@ class BrushTool:
             self.last_draw_pos = (pixel_x, pixel_y)
             return
         
-        # 计算距离
-        distance = self._calculate_distance(self.last_draw_pos, (pixel_x, pixel_y))
-        step_distance = self.size * self.spacing
+        # 使用 StrokeInterpolator 计算插值点
+        interpolated_points = StrokeInterpolator.interpolate_points(
+            self.last_draw_pos,
+            (pixel_x, pixel_y),
+            self.size,
+            self.spacing
+        )
         
-        if distance >= step_distance:
-            # 在路径上插值点以保持均匀间距
-            num_steps = int(distance / step_distance)
-            
-            for i in range(1, num_steps + 1):
-                t = (i * step_distance) / distance
-                interp_x = int(self.last_draw_pos[0] + t * (pixel_x - self.last_draw_pos[0]))
-                interp_y = int(self.last_draw_pos[1] + t * (pixel_y - self.last_draw_pos[1]))
-                self.current_stroke.add_point(interp_x, interp_y)
-            
-            # 更新最后绘制位置为最后一个插值点
-            # 这样可以保持精确的间距
-            if num_steps > 0:
-                t = (num_steps * step_distance) / distance
-                self.last_draw_pos = (
-                    int(self.last_draw_pos[0] + t * (pixel_x - self.last_draw_pos[0])),
-                    int(self.last_draw_pos[1] + t * (pixel_y - self.last_draw_pos[1]))
-                )
+        # 添加所有插值点
+        for point in interpolated_points:
+            self.current_stroke.add_point(point[0], point[1])
+        
+        # 更新最后绘制位置为最后一个插值点（保持精确间距）
+        if len(interpolated_points) > 0:
+            self.last_draw_pos = StrokeInterpolator.calculate_last_interpolated_position(
+                self.last_draw_pos,
+                (pixel_x, pixel_y),
+                self.size,
+                self.spacing
+            )
     
     def end_stroke(self) -> Optional[BrushStroke]:
         """
@@ -127,77 +127,24 @@ class BrushTool:
             view_y: 光标中心 Y 坐标（视图坐标）
             view_size: 画笔大小（视图坐标）
         """
-        from PySide6.QtCore import Qt, QPointF
-        from PySide6.QtGui import QPen, QColor
-        
-        # 保存当前画笔状态
-        old_pen = painter.pen()
+        from PySide6.QtGui import QColor
         
         # 根据画笔颜色选择指示器颜色
         # 黑色画笔(0) -> 红色指示器
         # 白色画笔(255) -> 绿色指示器
         if self.color == 0:
-            indicator_color = QColor(255, 0, 0)  # 红色
+            ring_color = QColor(255, 0, 0)  # 红色
         else:
-            indicator_color = QColor(0, 255, 0)  # 绿色
+            ring_color = QColor(0, 255, 0)  # 绿色
         
-        # === 第一层：绘制彩色圆形外圈 ===
-        pen = QPen(indicator_color, 2)  # 使用指示器颜色，更粗的线条
-        pen.setStyle(Qt.SolidLine)
-        painter.setPen(pen)
-        
-        radius = view_size / 2.0
-        painter.drawEllipse(QPointF(view_x, view_y), radius, radius)
-        
-        # === 第二层：绘制十字准星（在圆圈外，只在圆圈小时显示）===
-        if view_size < self.crosshair_threshold:
-            pen = QPen(indicator_color)  # 使用相同的指示器颜色
-            pen.setWidth(2)  # 更粗的线条
-            pen.setStyle(Qt.SolidLine)
-            painter.setPen(pen)
-            
-            # 十字准星从圆圈边缘开始，向外延伸
-            gap = 2  # 圆圈和十字之间的间隙
-            crosshair_length = 8  # 十字线的长度
-            
-            # 水平线（左右两段，不穿过圆圈）
-            # 左边
-            painter.drawLine(
-                int(view_x - radius - gap - crosshair_length), int(view_y),
-                int(view_x - radius - gap), int(view_y)
-            )
-            # 右边
-            painter.drawLine(
-                int(view_x + radius + gap), int(view_y),
-                int(view_x + radius + gap + crosshair_length), int(view_y)
-            )
-            
-            # 垂直线（上下两段，不穿过圆圈）
-            # 上边
-            painter.drawLine(
-                int(view_x), int(view_y - radius - gap - crosshair_length),
-                int(view_x), int(view_y - radius - gap)
-            )
-            # 下边
-            painter.drawLine(
-                int(view_x), int(view_y + radius + gap),
-                int(view_x), int(view_y + radius + gap + crosshair_length)
-            )
-        
-        # 恢复画笔状态
-        painter.setPen(old_pen)
-    
-    def _calculate_distance(self, p1: tuple[int, int], p2: tuple[int, int]) -> float:
-        """
-        计算两点之间的欧几里得距离
-        
-        Args:
-            p1: 第一个点 (x, y)
-            p2: 第二个点 (x, y)
-            
-        Returns:
-            距离值
-        """
-        dx = p2[0] - p1[0]
-        dy = p2[1] - p1[1]
-        return (dx * dx + dy * dy) ** 0.5
+        # 使用 CursorRenderer 渲染
+        CursorRenderer.render_circle_cursor(
+            painter, 
+            view_x, 
+            view_y, 
+            view_size,
+            ring_color,
+            center_color=None,  # 画笔工具不显示中心点
+            show_crosshair=True,
+            crosshair_threshold=self.crosshair_threshold
+        )

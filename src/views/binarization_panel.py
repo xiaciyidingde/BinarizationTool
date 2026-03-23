@@ -8,9 +8,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                 QComboBox, QSlider, QGroupBox, QScrollArea, QCheckBox, QStyledItemDelegate)
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QPixmap, QIcon, QPainter
-from ..utils.resources import THREE_BARS_BYTES
-import tempfile
-import os
+from .view_mode_switcher import ViewModeSwitcher
 
 
 class BinarizationPanel(QWidget):
@@ -23,6 +21,9 @@ class BinarizationPanel(QWidget):
     # 信号：参数改变 (preprocess_params, binarization_method, threshold)
     parameters_changed = Signal(dict, int, int)
     
+    # 信号：视图模式改变 (mode: 'original', 'preprocessed', 'binary')
+    view_mode_changed = Signal(str)
+    
     def __init__(self, parent=None):
         """
         初始化二值化面板
@@ -31,9 +32,6 @@ class BinarizationPanel(QWidget):
             parent: 父窗口部件
         """
         super().__init__(parent)
-        
-        # 初始化临时图标路径
-        self._temp_icon_path = None
         
         self.setup_ui()
         self.connect_signals()
@@ -45,23 +43,42 @@ class BinarizationPanel(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         
-        # 外层容器（用于居中和限制宽度）
+        # 外层容器
         outer_container = QWidget()
-        outer_layout = QHBoxLayout(outer_container)
+        outer_layout = QVBoxLayout(outer_container)
         outer_layout.setContentsMargins(6, 6, 6, 6)
+        outer_layout.setSpacing(8)
         
-        # 内容容器（带背景和圆角）
-        content = QWidget()
-        content.setObjectName("binarizationPanelContent")
-        content.setStyleSheet("""
-            QWidget#binarizationPanelContent {
+        # === 视图模式切换器区域（独立白色背景） ===
+        view_mode_container = QWidget()
+        view_mode_container.setObjectName("viewModeContainer")
+        view_mode_container.setStyleSheet("""
+            QWidget#viewModeContainer {
                 background-color: #ffffff;
                 border-radius: 8px;
             }
         """)
-        layout = QVBoxLayout(content)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
+        view_mode_layout = QVBoxLayout(view_mode_container)
+        view_mode_layout.setContentsMargins(8, 8, 8, 8)
+        view_mode_layout.setSpacing(0)
+        
+        self.view_mode_switcher = ViewModeSwitcher()
+        view_mode_layout.addWidget(self.view_mode_switcher)
+        
+        outer_layout.addWidget(view_mode_container)
+        
+        # === 二值化设置区域（独立白色背景） ===
+        settings_container = QWidget()
+        settings_container.setObjectName("settingsContainer")
+        settings_container.setStyleSheet("""
+            QWidget#settingsContainer {
+                background-color: #ffffff;
+                border-radius: 8px;
+            }
+        """)
+        settings_layout = QVBoxLayout(settings_container)
+        settings_layout.setContentsMargins(8, 8, 8, 8)
+        settings_layout.setSpacing(8)
         
         # === 预处理参数 ===
         preprocess_group = QGroupBox("预处理")
@@ -113,7 +130,49 @@ class BinarizationPanel(QWidget):
         )
         
         preprocess_group.setLayout(preprocess_layout)
-        layout.addWidget(preprocess_group)
+        settings_layout.addWidget(preprocess_group)
+        
+        # === RGB 通道调整 ===
+        rgb_group = QGroupBox("RGB 通道")
+        rgb_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 14px;
+                color: #495057;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 8px;
+                top: 0px;
+                padding: 0 4px;
+                background-color: #ffffff;
+            }
+        """)
+        rgb_layout = QVBoxLayout()
+        rgb_layout.setSpacing(6)
+        
+        # 红色通道
+        self.red_channel_slider = self._create_slider_with_label(
+            "红色通道:", -100, 100, 0, rgb_layout
+        )
+        
+        # 绿色通道
+        self.green_channel_slider = self._create_slider_with_label(
+            "绿色通道:", -100, 100, 0, rgb_layout
+        )
+        
+        # 蓝色通道
+        self.blue_channel_slider = self._create_slider_with_label(
+            "蓝色通道:", -100, 100, 0, rgb_layout
+        )
+        
+        rgb_group.setLayout(rgb_layout)
+        settings_layout.addWidget(rgb_group)
         
         # === 二值化方法 ===
         binarization_group = QGroupBox("二值化")
@@ -159,9 +218,6 @@ class BinarizationPanel(QWidget):
         self.method_combo.addItem("Bernsen 阈值", 6)
         self.method_combo.setCurrentIndex(1)  # 默认自适应阈值
         
-        # 设置自定义下拉图标
-        self._set_combobox_icon(self.method_combo)
-        
         method_row.addWidget(self.method_combo)
         method_row.addStretch()
         binarization_layout.addLayout(method_row)
@@ -186,7 +242,7 @@ class BinarizationPanel(QWidget):
         binarization_layout.addLayout(threshold_row)
         
         binarization_group.setLayout(binarization_layout)
-        layout.addWidget(binarization_group)
+        settings_layout.addWidget(binarization_group)
         
         # === 降噪功能 ===
         denoise_group = QGroupBox("降噪")
@@ -230,9 +286,6 @@ class BinarizationPanel(QWidget):
         self.denoise_method_combo.addItem("形态学-开运算", 4)
         self.denoise_method_combo.addItem("形态学-闭运算", 5)
         
-        # 设置自定义下拉图标
-        self._set_combobox_icon(self.denoise_method_combo)
-        
         denoise_method_row.addWidget(self.denoise_method_combo)
         denoise_method_row.addStretch()
         denoise_layout.addLayout(denoise_method_row)
@@ -243,13 +296,12 @@ class BinarizationPanel(QWidget):
         )
         
         denoise_group.setLayout(denoise_layout)
-        layout.addWidget(denoise_group)
+        settings_layout.addWidget(denoise_group)
         
         # 添加弹性空间
-        layout.addStretch()
+        settings_layout.addStretch()
         
-        # 将内容容器添加到外层布局
-        outer_layout.addWidget(content)
+        outer_layout.addWidget(settings_container)
         
         # 设置滚动区域
         scroll.setWidget(outer_container)
@@ -259,45 +311,8 @@ class BinarizationPanel(QWidget):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.addWidget(scroll)
         
-        # 初始状态：固定阈值控件启用
+        # 初始状态:固定阈值控件启用
         self._update_threshold_enabled()
-    
-    def _set_combobox_icon(self, combobox):
-        """为 QComboBox 设置自定义下拉图标"""
-        # 如果还没有创建临时图标文件，创建一个
-        if self._temp_icon_path is None:
-            # 创建临时文件
-            temp_dir = tempfile.gettempdir()
-            self._temp_icon_path = os.path.join(temp_dir, 'three_bars_icon.png')
-            
-            # 保存图标到临时文件
-            pixmap = QPixmap()
-            pixmap.loadFromData(THREE_BARS_BYTES)
-            pixmap.save(self._temp_icon_path, 'PNG')
-        
-        # 使用 QSS 设置图标
-        # 注意：Windows 路径需要转换为正斜杠
-        icon_path = self._temp_icon_path.replace('\\', '/')
-        combobox.setStyleSheet(f"""
-            QComboBox::down-arrow {{
-                image: url({icon_path});
-                width: 16px;
-                height: 16px;
-                border: none;
-                border-left: none;
-                border-right: none;
-                border-top: none;
-                border-bottom: none;
-            }}
-            QComboBox::drop-down {{
-                subcontrol-origin: padding;
-                subcontrol-position: center right;
-                width: 24px;
-                border: none;
-                border-left: none;
-                background: transparent;
-            }}
-        """)
     
     def _create_slider_with_label(self, label_text, min_val, max_val, default_val, 
                                   parent_layout, scale=1.0):
@@ -347,8 +362,18 @@ class BinarizationPanel(QWidget):
         self.sharpen_slider.valueChanged.connect(self._on_parameters_changed)
         self.gamma_slider.valueChanged.connect(self._on_parameters_changed)
         self.smooth_slider.valueChanged.connect(self._on_parameters_changed)
+        
+        # RGB 通道调整信号
+        self.red_channel_slider.valueChanged.connect(self._on_parameters_changed)
+        self.green_channel_slider.valueChanged.connect(self._on_parameters_changed)
+        self.blue_channel_slider.valueChanged.connect(self._on_parameters_changed)
+        
+        # 降噪参数信号
         self.denoise_method_combo.currentIndexChanged.connect(self._on_parameters_changed)
         self.denoise_slider.valueChanged.connect(self._on_parameters_changed)
+        
+        # 视图模式切换信号
+        self.view_mode_switcher.mode_changed.connect(self._on_view_mode_changed)
     
     def _on_parameters_changed(self):
         """参数改变事件"""
@@ -359,6 +384,10 @@ class BinarizationPanel(QWidget):
         """阈值改变事件"""
         self.threshold_label.setText(str(value))
         self._emit_change()
+    
+    def _on_view_mode_changed(self, mode: str):
+        """视图模式改变事件"""
+        self.view_mode_changed.emit(mode)
     
     def _update_threshold_enabled(self):
         """更新阈值控件的启用状态"""
@@ -388,6 +417,9 @@ class BinarizationPanel(QWidget):
             'sharpen': self.sharpen_slider.value(),
             'gamma': self.gamma_slider.value() * 0.01,
             'smooth': self.smooth_slider.value(),
+            'red_channel': self.red_channel_slider.value(),
+            'green_channel': self.green_channel_slider.value(),
+            'blue_channel': self.blue_channel_slider.value(),
             'denoise_method': self.denoise_method_combo.currentData(),
             'denoise': self.denoise_slider.value(),
         }
@@ -444,6 +476,9 @@ class BinarizationPanel(QWidget):
         self.sharpen_slider.setEnabled(enabled)
         self.gamma_slider.setEnabled(enabled)
         self.smooth_slider.setEnabled(enabled)
+        self.red_channel_slider.setEnabled(enabled)
+        self.green_channel_slider.setEnabled(enabled)
+        self.blue_channel_slider.setEnabled(enabled)
         self.denoise_method_combo.setEnabled(enabled)
         self.denoise_slider.setEnabled(enabled)
         

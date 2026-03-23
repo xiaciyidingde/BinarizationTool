@@ -19,13 +19,13 @@ class TileCache:
     使用 LRU 策略管理内存，只渲染可见区域的块。
     """
     
-    def __init__(self, tile_size: int = 256, max_tiles: int = 100):
+    def __init__(self, tile_size: int = 256, max_tiles: int = 1000):
         """
         初始化分块缓存
         
         Args:
             tile_size: 块的大小（像素单位），默认 256x256
-            max_tiles: 最大缓存块数量，默认 100（约 25MB 内存）
+            max_tiles: 最大缓存块数量，默认 1000（约 250MB 内存用于缓存）
         """
         self.tile_size = tile_size
         self.max_tiles = max_tiles
@@ -50,11 +50,15 @@ class TileCache:
         设置图片数据
         
         Args:
-            pixels: 图片像素数据，形状为 (H, W)，dtype=uint8
+            pixels: 图片像素数据，形状为 (H, W) 或 (H, W, C)，dtype=uint8
             selection_mask: 选区蒙版，形状为 (H, W)，dtype=bool（可选）
         """
         self.pixels = pixels
-        self.image_height, self.image_width = pixels.shape
+        # 支持灰度图 (H, W) 和彩色图 (H, W, C)
+        if len(pixels.shape) == 2:
+            self.image_height, self.image_width = pixels.shape
+        else:
+            self.image_height, self.image_width = pixels.shape[:2]
         self.selection_mask = selection_mask
         self.clear()
     
@@ -65,11 +69,15 @@ class TileCache:
         用于绘制过程中的增量更新。
         
         Args:
-            pixels: 图片像素数据，形状为 (H, W)，dtype=uint8
+            pixels: 图片像素数据，形状为 (H, W) 或 (H, W, C)，dtype=uint8
             selection_mask: 选区蒙版，形状为 (H, W)，dtype=bool（可选）
         """
         self.pixels = pixels
-        self.image_height, self.image_width = pixels.shape
+        # 支持灰度图 (H, W) 和彩色图 (H, W, C)
+        if len(pixels.shape) == 2:
+            self.image_height, self.image_width = pixels.shape
+        else:
+            self.image_height, self.image_width = pixels.shape[:2]
         self.selection_mask = selection_mask
     
     def set_scale(self, scale: float):
@@ -248,45 +256,103 @@ class TileCache:
         # 提取块数据（必须复制以确保内存连续）
         tile_data = self.pixels[pixel_y:pixel_y+tile_height, pixel_x:pixel_x+tile_width].copy()
         
+        # 判断是灰度图还是彩色图
+        is_color = len(tile_data.shape) == 3
+        
         # 如果有选区，叠加红色覆盖层
         if self.selection_mask is not None:
             # 提取选区块
             selection_tile = self.selection_mask[pixel_y:pixel_y+tile_height, pixel_x:pixel_x+tile_width]
             
-            # 转换为 RGB 以支持红色覆盖
-            tile_rgb = np.stack([tile_data, tile_data, tile_data], axis=-1)
-            
-            # 将选中的像素设置为红色 (255, 0, 0)
-            tile_rgb[selection_tile] = [255, 0, 0]
-            
-            # 确保数据是 C-contiguous
-            if not tile_rgb.flags['C_CONTIGUOUS']:
-                tile_rgb = np.ascontiguousarray(tile_rgb)
-            
-            # 转换为 QImage (RGB)
-            bytes_per_line = tile_width * 3
-            qimage = QImage(
-                tile_rgb.data,
-                tile_width,
-                tile_height,
-                bytes_per_line,
-                QImage.Format_RGB888
-            ).copy()
+            # 检查这个瓦片是否有选区（优化：跳过空选区）
+            if selection_tile.any():
+                # 转换为 RGB 以支持红色覆盖
+                if is_color:
+                    # 已经是彩色图，直接复制
+                    tile_rgb = tile_data.copy()
+                else:
+                    # 灰度图转 RGB（优化：使用更快的方法）
+                    tile_rgb = np.empty((tile_height, tile_width, 3), dtype=np.uint8)
+                    tile_rgb[:, :, 0] = tile_data
+                    tile_rgb[:, :, 1] = tile_data
+                    tile_rgb[:, :, 2] = tile_data
+                
+                # 将选中的像素设置为红色 (255, 0, 0)
+                tile_rgb[selection_tile] = [255, 0, 0]
+                
+                # 确保数据是 C-contiguous
+                if not tile_rgb.flags['C_CONTIGUOUS']:
+                    tile_rgb = np.ascontiguousarray(tile_rgb)
+                
+                # 转换为 QImage (RGB)
+                bytes_per_line = tile_width * 3
+                qimage = QImage(
+                    tile_rgb.data,
+                    tile_width,
+                    tile_height,
+                    bytes_per_line,
+                    QImage.Format_RGB888
+                ).copy()
+            else:
+                # 这个瓦片没有选区，使用原始渲染路径（更快）
+                if is_color:
+                    # 彩色图
+                    if not tile_data.flags['C_CONTIGUOUS']:
+                        tile_data = np.ascontiguousarray(tile_data)
+                    
+                    bytes_per_line = tile_width * 3
+                    qimage = QImage(
+                        tile_data.data,
+                        tile_width,
+                        tile_height,
+                        bytes_per_line,
+                        QImage.Format_RGB888
+                    ).copy()
+                else:
+                    # 灰度图
+                    if not tile_data.flags['C_CONTIGUOUS']:
+                        tile_data = np.ascontiguousarray(tile_data)
+                    
+                    bytes_per_line = tile_width
+                    qimage = QImage(
+                        tile_data.data, 
+                        tile_width, 
+                        tile_height, 
+                        bytes_per_line, 
+                        QImage.Format_Grayscale8
+                    ).copy()
         else:
-            # 没有选区，使用灰度图
-            # 确保数据是 C-contiguous
-            if not tile_data.flags['C_CONTIGUOUS']:
-                tile_data = np.ascontiguousarray(tile_data)
-            
-            # 转换为 QImage
-            bytes_per_line = tile_width
-            qimage = QImage(
-                tile_data.data, 
-                tile_width, 
-                tile_height, 
-                bytes_per_line, 
-                QImage.Format_Grayscale8
-            ).copy()
+            # 没有选区
+            if is_color:
+                # 彩色图
+                # 确保数据是 C-contiguous
+                if not tile_data.flags['C_CONTIGUOUS']:
+                    tile_data = np.ascontiguousarray(tile_data)
+                
+                # 转换为 QImage (RGB)
+                bytes_per_line = tile_width * 3
+                qimage = QImage(
+                    tile_data.data,
+                    tile_width,
+                    tile_height,
+                    bytes_per_line,
+                    QImage.Format_RGB888
+                ).copy()
+            else:
+                # 灰度图
+                # 确保数据是 C-contiguous
+                if not tile_data.flags['C_CONTIGUOUS']:
+                    tile_data = np.ascontiguousarray(tile_data)
+                
+                # 转换为 QImage
+                bytes_per_line = tile_width
+                qimage = QImage(
+                    tile_data.data, 
+                    tile_width, 
+                    tile_height, 
+                    bytes_per_line, 
+                    QImage.Format_Grayscale8
+                ).copy()
         
         # 缩放到视图大小 - 使用 round 而不是 int 以减少累积误差
         scaled_width = round(tile_width * self.current_scale)

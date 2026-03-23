@@ -4,8 +4,8 @@
 所有版本号从这里读取，确保版本号的一致性。
 """
 
-__version__ = "1.2.0.0"
+__version__ = "1.3.1.0"
 __author__ = "夏次一定de"
-__release_date__ = "2026-03-21"
+__release_date__ = "2026-03-23"
 __app_name__ = "BinarizationTool"
 __description__ = "二值化图片编辑器"
