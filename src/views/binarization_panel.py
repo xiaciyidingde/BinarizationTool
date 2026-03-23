@@ -295,6 +295,11 @@ class BinarizationPanel(QWidget):
         self.method_combo.addItem("Wolf 阈值", 4)
         self.method_combo.addItem("Nick 阈值", 5)
         self.method_combo.addItem("Bernsen 阈值", 6)
+        # 添加分隔线（使用禁用的项）
+        self.method_combo.insertSeparator(7)
+        self.method_combo.addItem("Floyd-Steinberg 抖动", 7)
+        self.method_combo.addItem("Ordered 抖动", 8)
+        self.method_combo.addItem("Atkinson 抖动", 9)
         self.method_combo.setCurrentIndex(1)  # 默认自适应阈值
         
         method_row.addWidget(self.method_combo)
@@ -343,6 +348,10 @@ class BinarizationPanel(QWidget):
         # === Bernsen 参数 ===
         self.bernsen_params_container = self._create_bernsen_params()
         binarization_layout.addWidget(self.bernsen_params_container)
+        
+        # === 抖动参数 ===
+        self.dithering_params_container = self._create_dithering_params()
+        binarization_layout.addWidget(self.dithering_params_container)
         
         binarization_group.setLayout(binarization_layout)
         settings_layout.addWidget(binarization_group)
@@ -550,6 +559,35 @@ class BinarizationPanel(QWidget):
         
         return container
     
+    def _create_dithering_params(self):
+        """创建抖动参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 抖动强度（用于 Floyd-Steinberg 和 Atkinson）
+        self.dither_strength_container = QWidget()
+        strength_layout = QVBoxLayout(self.dither_strength_container)
+        strength_layout.setContentsMargins(0, 0, 0, 0)
+        strength_layout.setSpacing(6)
+        self.dither_strength_slider = self._create_slider_with_label(
+            "抖动强度:", 0, 100, 100, strength_layout
+        )
+        layout.addWidget(self.dither_strength_container)
+        
+        # 矩阵大小（仅用于 Ordered 抖动）
+        self.dither_matrix_size_container = QWidget()
+        matrix_layout = QVBoxLayout(self.dither_matrix_size_container)
+        matrix_layout.setContentsMargins(0, 0, 0, 0)
+        matrix_layout.setSpacing(6)
+        self.dither_matrix_size_slider = self._create_slider_with_label(
+            "矩阵大小:", 2, 16, 8, matrix_layout
+        )
+        layout.addWidget(self.dither_matrix_size_container)
+        
+        return container
+    
     def connect_signals(self):
         """连接信号"""
         self.method_combo.currentIndexChanged.connect(self._on_parameters_changed)
@@ -583,6 +621,10 @@ class BinarizationPanel(QWidget):
         self.nick_k_slider.valueChanged.connect(self._on_parameters_changed)
         self.bernsen_window_slider.valueChanged.connect(self._on_parameters_changed)
         self.bernsen_contrast_slider.valueChanged.connect(self._on_parameters_changed)
+        
+        # 抖动参数信号
+        self.dither_strength_slider.valueChanged.connect(self._on_parameters_changed)
+        self.dither_matrix_size_slider.valueChanged.connect(self._on_parameters_changed)
         
         # 降噪参数信号
         self.denoise_method_combo.currentIndexChanged.connect(self._on_parameters_changed)
@@ -622,6 +664,7 @@ class BinarizationPanel(QWidget):
         self.wolf_params_container.setVisible(False)
         self.nick_params_container.setVisible(False)
         self.bernsen_params_container.setVisible(False)
+        self.dithering_params_container.setVisible(False)
         
         # 根据方法显示对应的参数
         if method == 0:  # 固定阈值
@@ -639,6 +682,18 @@ class BinarizationPanel(QWidget):
             self.nick_params_container.setVisible(True)
         elif method == 6:  # Bernsen
             self.bernsen_params_container.setVisible(True)
+        elif method == 7:  # Floyd-Steinberg 抖动
+            self.dithering_params_container.setVisible(True)
+            self.dither_strength_container.setVisible(True)
+            self.dither_matrix_size_container.setVisible(False)
+        elif method == 8:  # Ordered 抖动
+            self.dithering_params_container.setVisible(True)
+            self.dither_strength_container.setVisible(False)
+            self.dither_matrix_size_container.setVisible(True)
+        elif method == 9:  # Atkinson 抖动
+            self.dithering_params_container.setVisible(True)
+            self.dither_strength_container.setVisible(True)
+            self.dither_matrix_size_container.setVisible(False)
     
     def _update_edge_threshold_enabled(self):
         """更新边缘阈值控件的显示状态"""
@@ -679,6 +734,10 @@ class BinarizationPanel(QWidget):
         elif method == 6:  # Bernsen
             params['window_size'] = self.bernsen_window_slider.value()
             params['bernsen_contrast'] = self.bernsen_contrast_slider.value()
+        elif method in [7, 9]:  # Floyd-Steinberg 或 Atkinson 抖动
+            params['dither_strength'] = self.dither_strength_slider.value()
+        elif method == 8:  # Ordered 抖动
+            params['dither_matrix_size'] = self.dither_matrix_size_slider.value()
         
         return params
     

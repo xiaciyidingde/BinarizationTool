@@ -238,6 +238,137 @@ class BinarizationEngine:
         return image
     
     @staticmethod
+    def apply_floyd_steinberg(image: np.ndarray, strength: float = 1.0) -> np.ndarray:
+        """
+        Floyd-Steinberg 抖动算法
+        
+        经典的误差扩散算法，保留灰度细节。
+        
+        Args:
+            image: 输入灰度图
+            strength: 抖动强度 (0.0-1.0)，默认 1.0
+        
+        Returns:
+            二值化图片
+        """
+        # 确保是灰度图
+        img = BinarizationEngine.convert_to_grayscale(image)
+        img = img.astype(float)
+        h, w = img.shape
+        
+        for y in range(h):
+            for x in range(w):
+                old_pixel = img[y, x]
+                new_pixel = 255 if old_pixel > 127 else 0
+                img[y, x] = new_pixel
+                
+                error = (old_pixel - new_pixel) * strength
+                
+                # 扩散误差到相邻像素
+                if x + 1 < w:
+                    img[y, x + 1] += error * 7/16
+                if y + 1 < h:
+                    if x > 0:
+                        img[y + 1, x - 1] += error * 3/16
+                    img[y + 1, x] += error * 5/16
+                    if x + 1 < w:
+                        img[y + 1, x + 1] += error * 1/16
+        
+        return np.clip(img, 0, 255).astype(np.uint8)
+    
+    @staticmethod
+    def apply_ordered_dithering(image: np.ndarray, matrix_size: int = 8) -> np.ndarray:
+        """
+        Ordered Dithering (有序抖动)
+        
+        使用 Bayer 矩阵产生网点效果，适合打印。
+        
+        Args:
+            image: 输入灰度图
+            matrix_size: Bayer 矩阵大小 (2, 4, 8, 16)
+        
+        Returns:
+            二值化图片
+        """
+        # 确保是灰度图
+        img = BinarizationEngine.convert_to_grayscale(image)
+        
+        # 生成 Bayer 矩阵
+        def generate_bayer_matrix(n):
+            """递归生成 Bayer 矩阵"""
+            if n == 1:
+                return np.array([[0]])
+            else:
+                smaller = generate_bayer_matrix(n // 2)
+                return np.block([
+                    [4 * smaller + 0, 4 * smaller + 2],
+                    [4 * smaller + 3, 4 * smaller + 1]
+                ])
+        
+        # 确保 matrix_size 是 2 的幂
+        matrix_size = max(2, min(16, matrix_size))
+        if matrix_size not in [2, 4, 8, 16]:
+            matrix_size = 8
+        
+        bayer_matrix = generate_bayer_matrix(matrix_size)
+        threshold_map = (bayer_matrix / (matrix_size * matrix_size)) * 255
+        
+        h, w = img.shape
+        result = np.zeros_like(img)
+        
+        for y in range(h):
+            for x in range(w):
+                threshold = threshold_map[y % matrix_size, x % matrix_size]
+                result[y, x] = 255 if img[y, x] > threshold else 0
+        
+        return result
+    
+    @staticmethod
+    def apply_atkinson(image: np.ndarray, strength: float = 1.0) -> np.ndarray:
+        """
+        Atkinson 抖动算法
+        
+        Mac 风格的误差扩散，产生艺术效果。
+        误差扩散更轻，保留更多高光。
+        
+        Args:
+            image: 输入灰度图
+            strength: 抖动强度 (0.0-1.0)，默认 1.0
+        
+        Returns:
+            二值化图片
+        """
+        # 确保是灰度图
+        img = BinarizationEngine.convert_to_grayscale(image)
+        img = img.astype(float)
+        h, w = img.shape
+        
+        for y in range(h):
+            for x in range(w):
+                old_pixel = img[y, x]
+                new_pixel = 255 if old_pixel > 127 else 0
+                img[y, x] = new_pixel
+                
+                # Atkinson 使用 1/8 的误差扩散（比 Floyd-Steinberg 更轻）
+                error = (old_pixel - new_pixel) * strength / 8
+                
+                # 扩散误差到相邻像素（6个方向）
+                if x + 1 < w:
+                    img[y, x + 1] += error
+                if x + 2 < w:
+                    img[y, x + 2] += error
+                if y + 1 < h:
+                    if x > 0:
+                        img[y + 1, x - 1] += error
+                    img[y + 1, x] += error
+                    if x + 1 < w:
+                        img[y + 1, x + 1] += error
+                if y + 2 < h:
+                    img[y + 2, x] += error
+        
+        return np.clip(img, 0, 255).astype(np.uint8)
+    
+    @staticmethod
     def apply_preprocess(img: np.ndarray, **kwargs) -> np.ndarray:
         """
         图像预处理
@@ -357,6 +488,9 @@ class BinarizationEngine:
                 4 - Wolf 阈值
                 5 - Nick 阈值
                 6 - Bernsen 阈值
+                7 - Floyd-Steinberg 抖动
+                8 - Ordered 抖动
+                9 - Atkinson 抖动
             threshold_value: 阈值参数（用于固定阈值和自适应阈值的 C 参数）
             **kwargs: 额外参数
                 - block_size: 自适应阈值的块大小 (3-51奇数，默认自动计算)
@@ -366,6 +500,8 @@ class BinarizationEngine:
                 - wolf_k: Wolf的k参数 (0.0-1.0，默认0.5)
                 - nick_k: Nick的k参数 (-1.0-0.0，默认-0.1)
                 - bernsen_contrast: Bernsen的对比度阈值 (0-255，默认15)
+                - dither_strength: 抖动强度 (0.0-1.0，默认1.0)
+                - dither_matrix_size: Ordered抖动的矩阵大小 (2/4/8/16，默认8)
         
         Returns:
             二值化图片
@@ -373,6 +509,20 @@ class BinarizationEngine:
         # 确保是灰度图
         img = BinarizationEngine.convert_to_grayscale(image)
         
+        # 抖动算法 (7-9)
+        if threshold_method == 7:  # Floyd-Steinberg 抖动
+            strength = kwargs.get('dither_strength', 100) / 100.0
+            return BinarizationEngine.apply_floyd_steinberg(img, strength)
+        
+        elif threshold_method == 8:  # Ordered 抖动
+            matrix_size = kwargs.get('dither_matrix_size', 8)
+            return BinarizationEngine.apply_ordered_dithering(img, matrix_size)
+        
+        elif threshold_method == 9:  # Atkinson 抖动
+            strength = kwargs.get('dither_strength', 100) / 100.0
+            return BinarizationEngine.apply_atkinson(img, strength)
+        
+        # 传统二值化方法 (0-6)
         if threshold_method == 0:  # 固定阈值
             return cv2.threshold(img, threshold_value, 255, cv2.THRESH_BINARY)[1]
         
