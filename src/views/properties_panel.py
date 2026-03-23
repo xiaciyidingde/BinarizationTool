@@ -340,6 +340,25 @@ class PropertiesPanel(QWidget):
         mode_layout.addStretch()
         basic_layout.addLayout(mode_layout)
         
+        # 选择方式设置
+        method_layout = QHBoxLayout()
+        method_layout.setSpacing(12)
+        method_label = QLabel("方式:")
+        method_label.setMinimumWidth(40)
+        method_layout.addWidget(method_label)
+        
+        self.selection_method_group = QButtonGroup(self)
+        self.brush_method_radio = QRadioButton("涂抹")
+        self.rect_method_radio = QRadioButton("框选")
+        self.selection_method_group.addButton(self.brush_method_radio, 0)
+        self.selection_method_group.addButton(self.rect_method_radio, 1)
+        self.brush_method_radio.setChecked(True)
+        
+        method_layout.addWidget(self.brush_method_radio)
+        method_layout.addWidget(self.rect_method_radio)
+        method_layout.addStretch()
+        basic_layout.addLayout(method_layout)
+        
         # 颜色设置
         color_layout = QHBoxLayout()
         color_layout.setSpacing(12)

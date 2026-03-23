@@ -909,6 +909,9 @@ class MainWindow(QMainWindow):
         self.properties_panel.selection_mode_group.buttonClicked.connect(
             self._on_selection_mode_changed_panel
         )
+        self.properties_panel.selection_method_group.buttonClicked.connect(
+            self._on_selection_method_changed_panel
+        )
         self.properties_panel.selection_color_group.buttonClicked.connect(
             self._on_selection_color_changed_panel
         )
@@ -939,6 +942,22 @@ class MainWindow(QMainWindow):
             self.properties_panel.fill_button.setText("填充白色")
         else:
             self.properties_panel.fill_button.setText("填充黑色")
+        self.canvas.update()
+    
+    def _on_selection_method_changed_panel(self):
+        """属性面板：选择方式改变（涂抹/框选）"""
+        button_id = self.properties_panel.selection_method_group.checkedId()
+        is_rect_mode = (button_id == 1)  # 0=涂抹, 1=框选
+        self.canvas.selection_tool.rect_select_mode = is_rect_mode
+        
+        # 更新光标
+        if is_rect_mode:
+            self.canvas.setCursor(Qt.CrossCursor)
+            self.statusbar.showMessage("矩形框选模式已启用")
+        else:
+            self.canvas.setCursor(Qt.BlankCursor)
+            self.statusbar.showMessage("涂抹选择模式已启用")
+        
         self.canvas.update()
     
     def _on_view_mode_changed(self, mode: str):

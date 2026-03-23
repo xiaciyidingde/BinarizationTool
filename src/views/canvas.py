@@ -124,8 +124,13 @@ class Canvas(QWidget):
             # 裁剪工具：十字光标
             self.setCursor(Qt.CrossCursor)
         elif isinstance(tool, SelectionTool):
-            # 选择工具：隐藏系统光标（显示自定义圆圈光标）
-            self.setCursor(Qt.BlankCursor)
+            # 选择工具：根据模式设置光标
+            if tool.rect_select_mode:
+                # 矩形框选模式：十字光标
+                self.setCursor(Qt.CrossCursor)
+            else:
+                # 拖动选择模式：隐藏系统光标（显示自定义圆圈光标）
+                self.setCursor(Qt.BlankCursor)
         else:
             # 其他工具或无工具：恢复默认光标
             self.setCursor(Qt.ArrowCursor)
@@ -154,6 +159,10 @@ class Canvas(QWidget):
         if isinstance(self.current_tool, CropTool):
             self.current_tool.render_overlay(painter, self.view_transform)
         
+        # 渲染选择工具的矩形框选覆盖层
+        if isinstance(self.current_tool, SelectionTool) and self.current_tool.rect_select_mode:
+            self.current_tool.render_rect_select_overlay(painter, self.view_transform)
+        
         # 渲染画笔光标
         if isinstance(self.current_tool, BrushTool) and self.mouse_pos is not None:
             view_size = self.view_transform.get_brush_view_size(self.current_tool.size)
@@ -164,8 +173,8 @@ class Canvas(QWidget):
                 view_size
             )
         
-        # 渲染选择工具光标
-        if isinstance(self.current_tool, SelectionTool) and self.mouse_pos is not None:
+        # 渲染选择工具光标（只在非矩形框选模式下显示）
+        if isinstance(self.current_tool, SelectionTool) and self.mouse_pos is not None and not self.current_tool.rect_select_mode:
             view_size = self.view_transform.get_brush_view_size(self.current_tool.size)
             self.current_tool.render_cursor(
                 painter,
@@ -203,20 +212,26 @@ class Canvas(QWidget):
                     self.update()
                 
                 elif isinstance(self.current_tool, SelectionTool):
-                    # 开始拖动选择
-                    dirty_rect = self.current_tool.start_drag_select(self.image_data, pixel_x, pixel_y)
-                    # 将选区同步到 image_data
-                    self.image_data.selection_mask = self.current_tool.selection_mask
-                    # 直接更新 tile_cache 的选区引用（避免复制整个图像）
-                    self.tile_cache.selection_mask = self.current_tool.selection_mask
-                    # 使脏区域失效
-                    if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
-                        self.tile_cache.invalidate_region(
-                            dirty_rect[0], dirty_rect[1],
-                            dirty_rect[2] - dirty_rect[0],
-                            dirty_rect[3] - dirty_rect[1]
-                        )
-                    self.update()
+                    # 检查是否是矩形框选模式
+                    if self.current_tool.rect_select_mode:
+                        # 开始矩形框选
+                        self.current_tool.start_rect_select(pixel_x, pixel_y)
+                        self.update()
+                    else:
+                        # 开始拖动选择
+                        dirty_rect = self.current_tool.start_drag_select(self.image_data, pixel_x, pixel_y)
+                        # 将选区同步到 image_data
+                        self.image_data.selection_mask = self.current_tool.selection_mask
+                        # 直接更新 tile_cache 的选区引用（避免复制整个图像）
+                        self.tile_cache.selection_mask = self.current_tool.selection_mask
+                        # 使脏区域失效
+                        if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
+                            self.tile_cache.invalidate_region(
+                                dirty_rect[0], dirty_rect[1],
+                                dirty_rect[2] - dirty_rect[0],
+                                dirty_rect[3] - dirty_rect[1]
+                            )
+                        self.update()
         
         elif event.button() == Qt.MiddleButton:
             # 中键平移
@@ -274,35 +289,41 @@ class Canvas(QWidget):
                 self.update()
             
             elif isinstance(self.current_tool, SelectionTool) and self.current_tool.is_dragging:
-                # 继续拖动选择（优化版本）
-                dirty_rect = self.current_tool.continue_drag_select(self.image_data, pixel_x, pixel_y)
-                
-                # 只在有实际更新时处理
-                if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
-                    # 将选区同步到 image_data（引用，不复制）
-                    self.image_data.selection_mask = self.current_tool.selection_mask
-                    # 直接更新 tile_cache 的选区引用（避免复制整个图像）
-                    self.tile_cache.selection_mask = self.current_tool.selection_mask
-                    
-                    # 累积脏区域用于批量失效
-                    if self.pending_selection_dirty_rect[2] > self.pending_selection_dirty_rect[0]:
-                        # 合并脏区域
-                        old_rect = self.pending_selection_dirty_rect
-                        self.pending_selection_dirty_rect = (
-                            min(old_rect[0], dirty_rect[0]),
-                            min(old_rect[1], dirty_rect[1]),
-                            max(old_rect[2], dirty_rect[2]),
-                            max(old_rect[3], dirty_rect[3])
-                        )
-                    else:
-                        self.pending_selection_dirty_rect = dirty_rect
-                    
-                    # 立即触发重绘（保持流畅），但延迟失效瓦片（减少计算）
+                # 检查是否是矩形框选模式
+                if self.current_tool.rect_select_mode:
+                    # 更新矩形框选
+                    self.current_tool.continue_rect_select(pixel_x, pixel_y)
                     self.update()
+                else:
+                    # 继续拖动选择（优化版本）
+                    dirty_rect = self.current_tool.continue_drag_select(self.image_data, pixel_x, pixel_y)
                     
-                    # 使用节流来批量失效瓦片
-                    if not self.selection_update_timer.isActive():
-                        self.selection_update_timer.start(self.selection_throttle_interval)
+                    # 只在有实际更新时处理
+                    if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
+                        # 将选区同步到 image_data（引用，不复制）
+                        self.image_data.selection_mask = self.current_tool.selection_mask
+                        # 直接更新 tile_cache 的选区引用（避免复制整个图像）
+                        self.tile_cache.selection_mask = self.current_tool.selection_mask
+                        
+                        # 累积脏区域用于批量失效
+                        if self.pending_selection_dirty_rect[2] > self.pending_selection_dirty_rect[0]:
+                            # 合并脏区域
+                            old_rect = self.pending_selection_dirty_rect
+                            self.pending_selection_dirty_rect = (
+                                min(old_rect[0], dirty_rect[0]),
+                                min(old_rect[1], dirty_rect[1]),
+                                max(old_rect[2], dirty_rect[2]),
+                                max(old_rect[3], dirty_rect[3])
+                            )
+                        else:
+                            self.pending_selection_dirty_rect = dirty_rect
+                        
+                        # 立即触发重绘（保持流畅），但延迟失效瓦片（减少计算）
+                        self.update()
+                        
+                        # 使用节流来批量失效瓦片
+                        if not self.selection_update_timer.isActive():
+                            self.selection_update_timer.start(self.selection_throttle_interval)
             
             else:
                 # 更新光标显示
@@ -365,24 +386,45 @@ class Canvas(QWidget):
                             self.update()
                 
                 elif isinstance(self.current_tool, SelectionTool) and self.current_tool.is_dragging:
-                    # 结束拖动选择
-                    self.current_tool.end_drag_select()
-                    
-                    # 停止节流定时器并执行最后一次失效
-                    if self.selection_update_timer.isActive():
-                        self.selection_update_timer.stop()
-                    # 失效最后的累积区域
-                    if self.pending_selection_dirty_rect[2] > self.pending_selection_dirty_rect[0]:
-                        self._do_selection_update()
-                    
-                    # 将选区同步到 image_data（引用，不复制）
-                    self.image_data.selection_mask = self.current_tool.selection_mask
-                    # 确保 tile_cache 引用最新的选区
-                    self.tile_cache.selection_mask = self.current_tool.selection_mask
-                    
-                    # 通知选区已修改（用于更新 UI 状态）
-                    self.image_modified.emit()
-                    self.update()
+                    # 检查是否是矩形框选模式
+                    if self.current_tool.rect_select_mode:
+                        # 结束矩形框选
+                        self.current_tool.end_rect_select(self.image_data)
+                        # 将选区同步到 image_data
+                        self.image_data.selection_mask = self.current_tool.selection_mask
+                        # 更新 tile_cache 的选区引用
+                        self.tile_cache.selection_mask = self.current_tool.selection_mask
+                        # 使整个选区失效以触发重新渲染
+                        if self.current_tool.selection_mask is not None and self.current_tool.selection_mask.any():
+                            rows, cols = np.where(self.current_tool.selection_mask)
+                            if len(rows) > 0:
+                                self.tile_cache.invalidate_region(
+                                    cols.min(), rows.min(),
+                                    cols.max() - cols.min() + 1,
+                                    rows.max() - rows.min() + 1
+                                )
+                        # 通知选区已修改
+                        self.image_modified.emit()
+                        self.update()
+                    else:
+                        # 结束拖动选择
+                        self.current_tool.end_drag_select()
+                        
+                        # 停止节流定时器并执行最后一次失效
+                        if self.selection_update_timer.isActive():
+                            self.selection_update_timer.stop()
+                        # 失效最后的累积区域
+                        if self.pending_selection_dirty_rect[2] > self.pending_selection_dirty_rect[0]:
+                            self._do_selection_update()
+                        
+                        # 将选区同步到 image_data（引用，不复制）
+                        self.image_data.selection_mask = self.current_tool.selection_mask
+                        # 确保 tile_cache 引用最新的选区
+                        self.tile_cache.selection_mask = self.current_tool.selection_mask
+                        
+                        # 通知选区已修改（用于更新 UI 状态）
+                        self.image_modified.emit()
+                        self.update()
         
         elif event.button() == Qt.MiddleButton:
             # 结束中键平移
