@@ -200,6 +200,7 @@ class MainWindow(QMainWindow):
         self.crop_action.setCheckable(True)
         self.crop_action.setToolTip("裁剪工具 (C)")
         self.crop_action.triggered.connect(self._select_crop_tool)
+        self.addAction(self.crop_action)  # 添加到主窗口以启用快捷键
         
         # 选择工具动作
         self.selection_tool_action = QAction("选择工具", self)
@@ -950,12 +951,12 @@ class MainWindow(QMainWindow):
         is_rect_mode = (button_id == 1)  # 0=涂抹, 1=框选
         self.canvas.selection_tool.rect_select_mode = is_rect_mode
         
-        # 更新光标
+        # 更新光标（无论哪种模式都隐藏系统光标，显示自定义光标）
+        self.canvas.setCursor(Qt.BlankCursor)
+        
         if is_rect_mode:
-            self.canvas.setCursor(Qt.CrossCursor)
             self.statusbar.showMessage("矩形框选模式已启用")
         else:
-            self.canvas.setCursor(Qt.BlankCursor)
             self.statusbar.showMessage("涂抹选择模式已启用")
         
         self.canvas.update()

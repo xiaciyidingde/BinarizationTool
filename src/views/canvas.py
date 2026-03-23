@@ -121,16 +121,11 @@ class Canvas(QWidget):
             # 画笔工具：隐藏系统光标
             self.setCursor(Qt.BlankCursor)
         elif isinstance(tool, CropTool):
-            # 裁剪工具：十字光标
-            self.setCursor(Qt.CrossCursor)
+            # 裁剪工具：隐藏系统光标（显示自定义红色十字）
+            self.setCursor(Qt.BlankCursor)
         elif isinstance(tool, SelectionTool):
-            # 选择工具：根据模式设置光标
-            if tool.rect_select_mode:
-                # 矩形框选模式：十字光标
-                self.setCursor(Qt.CrossCursor)
-            else:
-                # 拖动选择模式：隐藏系统光标（显示自定义圆圈光标）
-                self.setCursor(Qt.BlankCursor)
+            # 选择工具：隐藏系统光标（无论哪种模式都显示自定义光标）
+            self.setCursor(Qt.BlankCursor)
         else:
             # 其他工具或无工具：恢复默认光标
             self.setCursor(Qt.ArrowCursor)
@@ -158,10 +153,24 @@ class Canvas(QWidget):
         # 渲染工具覆盖层
         if isinstance(self.current_tool, CropTool):
             self.current_tool.render_overlay(painter, self.view_transform)
+            # 渲染裁剪工具的红色十字光标
+            if self.mouse_pos is not None:
+                self.current_tool.render_cursor(
+                    painter,
+                    self.mouse_pos.x(),
+                    self.mouse_pos.y()
+                )
         
-        # 渲染选择工具的矩形框选覆盖层
+        # 渲染选择工具的矩形框选覆盖层和十字光标
         if isinstance(self.current_tool, SelectionTool) and self.current_tool.rect_select_mode:
             self.current_tool.render_rect_select_overlay(painter, self.view_transform)
+            # 在矩形框选模式下显示十字光标
+            if self.mouse_pos is not None:
+                self.current_tool.render_rect_cursor(
+                    painter,
+                    self.mouse_pos.x(),
+                    self.mouse_pos.y()
+                )
         
         # 渲染画笔光标
         if isinstance(self.current_tool, BrushTool) and self.mouse_pos is not None:
@@ -237,6 +246,7 @@ class Canvas(QWidget):
             # 中键平移
             self.is_panning = True
             self.pan_start_pos = event.pos()
+            self.setCursor(Qt.ClosedHandCursor)  # 设置为抓取光标
     
     def mouseMoveEvent(self, event: QMouseEvent):
         """鼠标移动事件"""
@@ -343,6 +353,12 @@ class Canvas(QWidget):
                 if self.pending_pan_update:
                     self.pending_pan_update = False
                     self.update()
+                
+                # 恢复工具光标
+                if self.current_tool is not None:
+                    self.set_tool(self.current_tool)
+                else:
+                    self.setCursor(Qt.ArrowCursor)
             
             elif self.image_data is not None and self.current_tool is not None:
                 if isinstance(self.current_tool, BrushTool) and self.current_tool.is_drawing:
@@ -437,6 +453,12 @@ class Canvas(QWidget):
             if self.pending_pan_update:
                 self.pending_pan_update = False
                 self.update()
+            
+            # 恢复工具光标
+            if self.current_tool is not None:
+                self.set_tool(self.current_tool)
+            else:
+                self.setCursor(Qt.ArrowCursor)
     
     def _do_pan_update(self):
         """节流定时器回调：执行延迟的平移更新"""
