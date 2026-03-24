@@ -26,7 +26,7 @@ class ViewTransform:
         self.scale = scale
         self.offset_x = offset_x
         self.offset_y = offset_y
-        self.min_scale = 0.1
+        self.min_scale = 0.01
         self.max_scale = 32.0
     
     def pixel_to_view(self, pixel_x: int, pixel_y: int) -> tuple[float, float]:
