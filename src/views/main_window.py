@@ -10,7 +10,8 @@ from datetime import datetime
 from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
                                 QSplitter, QToolBar, QFileDialog, QMessageBox,
                                 QPushButton, QLabel, QStatusBar, QSizePolicy,
-                                QSpinBox, QRadioButton, QButtonGroup, QFrame)
+                                QSpinBox, QRadioButton, QButtonGroup, QFrame,
+                                QApplication)
 from PySide6.QtCore import Qt, QPoint, QTimer
 from PySide6.QtGui import QAction, QIcon, QEnterEvent
 
@@ -522,6 +523,14 @@ class MainWindow(QMainWindow):
     def _load_file_from_path(self, file_path: str):
         """从文件路径加载图片（支持打开文件和拖放）"""
         try:
+            # 显示处理中状态
+            self.canvas.is_processing = True
+            self.canvas.update()
+            self.statusbar.showMessage(self.tr.tr('app.processing'))
+            
+            # 强制处理事件，让UI更新
+            QApplication.processEvents()
+            
             # 加载图片（不自动二值化）
             self.image_data = load_image(file_path, binarize=False)
             
@@ -562,11 +571,18 @@ class MainWindow(QMainWindow):
             # 更新属性面板
             self.properties_panel.set_image_info(self.image_data, file_path)
             
+            # 隐藏处理中状态
+            self.canvas.is_processing = False
+            self.canvas.update()
+            
             # 更新状态
             self.statusbar.showMessage(self.tr.tr('message.loaded', path=file_path))
             self._update_ui_state()
             
         except Exception as e:
+            # 隐藏处理中状态
+            self.canvas.is_processing = False
+            self.canvas.update()
             QMessageBox.critical(self, self.tr.tr('dialog.error'), self.tr.tr('dialog.load_error', error=str(e)))
     
     def _save_file(self):
