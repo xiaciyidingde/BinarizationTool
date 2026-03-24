@@ -6,6 +6,7 @@
 
 import numpy as np
 import cv2
+from ..cython_core import floyd_steinberg, atkinson, ordered_dithering
 
 
 class ImageEnhancer:
@@ -253,26 +254,10 @@ class BinarizationEngine:
         """
         # 确保是灰度图
         img = BinarizationEngine.convert_to_grayscale(image)
-        img = img.astype(float)
-        h, w = img.shape
+        img = img.astype(np.float64)
         
-        for y in range(h):
-            for x in range(w):
-                old_pixel = img[y, x]
-                new_pixel = 255 if old_pixel > 127 else 0
-                img[y, x] = new_pixel
-                
-                error = (old_pixel - new_pixel) * strength
-                
-                # 扩散误差到相邻像素
-                if x + 1 < w:
-                    img[y, x + 1] += error * 7/16
-                if y + 1 < h:
-                    if x > 0:
-                        img[y + 1, x - 1] += error * 3/16
-                    img[y + 1, x] += error * 5/16
-                    if x + 1 < w:
-                        img[y + 1, x + 1] += error * 1/16
+        # 使用 Cython 加速版本
+        img = floyd_steinberg(img, strength)
         
         return np.clip(img, 0, 255).astype(np.uint8)
     
@@ -313,13 +298,8 @@ class BinarizationEngine:
         bayer_matrix = generate_bayer_matrix(matrix_size)
         threshold_map = (bayer_matrix / (matrix_size * matrix_size)) * 255
         
-        h, w = img.shape
-        result = np.zeros_like(img)
-        
-        for y in range(h):
-            for x in range(w):
-                threshold = threshold_map[y % matrix_size, x % matrix_size]
-                result[y, x] = 255 if img[y, x] > threshold else 0
+        # 使用 Cython 加速版本
+        result = ordered_dithering(img, threshold_map.astype(np.float64), matrix_size)
         
         return result
     
@@ -340,31 +320,10 @@ class BinarizationEngine:
         """
         # 确保是灰度图
         img = BinarizationEngine.convert_to_grayscale(image)
-        img = img.astype(float)
-        h, w = img.shape
+        img = img.astype(np.float64)
         
-        for y in range(h):
-            for x in range(w):
-                old_pixel = img[y, x]
-                new_pixel = 255 if old_pixel > 127 else 0
-                img[y, x] = new_pixel
-                
-                # Atkinson 使用 1/8 的误差扩散（比 Floyd-Steinberg 更轻）
-                error = (old_pixel - new_pixel) * strength / 8
-                
-                # 扩散误差到相邻像素（6个方向）
-                if x + 1 < w:
-                    img[y, x + 1] += error
-                if x + 2 < w:
-                    img[y, x + 2] += error
-                if y + 1 < h:
-                    if x > 0:
-                        img[y + 1, x - 1] += error
-                    img[y + 1, x] += error
-                    if x + 1 < w:
-                        img[y + 1, x + 1] += error
-                if y + 2 < h:
-                    img[y + 2, x] += error
+        # 使用 Cython 加速版本
+        img = atkinson(img, strength)
         
         return np.clip(img, 0, 255).astype(np.uint8)
     

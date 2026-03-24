@@ -2,7 +2,7 @@
 
 基于 PySide6 的二值化图片编辑应用程序，提供类似 Photoshop 的编辑功能。
 
-**版本**: v1.3.3.0  
+**版本**: v1.4.0.0  
 
 **许可证**：MIT License
 
@@ -17,6 +17,10 @@
   - 二值化模式：显示二值化后的黑白图像（默认）
   - 实时切换，方便对比不同处理阶段的效果
 - 多种二值化算法（固定阈值、Otsu、自适应等 7 种方法）
+- **高性能抖动算法**（Cython 原生编译，处理速度极快）：
+  - Floyd-Steinberg 抖动：经典误差扩散，保留灰度细节
+  - Atkinson 抖动：Mac风格艺术效果
+  - Ordered 抖动：Bayer矩阵网点效果
 - 丰富的预处理参数：
   - 曝光、对比度、锐化、伽马、平滑
   - RGB 通道调整（红、绿、蓝三个独立通道）
@@ -85,9 +89,31 @@
 
 ## 安装依赖
 
+### 1. 安装 Python 依赖
+
 ```bash
 pip install -r requirements.txt
 ```
+
+### 2. 编译 Cython 扩展（必需）
+
+本项目使用 Cython 优化抖动算法，需要编译原生扩展模块。
+
+#### 手动编译
+```bash
+python setup.py build_ext --inplace
+```
+
+#### 强制重新编译
+```bash
+python setup.py build_ext --inplace --force
+```
+
+**注意**：
+- 首次运行前必须编译 Cython 扩展
+- 修改 `.pyx` 文件后需要重新编译
+- 编译需要 C 编译器（Windows: MSVC, Linux: GCC, Mac: Clang）
+- 编译成功后会生成 `.pyd` 文件
 
 ## 运行应用
 
@@ -252,6 +278,10 @@ pyinstaller image-brush-editor.spec
 ```
 .
 ├── src/
+│   ├── cython_core/     # Cython 加速模块
+│   │   ├── dithering.pyx        # 抖动算法
+│   │   ├── dithering.cp312-win_amd64.pyd  # 编译后的DLL
+│   │   └── __init__.py          # 模块初始化
 │   ├── models/          # 数据模型
 │   │   ├── view_transform.py    # 坐标变换
 │   │   ├── image_data.py        # 图片数据
@@ -280,7 +310,10 @@ pyinstaller image-brush-editor.spec
 │   └── light_theme.qss  # 浅色主题
 ├── tests/               # 测试文件
 ├── main.py              # 应用入口
-├── requirements.txt     # 依赖列表
+├── setup.py             # Cython 编译配置
+├── compile_cython.py    # 编译脚本
+├── requirements.txt     # 运行依赖
+├── requirements-dev.txt # 开发依赖
 └── README.md
 ```
 
@@ -288,7 +321,15 @@ pyinstaller image-brush-editor.spec
 
 - **GUI 框架**: PySide6 (Qt 6)
 - **图片处理**: NumPy, Pillow, OpenCV
+- **性能优化**: Cython
 - **测试**: pytest, Hypothesis
+
+## 性能特性
+
+- **Cython 加速**: 优化抖动算法，处理速度极快
+- **异步后台处理**: 不阻塞界面，流畅响应
+- **分块渲染系统**: 大图平移缩放流畅
+- **智能缓存管理**: LRU策略优化内存使用
 
 ## 开发状态
 
@@ -305,6 +346,7 @@ pyinstaller image-brush-editor.spec
 - 主窗口和布局
 
 🚀 性能优化：
+- **Cython 编译性能组件**
 - 分块渲染系统（Tile-based Rendering）
 - 增量光栅化算法
 - NumPy 向量化批量处理
@@ -315,6 +357,7 @@ pyinstaller image-brush-editor.spec
 
 ## 版本历史
 
+- **v1.4.0.0** (2026-03-24): Cython 加速（优化抖动算法，处理速度大幅提升）
 - **v1.3.3.0** (2026-03-23): 边缘检测增强（Canny/边缘增强/轮廓保留），处理中提示
 - **v1.3.2.0** (2026-03-23): 裁剪工具快捷键修复，光标优化
 - **v1.3.1.0** (2026-03-23): 涂抹类封装优化（StrokeInterpolator 工具类）

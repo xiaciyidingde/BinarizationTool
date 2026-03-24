@@ -1,0 +1,8 @@
+# 开发依赖
+cython>=3.0.0
+numpy>=1.20.0
+pytest>=7.0.0
+hypothesis>=6.0.0
+
+# 运行时依赖（从 requirements.txt 继承）
+-r requirements.txt
