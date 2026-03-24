@@ -310,6 +310,17 @@ class MainWindow(QMainWindow):
         # 添加弹性空间
         toolbar_layout.addStretch()
         
+        # 应用操作组（设置、关于）
+        app_group, app_layout = create_button_group()
+        settings_btn = create_toolbar_button("设置", "应用程序设置")
+        settings_btn.clicked.connect(self._show_settings)
+        app_layout.addWidget(settings_btn)
+        
+        about_btn = create_toolbar_button("关于", "关于 BinarizationTool")
+        about_btn.clicked.connect(self._show_about)
+        app_layout.addWidget(about_btn)
+        toolbar_layout.addWidget(app_group)
+        
         # 当前工具显示
         self.current_tool_label = QLabel("当前工具：无")
         self.current_tool_label.setStyleSheet("padding: 0 10px; color: #495057; font-size: 14px; font-weight: 500;")
@@ -1091,3 +1102,91 @@ class MainWindow(QMainWindow):
             'binary': '二值化'
         }
         return names.get(mode, mode)
+
+    def _show_settings(self):
+        """显示设置对话框"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("设置")
+        dialog.setMinimumWidth(400)
+        dialog.setMinimumHeight(300)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # 设置内容（暂时显示占位文本）
+        label = QLabel("设置功能开发中...")
+        label.setStyleSheet("padding: 20px; font-size: 14px; color: #6c757d;")
+        layout.addWidget(label)
+        
+        # 按钮
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        button_box.accepted.connect(dialog.accept)
+        layout.addWidget(button_box)
+        
+        dialog.exec()
+    
+    def _show_about(self):
+        """显示关于对话框"""
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
+        from src.__version__ import __version__, __app_name__, __author__, __release_date__
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"关于 {__app_name__}")
+        dialog.setMinimumWidth(450)
+        dialog.setMinimumHeight(350)
+        
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(15)
+        layout.setContentsMargins(30, 30, 30, 30)
+        
+        # 应用名称
+        app_name_label = QLabel(__app_name__)
+        app_name_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #212529;")
+        layout.addWidget(app_name_label)
+        
+        # 版本号
+        version_label = QLabel(f"版本 {__version__}")
+        version_label.setStyleSheet("font-size: 16px; color: #212529; margin-bottom: 10px;")
+        layout.addWidget(version_label)
+        
+        # 发布日期
+        date_label = QLabel(f"发布日期：{__release_date__}")
+        date_label.setStyleSheet("font-size: 14px; color: #212529;")
+        layout.addWidget(date_label)
+        
+        # 分隔线
+        separator = QLabel()
+        separator.setStyleSheet("border-top: 1px solid #dee2e6; margin: 10px 0;")
+        layout.addWidget(separator)
+        
+        # 描述
+        desc_label = QLabel("基于 PySide6 的二值化图片编辑应用程序\n提供类似 Photoshop 的编辑功能")
+        desc_label.setStyleSheet("font-size: 14px; color: #212529; line-height: 1.6;")
+        desc_label.setWordWrap(True)
+        layout.addWidget(desc_label)
+        
+        # 作者
+        author_label = QLabel(f"作者：{__author__}")
+        author_label.setStyleSheet("font-size: 14px; color: #212529; margin-top: 10px;")
+        layout.addWidget(author_label)
+        
+        # 版权
+        copyright_label = QLabel("© 2026 夏次一定de. All rights reserved.")
+        copyright_label.setStyleSheet("font-size: 12px; color: #212529; margin-top: 5px;")
+        layout.addWidget(copyright_label)
+        
+        # 许可证
+        license_label = QLabel("许可证：MIT License")
+        license_label.setStyleSheet("font-size: 12px; color: #212529;")
+        layout.addWidget(license_label)
+        
+        # 添加弹性空间
+        layout.addStretch()
+        
+        # 按钮
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
+        button_box.accepted.connect(dialog.accept)
+        layout.addWidget(button_box)
+        
+        dialog.exec()
