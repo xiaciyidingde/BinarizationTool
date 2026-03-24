@@ -6,6 +6,7 @@
 
 import numpy as np
 import cv2
+from typing import Optional
 from ..cython_core import floyd_steinberg, atkinson, ordered_dithering
 
 
@@ -237,6 +238,38 @@ class BinarizationEngine:
         
         # 默认返回原图
         return image
+    
+    @staticmethod
+    def _validate_window_size(window_size: Optional[int], img_shape: tuple) -> int:
+        """
+        验证并修正窗口大小，确保符合 OpenCV 要求
+        
+        OpenCV 的 adaptiveThreshold 和 boxFilter 等函数要求窗口大小必须：
+        1. 是奇数
+        2. 大于 1
+        
+        Args:
+            window_size: 用户指定的窗口大小（可以为 None）
+            img_shape: 图像形状 (height, width)
+        
+        Returns:
+            有效的窗口大小（奇数且 >= 3）
+        """
+        if window_size is None or window_size == 0:
+            # 自动计算：图像最小边的 1/8
+            window_size = min(img_shape) // 8
+        
+        # 确保至少为 3
+        window_size = max(3, window_size)
+        
+        # 确保是奇数
+        if window_size % 2 == 0:
+            window_size += 1
+        
+        # 限制最大值为 51（避免过大）
+        window_size = min(window_size, 51)
+        
+        return window_size
     
     @staticmethod
     def apply_floyd_steinberg(image: np.ndarray, strength: float = 1.0) -> np.ndarray:
@@ -486,13 +519,11 @@ class BinarizationEngine:
             return cv2.threshold(img, threshold_value, 255, cv2.THRESH_BINARY)[1]
         
         elif threshold_method == 1:  # 自适应阈值
-            # 获取块大小参数，如果未指定则自动计算
-            block_size = kwargs.get('block_size', None)
-            if block_size is None or block_size == 0:
-                block_size = min(img.shape) // 8
-                if block_size % 2 == 0:
-                    block_size += 1
-                block_size = max(3, min(block_size, 51))
+            # 验证块大小参数
+            block_size = BinarizationEngine._validate_window_size(
+                kwargs.get('block_size', None), 
+                img.shape
+            )
             
             # 优化自适应阈值参数
             C = max(0, threshold_value / 10 - 10)
@@ -506,13 +537,11 @@ class BinarizationEngine:
                                cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
         
         elif threshold_method == 3:  # Sauvola阈值
-            # 获取窗口大小参数，如果未指定则自动计算
-            window = kwargs.get('window_size', None)
-            if window is None or window == 0:
-                window = min(img.shape) // 8
-                if window % 2 == 0:
-                    window += 1
-                window = max(3, min(window, 51))
+            # 验证窗口大小参数
+            window = BinarizationEngine._validate_window_size(
+                kwargs.get('window_size', None),
+                img.shape
+            )
             
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
@@ -527,13 +556,11 @@ class BinarizationEngine:
             return np.where(img >= threshold, 255, 0).astype(np.uint8)
         
         elif threshold_method == 4:  # Wolf阈值
-            # 获取窗口大小参数，如果未指定则自动计算
-            window = kwargs.get('window_size', None)
-            if window is None or window == 0:
-                window = min(img.shape) // 8
-                if window % 2 == 0:
-                    window += 1
-                window = max(3, min(window, 51))
+            # 验证窗口大小参数
+            window = BinarizationEngine._validate_window_size(
+                kwargs.get('window_size', None),
+                img.shape
+            )
             
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
@@ -549,13 +576,11 @@ class BinarizationEngine:
             return np.where(img >= threshold, 255, 0).astype(np.uint8)
         
         elif threshold_method == 5:  # Nick阈值
-            # 获取窗口大小参数，如果未指定则自动计算
-            window = kwargs.get('window_size', None)
-            if window is None or window == 0:
-                window = min(img.shape) // 8
-                if window % 2 == 0:
-                    window += 1
-                window = max(3, min(window, 51))
+            # 验证窗口大小参数
+            window = BinarizationEngine._validate_window_size(
+                kwargs.get('window_size', None),
+                img.shape
+            )
             
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
@@ -569,13 +594,11 @@ class BinarizationEngine:
             return np.where(img >= threshold, 255, 0).astype(np.uint8)
         
         elif threshold_method == 6:  # Bernsen阈值
-            # 获取窗口大小参数，如果未指定则自动计算
-            window = kwargs.get('window_size', None)
-            if window is None or window == 0:
-                window = min(img.shape) // 8
-                if window % 2 == 0:
-                    window += 1
-                window = max(3, min(window, 51))
+            # 验证窗口大小参数
+            window = BinarizationEngine._validate_window_size(
+                kwargs.get('window_size', None),
+                img.shape
+            )
             
             # 计算局部最大值和最小值
             kernel = np.ones((window, window), np.uint8)
