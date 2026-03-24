@@ -2,7 +2,7 @@
 
 基于 PySide6 的二值化图片编辑应用程序，提供类似 Photoshop 的编辑功能。
 
-**版本**: v1.4.0.0  
+**版本**: v1.4.1.0  
 
 **许可证**：MIT License
 
@@ -133,22 +133,41 @@ pytest
 
 ## 打包应用
 
-使用 PyInstaller 打包为独立可执行文件：
+使用 Nuitka 打包为独立可执行文件（支持 Windows 和 Linux）：
 
 ```bash
-# 安装 PyInstaller
-pip install pyinstaller
-
-# 打包
-pyinstaller image-brush-editor.spec
-
-# 可执行文件位于 dist/ 目录
+# 运行打包脚本
+python build.py
 ```
 
-打包后可以：
-- 双击 `BinarizationTool.exe` 启动
-- 命令行使用：`BinarizationTool.exe image.png`
-- 设置为图片文件的默认打开方式
+打包脚本会自动：
+- 检测并安装 Nuitka（如果未安装）
+- 编译 Cython 模块
+- 使用 standalone 模式打包应用程序
+- 包含 themes 目录和图标文件
+- 根据操作系统应用平台特定的优化
+- 生成版本锁定文件
+- 清理临时文件
+
+### 平台特定说明
+
+**Windows**：
+- 输出文件夹：`BinarizationToolv{version}/`
+- 主可执行文件：`BinarizationTool.exe`
+- 图标：`icon/icon.ico`
+- 隐藏控制台窗口
+
+**Linux**：
+- 输出文件夹：`BinarizationToolv{version}/`
+- 主可执行文件：`BinarizationTool`（无扩展名）
+- 图标：`icon/icon.png`
+- 需要安装 Qt6 依赖
+
+打包完成后：
+- 可以直接分发整个文件夹
+- 双击可执行文件启动
+- 命令行使用：`BinarizationTool image.png`（Windows 需要加 .exe）
+- 可设置为图片文件的默认打开方式
 
 ## 使用说明
 
@@ -310,8 +329,8 @@ pyinstaller image-brush-editor.spec
 │   └── light_theme.qss  # 浅色主题
 ├── tests/               # 测试文件
 ├── main.py              # 应用入口
+├── build.py             # Nuitka 打包脚本
 ├── setup.py             # Cython 编译配置
-├── compile_cython.py    # 编译脚本
 ├── requirements.txt     # 运行依赖
 ├── requirements-dev.txt # 开发依赖
 └── README.md
@@ -357,6 +376,7 @@ pyinstaller image-brush-editor.spec
 
 ## 版本历史
 
+- **v1.4.1.0** (2026-03-24): Nuitka 打包脚本，构建系统改进，OpenCV 参数验证修复
 - **v1.4.0.0** (2026-03-24): Cython 加速（优化抖动算法，处理速度大幅提升）
 - **v1.3.3.0** (2026-03-23): 边缘检测增强（Canny/边缘增强/轮廓保留），处理中提示
 - **v1.3.2.0** (2026-03-23): 裁剪工具快捷键修复，光标优化

@@ -1,5 +1,29 @@
 ﻿# 更新日志
 
+## [v1.4.1.0] - 2026-03-24
+
+### 构建系统改进
+- **Nuitka 打包脚本**：
+  - 新增完整的 `build.py` 打包脚本
+  - 自动从 `src.__version__` 读取版本信息
+  - 支持 Cython 模块自动编译和包含
+  - 包含 themes 目录和图标文件（`icon.ico`）
+  - 优化编译参数，排除不需要的模块减小体积
+  - 自动清理旧的编译文件
+  - 生成版本锁定文件（`.version`）用于版本管理
+  - 输出文件夹命名为 `BinarizationToolv{version}`
+  - 主可执行文件自动重命名为 `BinarizationTool.exe`
+  - Windows 文件属性显示完整版本信息和版权信息
+
+### Bug 修复
+- **OpenCV 参数验证修复**（继承自 v1.4.0.1）：
+  - 修复自适应阈值（Adaptive Threshold）窗口大小验证问题
+  - 修复 Sauvola、Wolf、Nick、Bernsen 算法窗口大小验证问题
+  - 新增 `_validate_window_size()` 辅助方法统一处理窗口大小验证
+  - 确保所有窗口大小参数都是奇数且 >= 3，符合 OpenCV 要求
+
+---
+
 ## [v1.4.0.1] - 2026-03-24
 
 ### Bug 修复
