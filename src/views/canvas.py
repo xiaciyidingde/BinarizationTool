@@ -16,6 +16,7 @@ from ..models.brush_tool import BrushTool
 from ..models.crop_tool import CropTool
 from ..models.selection_tool import SelectionTool
 from ..models.tile_cache import TileCache
+from ..utils.translation_manager import get_translator
 
 
 class Canvas(QWidget):
@@ -39,6 +40,9 @@ class Canvas(QWidget):
             parent: 父窗口部件
         """
         super().__init__(parent)
+        
+        # 翻译器
+        self.tr = get_translator()
         
         # 数据
         self.image_data: Optional[ImageData] = None
@@ -221,7 +225,7 @@ class Canvas(QWidget):
         painter.setFont(font)
         
         # 文本内容
-        text = "处理中..."
+        text = self.tr.tr('app.processing')
         
         # 计算文本尺寸
         metrics = painter.fontMetrics()

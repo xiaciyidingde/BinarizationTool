@@ -51,7 +51,43 @@ class ConfigManager:
         }
     }
     
-    # 值映射：UI显示值 <-> 配置文件值
+    # 值映射：配置文件值 -> 翻译键
+    # UI 显示时使用翻译键获取本地化文本
+    VALUE_TRANSLATION_KEYS = {
+        # 语言
+        "language": {
+            "zh_CN": "settings.language_chinese",
+            "en_US": "settings.language_english"
+        },
+        # 主题
+        "theme": {
+            "light": "settings.theme_light",
+            "dark": "settings.theme_dark",
+            "system": "settings.theme_system"
+        },
+        # 画布背景
+        "canvas_background": {
+            "white": "settings.canvas_white",
+            "gray": "settings.canvas_gray",
+            "black": "settings.canvas_black"
+        },
+        # 保存格式
+        "save_format": {
+            "follow_original": "settings.format_follow_original",
+            "png": "PNG",
+            "jpg": "JPG",
+            "bmp": "BMP",
+            "webp": "WebP"
+        },
+        # 文件名格式
+        "filename_format": {
+            "timestamp": "settings.filename_timestamp_short",
+            "copy": "settings.filename_copy_short",
+            "custom": "settings.filename_custom"
+        }
+    }
+    
+    # 值映射：UI显示值 <-> 配置文件值（向后兼容，逐步废弃）
     VALUE_MAPPING = {
         # 语言
         "language": {
@@ -211,6 +247,67 @@ class ConfigManager:
             else:
                 result[key] = value
         return result
+    
+    @classmethod
+    def get_ui_options(cls, category: str, translator=None) -> list:
+        """
+        获取某个类别的所有 UI 选项
+        
+        Args:
+            category: 值类别
+            translator: 翻译器实例（可选）
+        
+        Returns:
+            UI 选项列表
+        """
+        translation_keys = cls.VALUE_TRANSLATION_KEYS.get(category, {})
+        
+        if translator:
+            # 使用翻译器
+            return [translator.tr(key) if key.count('.') > 0 else key 
+                   for key in translation_keys.values()]
+        else:
+            # 回退到旧的映射
+            return list(cls.VALUE_MAPPING.get(category, {}).keys())
+    
+    @classmethod
+    def config_value_to_ui_index(cls, category: str, config_value: str) -> int:
+        """
+        将配置值转换为 UI 选项索引
+        
+        Args:
+            category: 值类别
+            config_value: 配置文件值
+        
+        Returns:
+            UI 选项索引
+        """
+        translation_keys = cls.VALUE_TRANSLATION_KEYS.get(category, {})
+        config_values = list(translation_keys.keys())
+        
+        try:
+            return config_values.index(config_value)
+        except ValueError:
+            return 0
+    
+    @classmethod
+    def ui_index_to_config_value(cls, category: str, index: int) -> str:
+        """
+        将 UI 选项索引转换为配置值
+        
+        Args:
+            category: 值类别
+            index: UI 选项索引
+        
+        Returns:
+            配置文件值
+        """
+        translation_keys = cls.VALUE_TRANSLATION_KEYS.get(category, {})
+        config_values = list(translation_keys.keys())
+        
+        if 0 <= index < len(config_values):
+            return config_values[index]
+        return config_values[0] if config_values else ""
     
     @classmethod
     def ui_to_config(cls, category: str, ui_value: str) -> str:

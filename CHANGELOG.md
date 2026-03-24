@@ -1,5 +1,37 @@
 ﻿# 更新日志
 
+## [v1.4.3.0] - 2026-03-24
+
+### 新增功能
+- **多语言支持**：
+  - 创建翻译管理器 (`TranslationManager`) 用于管理多语言翻译
+  - 支持中文（zh_CN）和英文（en_US）两种语言
+  - 使用 JSON 文件存储翻译字符串
+  - 翻译文件位置：`locales/zh_CN.json`, `locales/en_US.json`
+  - 支持嵌套键访问（如 `menu.file.open`）
+  - 支持占位符替换（如 `"已加载: {filename}"`）
+  - 在设置对话框中启用语言切换功能
+  - 语言更改后提示用户重启应用生效
+  - **所有 UI 组件已完整集成翻译系统**：
+    - ✅ 主窗口 (MainWindow) - 完全翻译
+    - ✅ 设置对话框 (SettingsDialog) - 完全翻译
+    - ✅ 属性面板 (PropertiesPanel) - 完全翻译
+    - ✅ 二值化面板 (BinarizationPanel) - 完全翻译
+    - ✅ 所有状态消息和对话框 - 完全翻译
+  - 翻译文件包含 200+ 条翻译键，覆盖所有用户可见文本
+
+### 技术实现
+- 创建翻译管理器 (`src/utils/translation_manager.py`)
+- 创建完整的中英文翻译文件 (`locales/zh_CN.json`, `locales/en_US.json`)
+- 所有主要 UI 组件集成翻译系统
+- 配置管理器支持语言设置的保存和加载
+- 翻译架构支持未来扩展更多语言
+
+### 待完成
+- 热重载语言切换
+
+---
+
 ## [v1.4.2.0] - 2026-03-24
 
 ### 新增功能
@@ -28,7 +60,6 @@
 - 创建配置管理器 (`src/utils/config_manager.py`)
 - 配置文件模板 (`data/config.template.json`)
 - 完整的单元测试 (`tests/test_config_manager.py`)，测试隔离不影响实际配置
-- 主窗口集成配置管理器，支持配置应用和立即生效
 - 属性面板 UI 自动同步更新
 
 ---

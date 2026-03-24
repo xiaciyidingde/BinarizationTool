@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QPixmap, QIcon, QPainter
 from .view_mode_switcher import ViewModeSwitcher
+from ..utils.translation_manager import get_translator
 
 
 class BinarizationPanel(QWidget):
@@ -32,6 +33,9 @@ class BinarizationPanel(QWidget):
             parent: 父窗口部件
         """
         super().__init__(parent)
+        
+        # 获取翻译器
+        self.tr = get_translator()
         
         self.setup_ui()
         self.connect_signals()
@@ -81,7 +85,7 @@ class BinarizationPanel(QWidget):
         settings_layout.setSpacing(8)
         
         # === 预处理参数 ===
-        preprocess_group = QGroupBox("预处理")
+        preprocess_group = QGroupBox(self.tr.tr('binarization_panel.preprocess'))
         preprocess_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -106,34 +110,34 @@ class BinarizationPanel(QWidget):
         
         # 曝光度
         self.exposure_slider = self._create_slider_with_label(
-            "曝光度:", -100, 100, 0, preprocess_layout
+            "exposure", -100, 100, 0, preprocess_layout
         )
         
         # 对比度
         self.contrast_slider = self._create_slider_with_label(
-            "对比度:", -100, 100, 0, preprocess_layout
+            "contrast", -100, 100, 0, preprocess_layout
         )
         
         # 锐化
         self.sharpen_slider = self._create_slider_with_label(
-            "锐化:", 0, 100, 0, preprocess_layout
+            "sharpness", 0, 100, 0, preprocess_layout
         )
         
         # 伽马
         self.gamma_slider = self._create_slider_with_label(
-            "伽马:", 10, 300, 100, preprocess_layout, scale=0.01
+            "gamma", 10, 300, 100, preprocess_layout, scale=0.01
         )
         
         # 平滑
         self.smooth_slider = self._create_slider_with_label(
-            "平滑:", 0, 100, 0, preprocess_layout
+            "smooth", 0, 100, 0, preprocess_layout
         )
         
         preprocess_group.setLayout(preprocess_layout)
         settings_layout.addWidget(preprocess_group)
         
         # === RGB 通道调整 ===
-        rgb_group = QGroupBox("RGB 通道")
+        rgb_group = QGroupBox(self.tr.tr('binarization_panel.rgb_channels'))
         rgb_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -158,24 +162,24 @@ class BinarizationPanel(QWidget):
         
         # 红色通道
         self.red_channel_slider = self._create_slider_with_label(
-            "红色通道:", -100, 100, 0, rgb_layout
+            "red_channel", -100, 100, 0, rgb_layout
         )
         
         # 绿色通道
         self.green_channel_slider = self._create_slider_with_label(
-            "绿色通道:", -100, 100, 0, rgb_layout
+            "green_channel", -100, 100, 0, rgb_layout
         )
         
         # 蓝色通道
         self.blue_channel_slider = self._create_slider_with_label(
-            "蓝色通道:", -100, 100, 0, rgb_layout
+            "blue_channel", -100, 100, 0, rgb_layout
         )
         
         rgb_group.setLayout(rgb_layout)
         settings_layout.addWidget(rgb_group)
         
         # === 边缘检测 ===
-        edge_group = QGroupBox("边缘检测")
+        edge_group = QGroupBox(self.tr.tr('binarization_panel.edge_detection'))
         edge_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -200,7 +204,7 @@ class BinarizationPanel(QWidget):
         
         # 边缘模式（左右布局）
         edge_mode_row = QHBoxLayout()
-        edge_mode_label = QLabel("边缘模式:")
+        edge_mode_label = QLabel(self.tr.tr('binarization_panel.edge_mode'))
         edge_mode_label.setMinimumWidth(70)
         edge_mode_row.addWidget(edge_mode_label)
         
@@ -209,10 +213,10 @@ class BinarizationPanel(QWidget):
         
         self.edge_mode_combo = QComboBox()
         self.edge_mode_combo.setFixedWidth(120)
-        self.edge_mode_combo.addItem("关闭", 0)
-        self.edge_mode_combo.addItem("Canny 边缘", 1)
-        self.edge_mode_combo.addItem("边缘增强", 2)
-        self.edge_mode_combo.addItem("轮廓保留", 3)
+        self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_off'), 0)
+        self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_canny'), 1)
+        self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_enhance'), 2)
+        self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_contour'), 3)
         
         edge_mode_row.addWidget(self.edge_mode_combo)
         edge_mode_row.addStretch()
@@ -220,13 +224,19 @@ class BinarizationPanel(QWidget):
         
         # 边缘强度
         self.edge_strength_slider = self._create_slider_with_label(
-            "边缘强度:", 0, 100, 50, edge_layout
+            "edge_strength", 0, 100, 50, edge_layout
         )
         
         # 边缘阈值（仅 Canny 模式显示）- 手动创建以便隐藏整行
         self.edge_threshold_row = QHBoxLayout()
         
-        edge_threshold_label = QLabel("边缘阈值:")
+        # 提取标签文本（移除占位符）
+        full_text = self.tr.tr('binarization_panel.edge_threshold', value='')
+        label_text = full_text.replace('{value}', '').strip()
+        if not label_text.endswith('：') and not label_text.endswith(':'):
+            label_text += '：' if '：' in full_text else ':'
+        
+        edge_threshold_label = QLabel(label_text)
         edge_threshold_label.setMinimumWidth(70)
         self.edge_threshold_row.addWidget(edge_threshold_label)
         
@@ -254,7 +264,7 @@ class BinarizationPanel(QWidget):
         settings_layout.addWidget(edge_group)
         
         # === 二值化方法 ===
-        binarization_group = QGroupBox("二值化")
+        binarization_group = QGroupBox(self.tr.tr('binarization_panel.binarization'))
         binarization_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -279,7 +289,7 @@ class BinarizationPanel(QWidget):
         
         # 方法选择（左右布局）
         method_row = QHBoxLayout()
-        method_label = QLabel("二值化方法:")
+        method_label = QLabel(self.tr.tr('binarization_panel.method'))
         method_label.setMinimumWidth(70)
         method_row.addWidget(method_label)
         
@@ -288,18 +298,18 @@ class BinarizationPanel(QWidget):
         
         self.method_combo = QComboBox()
         self.method_combo.setFixedWidth(120)
-        self.method_combo.addItem("固定阈值", 0)
-        self.method_combo.addItem("自适应阈值", 1)
-        self.method_combo.addItem("Otsu 自动阈值", 2)
-        self.method_combo.addItem("Sauvola 阈值", 3)
-        self.method_combo.addItem("Wolf 阈值", 4)
-        self.method_combo.addItem("Nick 阈值", 5)
-        self.method_combo.addItem("Bernsen 阈值", 6)
+        self.method_combo.addItem(self.tr.tr('binarization_panel.method_fixed'), 0)
+        self.method_combo.addItem(self.tr.tr('binarization_panel.method_adaptive'), 1)
+        self.method_combo.addItem(self.tr.tr('binarization_panel.method_otsu'), 2)
+        self.method_combo.addItem(self.tr.tr('binarization_panel.method_sauvola'), 3)
+        self.method_combo.addItem(self.tr.tr('binarization_panel.method_wolf'), 4)
+        self.method_combo.addItem(self.tr.tr('binarization_panel.method_nick'), 5)
+        self.method_combo.addItem(self.tr.tr('binarization_panel.method_bernsen'), 6)
         # 添加分隔线（使用禁用的项）
         self.method_combo.insertSeparator(7)
-        self.method_combo.addItem("Floyd-Steinberg 抖动", 7)
-        self.method_combo.addItem("Ordered 抖动", 8)
-        self.method_combo.addItem("Atkinson 抖动", 9)
+        self.method_combo.addItem(self.tr.tr('binarization_panel.method_floyd'), 7)
+        self.method_combo.addItem(self.tr.tr('binarization_panel.method_ordered'), 8)
+        self.method_combo.addItem(self.tr.tr('binarization_panel.method_atkinson'), 9)
         self.method_combo.setCurrentIndex(1)  # 默认自适应阈值
         
         method_row.addWidget(self.method_combo)
@@ -308,7 +318,14 @@ class BinarizationPanel(QWidget):
         
         # 阈值（左右布局）- 手动创建以便隐藏整行
         self.threshold_row = QHBoxLayout()
-        threshold_label_text = QLabel("阈值:")
+        
+        # 提取标签文本（移除占位符）
+        full_text = self.tr.tr('binarization_panel.threshold', value='')
+        label_text = full_text.replace('{value}', '').strip()
+        if not label_text.endswith('：') and not label_text.endswith(':'):
+            label_text += '：' if '：' in full_text else ':'
+        
+        threshold_label_text = QLabel(label_text)
         threshold_label_text.setMinimumWidth(70)
         self.threshold_row.addWidget(threshold_label_text)
         
@@ -357,7 +374,7 @@ class BinarizationPanel(QWidget):
         settings_layout.addWidget(binarization_group)
         
         # === 降噪功能 ===
-        denoise_group = QGroupBox("降噪")
+        denoise_group = QGroupBox(self.tr.tr('binarization_panel.denoise'))
         denoise_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -382,7 +399,7 @@ class BinarizationPanel(QWidget):
         
         # 降噪方法（左右布局）
         denoise_method_row = QHBoxLayout()
-        denoise_method_label = QLabel("降噪方法:")
+        denoise_method_label = QLabel(self.tr.tr('binarization_panel.denoise_method'))
         denoise_method_label.setMinimumWidth(70)
         denoise_method_row.addWidget(denoise_method_label)
         
@@ -391,12 +408,12 @@ class BinarizationPanel(QWidget):
         
         self.denoise_method_combo = QComboBox()
         self.denoise_method_combo.setFixedWidth(120)
-        self.denoise_method_combo.addItem("高斯降噪", 0)
-        self.denoise_method_combo.addItem("中值滤波", 1)
-        self.denoise_method_combo.addItem("双边滤波", 2)
-        self.denoise_method_combo.addItem("NLMeans降噪", 3)
-        self.denoise_method_combo.addItem("形态学-开运算", 4)
-        self.denoise_method_combo.addItem("形态学-闭运算", 5)
+        self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_gaussian'), 0)
+        self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_median'), 1)
+        self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_bilateral'), 2)
+        self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_nlmeans'), 3)
+        self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_morph_open'), 4)
+        self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_morph_close'), 5)
         
         denoise_method_row.addWidget(self.denoise_method_combo)
         denoise_method_row.addStretch()
@@ -404,7 +421,7 @@ class BinarizationPanel(QWidget):
         
         # 降噪强度
         self.denoise_slider = self._create_slider_with_label(
-            "降噪强度:", 0, 100, 0, denoise_layout
+            "denoise_strength", 0, 100, 0, denoise_layout
         )
         
         denoise_group.setLayout(denoise_layout)
@@ -427,13 +444,28 @@ class BinarizationPanel(QWidget):
         self._update_threshold_enabled()
         self._update_edge_threshold_enabled()
     
-    def _create_slider_with_label(self, label_text, min_val, max_val, default_val, 
+    def _create_slider_with_label(self, label_key, min_val, max_val, default_val, 
                                   parent_layout, scale=1.0):
-        """创建带标签的滑块（左右布局）"""
+        """创建带标签的滑块（左右布局）
+        
+        Args:
+            label_key: 翻译键（不带冒号）
+            min_val: 最小值
+            max_val: 最大值
+            default_val: 默认值
+            parent_layout: 父布局
+            scale: 缩放比例
+        """
         # 标签和滑块的水平布局
         row_layout = QHBoxLayout()
         
-        # 左侧：标签
+        # 左侧：标签（使用翻译键，只取冒号前的部分）
+        full_text = self.tr.tr(f'binarization_panel.{label_key}', value='')
+        # 移除占位符，只保留标签文本
+        label_text = full_text.replace('{value}', '').replace('：', '：').replace(': ', ': ').strip()
+        if not label_text.endswith('：') and not label_text.endswith(':'):
+            label_text += '：' if '：' in full_text else ':'
+        
         label = QLabel(label_text)
         label.setMinimumWidth(70)
         row_layout.addWidget(label)
@@ -461,6 +493,7 @@ class BinarizationPanel(QWidget):
         
         # 保存标签引用
         slider.value_label = value_label
+        slider.text_label = label
         
         return slider
     
@@ -473,7 +506,7 @@ class BinarizationPanel(QWidget):
         
         # 块大小
         self.adaptive_block_size_slider = self._create_slider_with_label(
-            "块大小:", 3, 51, 11, layout
+            "block_size", 3, 51, 11, layout
         )
         
         return container
@@ -487,17 +520,17 @@ class BinarizationPanel(QWidget):
         
         # 窗口大小
         self.sauvola_window_slider = self._create_slider_with_label(
-            "窗口大小:", 3, 51, 15, layout
+            "window_size", 3, 51, 15, layout
         )
         
         # k 参数
         self.sauvola_k_slider = self._create_slider_with_label(
-            "k 参数:", 0, 100, 20, layout, scale=0.01
+            "k_param", 0, 100, 20, layout, scale=0.01
         )
         
         # R 参数
         self.sauvola_r_slider = self._create_slider_with_label(
-            "R 参数:", 0, 255, 128, layout
+            "r_param", 0, 255, 128, layout
         )
         
         return container
@@ -511,12 +544,12 @@ class BinarizationPanel(QWidget):
         
         # 窗口大小
         self.wolf_window_slider = self._create_slider_with_label(
-            "窗口大小:", 3, 51, 15, layout
+            "window_size", 3, 51, 15, layout
         )
         
         # k 参数
         self.wolf_k_slider = self._create_slider_with_label(
-            "k 参数:", 0, 100, 50, layout, scale=0.01
+            "k_param", 0, 100, 50, layout, scale=0.01
         )
         
         return container
@@ -530,12 +563,12 @@ class BinarizationPanel(QWidget):
         
         # 窗口大小
         self.nick_window_slider = self._create_slider_with_label(
-            "窗口大小:", 3, 51, 15, layout
+            "window_size", 3, 51, 15, layout
         )
         
         # k 参数 (-1.0 到 0.0)
         self.nick_k_slider = self._create_slider_with_label(
-            "k 参数:", -100, 0, -10, layout, scale=0.01
+            "k_param", -100, 0, -10, layout, scale=0.01
         )
         
         return container
@@ -549,12 +582,12 @@ class BinarizationPanel(QWidget):
         
         # 窗口大小
         self.bernsen_window_slider = self._create_slider_with_label(
-            "窗口大小:", 3, 51, 15, layout
+            "window_size", 3, 51, 15, layout
         )
         
         # 对比度阈值
         self.bernsen_contrast_slider = self._create_slider_with_label(
-            "对比度阈值:", 0, 255, 15, layout
+            "contrast_threshold", 0, 255, 15, layout
         )
         
         return container
@@ -572,7 +605,7 @@ class BinarizationPanel(QWidget):
         strength_layout.setContentsMargins(0, 0, 0, 0)
         strength_layout.setSpacing(6)
         self.dither_strength_slider = self._create_slider_with_label(
-            "抖动强度:", 0, 100, 100, strength_layout
+            "dither_strength", 0, 100, 100, strength_layout
         )
         layout.addWidget(self.dither_strength_container)
         
@@ -582,7 +615,7 @@ class BinarizationPanel(QWidget):
         matrix_layout.setContentsMargins(0, 0, 0, 0)
         matrix_layout.setSpacing(6)
         self.dither_matrix_size_slider = self._create_slider_with_label(
-            "矩阵大小:", 2, 16, 8, matrix_layout
+            "matrix_size", 2, 16, 8, matrix_layout
         )
         layout.addWidget(self.dither_matrix_size_container)
         
@@ -819,6 +852,13 @@ class BinarizationPanel(QWidget):
         self.red_channel_slider.setEnabled(enabled)
         self.green_channel_slider.setEnabled(enabled)
         self.blue_channel_slider.setEnabled(enabled)
+    
+    def retranslate_ui(self):
+        """重新翻译 UI 文本（用于语言切换）"""
+        # 更新组标题
+        # 注意：QGroupBox 的标题需要通过 setTitle 更新
+        # 这里只是示例，实际需要保存对 QGroupBox 的引用
+        pass
         self.edge_mode_combo.setEnabled(enabled)
         self.edge_strength_slider.setEnabled(enabled)
         self.edge_threshold_slider.setEnabled(enabled)

@@ -7,6 +7,7 @@
 from PySide6.QtGui import QAction
 from ..models.brush_tool import BrushTool
 from ..models.selection_tool import SelectionTool
+from ..utils.translation_manager import get_translator
 
 
 class ShortcutHandler:
@@ -25,6 +26,7 @@ class ShortcutHandler:
         """
         self.main_window = main_window
         self.canvas = main_window.canvas
+        self.tr = get_translator()
         
         # 创建快捷键动作
         self._create_actions()
@@ -114,8 +116,9 @@ class ShortcutHandler:
         else:
             self.main_window.properties_panel.brush_white_radio.setChecked(True)
         
+        color_name = self.tr.tr('color.black') if new_color == 0 else self.tr.tr('color.white')
         self.main_window.statusbar.showMessage(
-            f"画笔颜色: {'黑色' if new_color == 0 else '白色'}"
+            self.tr.tr('message.brush_color', color=color_name)
         )
     
     def _increase_brush_size(self):
@@ -136,7 +139,7 @@ class ShortcutHandler:
         # 更新属性面板
         self.main_window.properties_panel.brush_size_spinbox.setValue(int(new_size))
         
-        self.main_window.statusbar.showMessage(f"画笔大小: {int(new_size)}")
+        self.main_window.statusbar.showMessage(self.tr.tr('message.brush_size', size=int(new_size)))
         self.canvas.update()  # 更新光标显示
     
     def _decrease_brush_size(self):
@@ -157,7 +160,7 @@ class ShortcutHandler:
         # 更新属性面板
         self.main_window.properties_panel.brush_size_spinbox.setValue(int(new_size))
         
-        self.main_window.statusbar.showMessage(f"画笔大小: {int(new_size)}")
+        self.main_window.statusbar.showMessage(self.tr.tr('message.brush_size', size=int(new_size)))
         self.canvas.update()  # 更新光标显示
     
     # ========== 选择工具快捷键 ==========
@@ -174,8 +177,8 @@ class ShortcutHandler:
         else:
             self.main_window.properties_panel.subtract_mode_radio.setChecked(True)
         
-        mode_text = "添加" if new_mode == 'add' else "删除"
-        self.main_window.statusbar.showMessage(f"选择模式: {mode_text}")
+        mode_name = self.tr.tr('mode.add') if new_mode == 'add' else self.tr.tr('mode.subtract')
+        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_mode', mode=mode_name))
         self.canvas.update()  # 更新光标显示
     
     def _increase_selection_tool_size(self):
@@ -196,7 +199,7 @@ class ShortcutHandler:
         # 更新属性面板
         self.main_window.properties_panel.selection_size_spinbox.setValue(int(new_size))
         
-        self.main_window.statusbar.showMessage(f"选择范围: {int(new_size)}")
+        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_size', size=int(new_size)))
         self.canvas.update()  # 更新光标显示
     
     def _decrease_selection_tool_size(self):
@@ -217,7 +220,7 @@ class ShortcutHandler:
         # 更新属性面板
         self.main_window.properties_panel.selection_size_spinbox.setValue(int(new_size))
         
-        self.main_window.statusbar.showMessage(f"选择范围: {int(new_size)}")
+        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_size', size=int(new_size)))
         self.canvas.update()  # 更新光标显示
 
     def _toggle_wand_color(self):
@@ -235,13 +238,13 @@ class ShortcutHandler:
         # 更新属性面板
         if new_color == 0:
             self.main_window.properties_panel.selection_black_radio.setChecked(True)
-            self.main_window.properties_panel.fill_button.setText("填充白色")
+            self.main_window.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_white'))
         else:
             self.main_window.properties_panel.selection_white_radio.setChecked(True)
-            self.main_window.properties_panel.fill_button.setText("填充黑色")
+            self.main_window.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_black'))
         
-        color_text = "黑色" if new_color == 0 else "白色"
-        self.main_window.statusbar.showMessage(f"选择目标颜色: {color_text}")
+        color_name = self.tr.tr('color.black') if new_color == 0 else self.tr.tr('color.white')
+        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_target_color', color=color_name))
         self.canvas.update()  # 更新光标显示
     
     # ========== 视图模式切换快捷键 ==========

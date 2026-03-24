@@ -6,6 +6,7 @@
 
 from PySide6.QtWidgets import QWidget, QHBoxLayout, QPushButton, QButtonGroup, QFrame
 from PySide6.QtCore import Qt, Signal
+from ..utils.translation_manager import get_translator
 
 
 class ViewModeSwitcher(QWidget):
@@ -26,6 +27,9 @@ class ViewModeSwitcher(QWidget):
             parent: 父窗口部件
         """
         super().__init__(parent)
+        
+        # 获取翻译器
+        self.tr = get_translator()
         
         # 当前模式
         self._current_mode = 'binary'
@@ -52,9 +56,9 @@ class ViewModeSwitcher(QWidget):
         self.button_group.setExclusive(True)
         
         # 创建三个按钮
-        self.original_button = QPushButton("原图")
-        self.preprocessed_button = QPushButton("预处理")
-        self.binary_button = QPushButton("二值化")
+        self.original_button = QPushButton(self.tr.tr('view_mode.original'))
+        self.preprocessed_button = QPushButton(self.tr.tr('view_mode.preprocessed'))
+        self.binary_button = QPushButton(self.tr.tr('view_mode.binary'))
         
         # 设置按钮为可选中
         self.original_button.setCheckable(True)
@@ -62,9 +66,9 @@ class ViewModeSwitcher(QWidget):
         self.binary_button.setCheckable(True)
         
         # 设置按钮 tooltip（显示快捷键）
-        self.original_button.setToolTip("切换到原图模式 (Ctrl+1)")
-        self.preprocessed_button.setToolTip("切换到预处理模式 (Ctrl+2)")
-        self.binary_button.setToolTip("切换到二值化模式 (Ctrl+3)\n\n提示：使用 Tab 键可循环切换视图模式")
+        self.original_button.setToolTip(self.tr.tr('view_mode.original') + " (Ctrl+1)")
+        self.preprocessed_button.setToolTip(self.tr.tr('view_mode.preprocessed') + " (Ctrl+2)")
+        self.binary_button.setToolTip(self.tr.tr('view_mode.binary') + " (Ctrl+3)\n\n" + self.tr.tr('view_mode.tab_hint'))
         
         # 设置按钮高度（与工具栏一致）
         for btn in [self.original_button, self.preprocessed_button, self.binary_button]:

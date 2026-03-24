@@ -26,6 +26,7 @@ from ..utils.binarization_engine import BinarizationEngine
 from ..utils.binarization_worker import BinarizationWorker
 from ..utils.theme_manager import ThemeManager
 from ..utils.config_manager import get_config_manager
+from ..utils.translation_manager import get_translator
 
 
 class MainWindow(QMainWindow):
@@ -41,6 +42,9 @@ class MainWindow(QMainWindow):
         
         # 配置管理器
         self.config_manager = get_config_manager()
+        
+        # 翻译管理器
+        self.tr = get_translator()
         
         # 主题管理器
         self.theme_manager = ThemeManager()
@@ -63,7 +67,7 @@ class MainWindow(QMainWindow):
         self.binarization_debounce_timer.setInterval(debounce_delay)
         
         # 设置窗口
-        self.setWindowTitle("BinarizationTool - 二值化图片编辑器")
+        self.setWindowTitle(self.tr.tr('app.title'))
         self.setGeometry(100, 100, 1550, 800)  # 宽度从 1450 增加到 1550
         
         # 创建 UI
@@ -146,54 +150,54 @@ class MainWindow(QMainWindow):
     def create_actions(self):
         """创建动作"""
         # 文件菜单动作
-        self.open_action = QAction("打开", self)
+        self.open_action = QAction(self.tr.tr('toolbar.open'), self)
         self.open_action.setShortcut("Ctrl+O")
-        self.open_action.setToolTip("打开图片 (Ctrl+O)")
+        self.open_action.setToolTip(self.tr.tr('tooltip.open'))
         self.open_action.triggered.connect(self._open_file)
-        self.addAction(self.open_action)  # 添加到主窗口以启用快捷键
+        self.addAction(self.open_action)
         
-        self.save_action = QAction("保存", self)
+        self.save_action = QAction(self.tr.tr('toolbar.save'), self)
         self.save_action.setShortcut("Ctrl+S")
-        self.save_action.setToolTip("保存图片 (Ctrl+S)")
+        self.save_action.setToolTip(self.tr.tr('tooltip.save'))
         self.save_action.triggered.connect(self._save_file)
-        self.addAction(self.save_action)  # 添加到主窗口以启用快捷键
+        self.addAction(self.save_action)
         
-        self.save_as_action = QAction("另存为", self)
+        self.save_as_action = QAction(self.tr.tr('menu.save_as'), self)
         self.save_as_action.setShortcut("Ctrl+Shift+S")
-        self.save_as_action.setToolTip("另存为 (Ctrl+Shift+S)")
+        self.save_as_action.setToolTip(self.tr.tr('tooltip.save_as'))
         self.save_as_action.triggered.connect(self._save_file_as)
-        self.addAction(self.save_as_action)  # 添加到主窗口以启用快捷键
+        self.addAction(self.save_as_action)
         
-        self.exit_action = QAction("退出", self)
+        self.exit_action = QAction(self.tr.tr('menu.exit'), self)
         self.exit_action.setShortcut("Ctrl+Q")
-        self.exit_action.setToolTip("退出程序 (Ctrl+Q)")
+        self.exit_action.setToolTip(self.tr.tr('tooltip.exit'))
         self.exit_action.triggered.connect(self.close)
-        self.addAction(self.exit_action)  # 添加到主窗口以启用快捷键
+        self.addAction(self.exit_action)
         
         # 编辑菜单动作
-        self.undo_action = QAction("后退", self)
+        self.undo_action = QAction(self.tr.tr('toolbar.undo'), self)
         self.undo_action.setShortcut("Ctrl+Z")
-        self.undo_action.setToolTip("后退到上一步 (Ctrl+Z)")
+        self.undo_action.setToolTip(self.tr.tr('tooltip.undo'))
         self.undo_action.triggered.connect(self._undo)
-        self.addAction(self.undo_action)  # 添加到主窗口以启用快捷键
+        self.addAction(self.undo_action)
         
-        self.redo_action = QAction("前进", self)
+        self.redo_action = QAction(self.tr.tr('toolbar.redo'), self)
         self.redo_action.setShortcut("Ctrl+Y")
-        self.redo_action.setToolTip("前进到下一步 (Ctrl+Y)")
+        self.redo_action.setToolTip(self.tr.tr('tooltip.redo'))
         self.redo_action.triggered.connect(self._redo)
-        self.addAction(self.redo_action)  # 添加到主窗口以启用快捷键
+        self.addAction(self.redo_action)
         
-        self.reset_action = QAction("重置", self)
+        self.reset_action = QAction(self.tr.tr('toolbar.reset'), self)
         self.reset_action.setShortcut("Ctrl+R")
-        self.reset_action.setToolTip("重置到初始状态 (Ctrl+R)")
+        self.reset_action.setToolTip(self.tr.tr('tooltip.reset'))
         self.reset_action.triggered.connect(self._reset_to_initial)
-        self.addAction(self.reset_action)  # 添加到主窗口以启用快捷键
+        self.addAction(self.reset_action)
         
         # 工具动作 - 创建自定义按钮以支持悬浮事件
-        self.brush_button = QPushButton("画笔工具")
+        self.brush_button = QPushButton(self.tr.tr('toolbar.brush'))
         self.brush_button.setCheckable(True)
-        self.brush_button.setFlat(True)  # 扁平样式，类似 QAction
-        self.brush_button.setToolTip("画笔工具 (B)")
+        self.brush_button.setFlat(True)
+        self.brush_button.setToolTip(self.tr.tr('tooltip.brush_tool'))
         self.brush_button.clicked.connect(self._select_brush_tool)
         self.brush_button.installEventFilter(self)
         
@@ -203,44 +207,44 @@ class MainWindow(QMainWindow):
         self.brush_shortcut.triggered.connect(self._select_brush_tool)
         self.addAction(self.brush_shortcut)
         
-        # 初始化快捷键处理器（统一管理工具快捷键）
+        # 初始化快捷键处理器
         self.shortcut_handler = ShortcutHandler(self)
         
-        self.crop_action = QAction("裁剪工具", self)
+        self.crop_action = QAction(self.tr.tr('toolbar.crop'), self)
         self.crop_action.setShortcut("C")
         self.crop_action.setCheckable(True)
-        self.crop_action.setToolTip("裁剪工具 (C)")
+        self.crop_action.setToolTip(self.tr.tr('tooltip.crop_tool'))
         self.crop_action.triggered.connect(self._select_crop_tool)
-        self.addAction(self.crop_action)  # 添加到主窗口以启用快捷键
+        self.addAction(self.crop_action)
         
         # 选择工具动作
-        self.selection_tool_action = QAction("选择工具", self)
+        self.selection_tool_action = QAction(self.tr.tr('toolbar.selection'), self)
         self.selection_tool_action.setShortcut("W")
         self.selection_tool_action.setCheckable(True)
-        self.selection_tool_action.setToolTip("选择工具 (W)")
+        self.selection_tool_action.setToolTip(self.tr.tr('tooltip.selection_tool'))
         self.selection_tool_action.triggered.connect(self._select_selection_tool)
-        self.addAction(self.selection_tool_action)  # 添加到主窗口以启用快捷键
+        self.addAction(self.selection_tool_action)
         
         # 选区菜单动作
-        self.deselect_action = QAction("取消选择 (Ctrl+D)", self)
+        self.deselect_action = QAction(self.tr.tr('tooltip.deselect'), self)
         self.deselect_action.setShortcut("Ctrl+D")
         self.deselect_action.triggered.connect(self._deselect)
-        self.addAction(self.deselect_action)  # 添加到主窗口以启用快捷键
+        self.addAction(self.deselect_action)
         
-        self.invert_selection_action = QAction("反选 (Ctrl+Shift+I)", self)
+        self.invert_selection_action = QAction(self.tr.tr('tooltip.invert_selection'), self)
         self.invert_selection_action.setShortcut("Ctrl+Shift+I")
         self.invert_selection_action.triggered.connect(self._invert_selection)
-        self.addAction(self.invert_selection_action)  # 添加到主窗口以启用快捷键
+        self.addAction(self.invert_selection_action)
         
-        self.select_black_action = QAction("选择黑色", self)
+        self.select_black_action = QAction(self.tr.tr('menu.select_black'), self)
         self.select_black_action.triggered.connect(lambda: self._select_by_color(0))
         
-        self.select_white_action = QAction("选择白色", self)
+        self.select_white_action = QAction(self.tr.tr('menu.select_white'), self)
         self.select_white_action.triggered.connect(lambda: self._select_by_color(255))
     
     def create_toolbars(self):
         """创建工具栏"""
-        self.toolbar = QToolBar("工具")
+        self.toolbar = QToolBar(self.tr.tr('toolbar.title'))
         self.toolbar.setMovable(False)
         self.toolbar.setContextMenuPolicy(Qt.PreventContextMenu)  # 禁用右键菜单
         
@@ -272,11 +276,11 @@ class MainWindow(QMainWindow):
         
         # 文件操作组
         file_group, file_layout = create_button_group()
-        open_btn = create_toolbar_button("打开", "打开图片 (Ctrl+O)")
+        open_btn = create_toolbar_button(self.tr.tr('toolbar.open'), self.tr.tr('tooltip.open'))
         open_btn.clicked.connect(self._open_file)
         file_layout.addWidget(open_btn)
         
-        save_btn = create_toolbar_button("保存", "保存图片 (Ctrl+S)")
+        save_btn = create_toolbar_button(self.tr.tr('toolbar.save'), self.tr.tr('tooltip.save'))
         save_btn.clicked.connect(self._save_file)
         file_layout.addWidget(save_btn)
         self.save_action_btn = save_btn
@@ -284,17 +288,17 @@ class MainWindow(QMainWindow):
         
         # 编辑操作组
         edit_group, edit_layout = create_button_group()
-        undo_btn = create_toolbar_button("后退", "后退到上一步 (Ctrl+Z)")
+        undo_btn = create_toolbar_button(self.tr.tr('toolbar.undo'), self.tr.tr('tooltip.undo'))
         undo_btn.clicked.connect(self._undo)
         edit_layout.addWidget(undo_btn)
         self.undo_action_btn = undo_btn
         
-        redo_btn = create_toolbar_button("前进", "前进到下一步 (Ctrl+Y)")
+        redo_btn = create_toolbar_button(self.tr.tr('toolbar.redo'), self.tr.tr('tooltip.redo'))
         redo_btn.clicked.connect(self._redo)
         edit_layout.addWidget(redo_btn)
         self.redo_action_btn = redo_btn
         
-        reset_btn = create_toolbar_button("重置", "重置到初始状态 (Ctrl+R)")
+        reset_btn = create_toolbar_button(self.tr.tr('toolbar.reset'), self.tr.tr('tooltip.reset'))
         reset_btn.clicked.connect(self._reset_to_initial)
         edit_layout.addWidget(reset_btn)
         self.reset_action_btn = reset_btn
@@ -302,16 +306,16 @@ class MainWindow(QMainWindow):
         
         # 工具选择组
         tool_group, tool_layout = create_button_group()
-        self.brush_button = create_toolbar_button("画笔", "画笔工具 (B)", checkable=True)
+        self.brush_button = create_toolbar_button(self.tr.tr('toolbar.brush'), self.tr.tr('tooltip.brush_tool'), checkable=True)
         self.brush_button.clicked.connect(self._select_brush_tool)
         self.brush_button.installEventFilter(self)
         tool_layout.addWidget(self.brush_button)
         
-        self.crop_button = create_toolbar_button("裁剪", "裁剪工具 (C)", checkable=True)
+        self.crop_button = create_toolbar_button(self.tr.tr('toolbar.crop'), self.tr.tr('tooltip.crop_tool'), checkable=True)
         self.crop_button.clicked.connect(self._select_crop_tool)
         tool_layout.addWidget(self.crop_button)
         
-        self.selection_tool_button = create_toolbar_button("选择", "选择工具 (W)", checkable=True)
+        self.selection_tool_button = create_toolbar_button(self.tr.tr('toolbar.selection'), self.tr.tr('tooltip.selection_tool'), checkable=True)
         self.selection_tool_button.setEnabled(False)
         self.selection_tool_button.clicked.connect(self._select_selection_tool)
         self.selection_tool_button.installEventFilter(self)
@@ -323,17 +327,17 @@ class MainWindow(QMainWindow):
         
         # 应用操作组（设置、关于）
         app_group, app_layout = create_button_group()
-        settings_btn = create_toolbar_button("设置", "应用程序设置")
+        settings_btn = create_toolbar_button(self.tr.tr('toolbar.settings'), self.tr.tr('settings.title'))
         settings_btn.clicked.connect(self._show_settings)
         app_layout.addWidget(settings_btn)
         
-        about_btn = create_toolbar_button("关于", "关于 BinarizationTool")
+        about_btn = create_toolbar_button(self.tr.tr('toolbar.about'), self.tr.tr('about.title', app_name='BinarizationTool'))
         about_btn.clicked.connect(self._show_about)
         app_layout.addWidget(about_btn)
         toolbar_layout.addWidget(app_group)
         
         # 当前工具显示
-        self.current_tool_label = QLabel("当前工具：无")
+        self.current_tool_label = QLabel(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
         self.current_tool_label.setStyleSheet("padding: 0 10px; color: #495057; font-size: 14px; font-weight: 500;")
         toolbar_layout.addWidget(self.current_tool_label)
         
@@ -345,7 +349,7 @@ class MainWindow(QMainWindow):
         """创建状态栏"""
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
-        self.statusbar.showMessage("就绪")
+        self.statusbar.showMessage(self.tr.tr('app.ready'))
         
         # 创建菜单栏（但隐藏，功能通过工具栏和快捷键访问）
         self._create_menus()
@@ -376,7 +380,7 @@ class MainWindow(QMainWindow):
         menubar = self.menuBar()
         
         # 文件菜单
-        file_menu = menubar.addMenu("文件")
+        file_menu = menubar.addMenu(self.tr.tr('menu.file'))
         file_menu.addAction(self.open_action)
         file_menu.addAction(self.save_action)
         file_menu.addAction(self.save_as_action)
@@ -384,12 +388,12 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.exit_action)
         
         # 编辑菜单
-        edit_menu = menubar.addMenu("编辑")
+        edit_menu = menubar.addMenu(self.tr.tr('menu.edit'))
         edit_menu.addAction(self.undo_action)
         edit_menu.addAction(self.redo_action)
         
         # 选择菜单
-        select_menu = menubar.addMenu("选择")
+        select_menu = menubar.addMenu(self.tr.tr('menu.select'))
         select_menu.addAction(self.deselect_action)
         select_menu.addAction(self.invert_selection_action)
         select_menu.addSeparator()
@@ -399,15 +403,15 @@ class MainWindow(QMainWindow):
     def _select_brush_tool(self):
         """选择画笔工具"""
         if self.image_data is None:
-            self.statusbar.showMessage("请先加载图片")
+            self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
             return
         
         self.canvas.set_tool(self.canvas.brush_tool)
         self.brush_button.setChecked(True)
         self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(False)
-        self.current_tool_label.setText("当前工具：画笔")
-        self.statusbar.showMessage("画笔工具已激活")
+        self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.brush')))
+        self.statusbar.showMessage(self.tr.tr('message.brush_activated'))
         
         # 显示画笔工具设置
         self.properties_panel.show_brush_settings()
@@ -424,8 +428,8 @@ class MainWindow(QMainWindow):
         self.brush_button.setChecked(False)
         self.crop_button.setChecked(True)
         self.selection_tool_button.setChecked(False)
-        self.current_tool_label.setText("当前工具：裁剪")
-        self.statusbar.showMessage("裁剪工具已激活")
+        self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.crop')))
+        self.statusbar.showMessage(self.tr.tr('message.crop_activated'))
         
         # 隐藏所有工具设置（裁剪工具没有设置）
         self.properties_panel.hide_all_tool_settings()
@@ -433,16 +437,16 @@ class MainWindow(QMainWindow):
     def _select_selection_tool(self):
         """选择选择工具"""
         if self.image_data is None:
-            self.statusbar.showMessage("请先加载图片")
+            self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
             return
         
         self.canvas.set_tool(self.canvas.selection_tool)
         self.brush_button.setChecked(False)
         self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(True)
-        self.current_tool_label.setText("当前工具：选择")
-        mode_text = "添加" if self.canvas.selection_tool.selection_mode == 'add' else "删除"
-        self.statusbar.showMessage(f"选择工具已激活 - 模式：{mode_text}")
+        self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.selection')))
+        mode_text = self.tr.tr('mode.add') if self.canvas.selection_tool.selection_mode == 'add' else self.tr.tr('mode.subtract')
+        self.statusbar.showMessage(self.tr.tr('message.selection_activated', mode=mode_text))
         
         # 显示选择工具设置
         self.properties_panel.show_selection_settings()
@@ -464,7 +468,7 @@ class MainWindow(QMainWindow):
         self.history_manager.push_state(self.image_data)
         
         self._update_ui_state()  # 更新 UI 状态
-        self.statusbar.showMessage("已取消选择")
+        self.statusbar.showMessage(self.tr.tr('message.deselected'))
     
     def _invert_selection(self):
         """反选"""
@@ -484,7 +488,7 @@ class MainWindow(QMainWindow):
         self.history_manager.push_state(self.image_data)
         
         self._update_ui_state()  # 更新 UI 状态
-        self.statusbar.showMessage("已反选")
+        self.statusbar.showMessage(self.tr.tr('message.inverted'))
     
     def _select_by_color(self, color: int):
         """按颜色选择"""
@@ -500,16 +504,16 @@ class MainWindow(QMainWindow):
         self.history_manager.push_state(self.image_data)
         
         self._update_ui_state()  # 更新 UI 状态
-        color_name = "黑色" if color == 0 else "白色"
-        self.statusbar.showMessage(f"已选择所有{color_name}像素")
+        color_name = self.tr.tr('color.black') if color == 0 else self.tr.tr('color.white')
+        self.statusbar.showMessage(self.tr.tr('message.selected_color', color=color_name))
     
     def _open_file(self):
         """打开文件"""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "打开图片",
+            self.tr.tr('file_dialog.open_image'),
             "",
-            "图片文件 (*.png *.jpg *.jpeg *.bmp *.webp);;所有文件 (*.*)"
+            self.tr.tr('file_dialog.image_files')
         )
         
         if file_path:
@@ -559,11 +563,11 @@ class MainWindow(QMainWindow):
             self.properties_panel.set_image_info(self.image_data, file_path)
             
             # 更新状态
-            self.statusbar.showMessage(f"已加载: {file_path}")
+            self.statusbar.showMessage(self.tr.tr('message.loaded', path=file_path))
             self._update_ui_state()
             
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"无法加载图片:\n{str(e)}")
+            QMessageBox.critical(self, self.tr.tr('dialog.error'), self.tr.tr('dialog.load_error', error=str(e)))
     
     def _save_file(self):
         """保存文件（第一次另存为，之后覆盖）"""
@@ -599,9 +603,9 @@ class MainWindow(QMainWindow):
         
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "另存为",
+            self.tr.tr('file_dialog.save_as'),
             default_name,
-            "PNG 图片 (*.png);;JPEG 图片 (*.jpg);;BMP 图片 (*.bmp)"
+            self.tr.tr('file_dialog.png_files')
         )
         
         if file_path:
@@ -637,9 +641,9 @@ class MainWindow(QMainWindow):
         try:
             save_image(self.image_data, file_path)
             self.current_file_path = file_path
-            self.statusbar.showMessage(f"已保存: {file_path}")
+            self.statusbar.showMessage(self.tr.tr('message.saved', path=file_path))
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"无法保存图片:\n{str(e)}")
+            QMessageBox.critical(self, self.tr.tr('dialog.error'), self.tr.tr('dialog.save_error', error=str(e)))
     
     def _undo(self):
         """撤销"""
@@ -654,7 +658,7 @@ class MainWindow(QMainWindow):
             if self.canvas.selection_tool:
                 self.canvas.selection_tool.selection_mask = self.image_data.selection_mask
             
-            self.statusbar.showMessage("已撤销")
+            self.statusbar.showMessage(self.tr.tr('message.undone'))
             self._update_ui_state()
             # 更新属性面板（撤销可能恢复裁剪前的尺寸）
             self.properties_panel.set_image_info(self.image_data, self.current_file_path)
@@ -672,7 +676,7 @@ class MainWindow(QMainWindow):
             if self.canvas.selection_tool:
                 self.canvas.selection_tool.selection_mask = self.image_data.selection_mask
             
-            self.statusbar.showMessage("已重做")
+            self.statusbar.showMessage(self.tr.tr('message.redone'))
             self._update_ui_state()
             # 更新属性面板（重做可能改变尺寸）
             self.properties_panel.set_image_info(self.image_data, self.current_file_path)
@@ -684,14 +688,14 @@ class MainWindow(QMainWindow):
         
         # 检查是否有编辑内容
         if not self._has_edits():
-            self.statusbar.showMessage("没有需要重置的编辑内容")
+            self.statusbar.showMessage(self.tr.tr('message.no_edits'))
             return
         
         # 弹窗确认
         reply = QMessageBox.question(
             self,
-            "确认重置",
-            "确定要重置到初始状态吗？\n\n这将清除所有画笔编辑和裁剪操作，恢复到刚打开图片时的二值化结果。\n此操作无法撤销。",
+            self.tr.tr('dialog.confirm'),
+            self.tr.tr('dialog.reset_confirm'),
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -700,9 +704,9 @@ class MainWindow(QMainWindow):
             # 重新加载图片（最简单可靠的方式）
             if self.current_file_path:
                 self._load_file_from_path(self.current_file_path)
-                self.statusbar.showMessage("已重置到初始状态")
+                self.statusbar.showMessage(self.tr.tr('message.reset'))
             else:
-                self.statusbar.showMessage("无法重置：未找到原始文件路径")
+                self.statusbar.showMessage(self.tr.tr('dialog.reset_no_file'))
     
     def _has_edits(self) -> bool:
         """
@@ -757,7 +761,7 @@ class MainWindow(QMainWindow):
             self.binarization_debounce_timer.start(150)
             
             # 显示处理中状态
-            self.statusbar.showMessage("处理中...")
+            self.statusbar.showMessage(self.tr.tr('app.processing'))
     
     def _start_binarization(self):
         """启动异步二值化处理"""
@@ -806,18 +810,18 @@ class MainWindow(QMainWindow):
             # 更新分块缓存
             self._safe_update_tile_cache(self.image_data.selection_mask)
             
-            self.statusbar.showMessage("处理完成")
+            self.statusbar.showMessage(self.tr.tr('app.processing_complete'))
             
         except Exception as e:
-            QMessageBox.warning(self, "警告", f"图像更新失败:\n{str(e)}")
+            QMessageBox.warning(self, self.tr.tr('dialog.warning'), self.tr.tr('dialog.update_error', error=str(e)))
     
     def _on_binarization_error(self, error_message: str):
         """二值化出错"""
         # 清除画布处理状态
         self.canvas.set_processing(False)
         
-        QMessageBox.warning(self, "警告", f"图像处理失败:\n{error_message}")
-        self.statusbar.showMessage("处理失败")
+        QMessageBox.warning(self, self.tr.tr('dialog.warning'), self.tr.tr('app.processing_failed') + f":\n{error_message}")
+        self.statusbar.showMessage(self.tr.tr('app.processing_failed'))
     
     def _on_image_modified(self):
         """图片被修改"""
@@ -870,7 +874,7 @@ class MainWindow(QMainWindow):
         
         # 检查是否有选区
         if not self.canvas.selection_tool.has_selection():
-            self.statusbar.showMessage("没有选区，无法填充")
+            self.statusbar.showMessage(self.tr.tr('message.no_selection'))
             return
         
         # 获取选区蒙版
@@ -878,7 +882,7 @@ class MainWindow(QMainWindow):
         
         # 检查选区尺寸是否匹配
         if selection_mask.shape != (self.image_data.height, self.image_data.width):
-            self.statusbar.showMessage("选区尺寸不匹配，已清除选区")
+            self.statusbar.showMessage(self.tr.tr('message.selection_size_mismatch'))
             self.canvas.selection_tool.clear_selection()
             self.image_data.selection_mask = None
             self._safe_update_tile_cache(None)
@@ -913,8 +917,8 @@ class MainWindow(QMainWindow):
         self.canvas.update()
         
         # 显示提示
-        color_name = "黑色" if color == 0 else "白色"
-        self.statusbar.showMessage(f"已用{color_name}填充选区")
+        color_name = self.tr.tr('color.black') if color == 0 else self.tr.tr('color.white')
+        self.statusbar.showMessage(self.tr.tr('message.filled', color=color_name))
     
     def _fill_selection_opposite_color(self):
         """
@@ -976,9 +980,9 @@ class MainWindow(QMainWindow):
         self.canvas.selection_tool.target_color = button_id
         # 更新填充按钮文本
         if button_id == 0:
-            self.properties_panel.fill_button.setText("填充白色")
+            self.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_white'))
         else:
-            self.properties_panel.fill_button.setText("填充黑色")
+            self.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_black'))
         self.canvas.update()
     
     def _on_selection_method_changed_panel(self):
@@ -991,9 +995,9 @@ class MainWindow(QMainWindow):
         self.canvas.setCursor(Qt.BlankCursor)
         
         if is_rect_mode:
-            self.statusbar.showMessage("矩形框选模式已启用")
+            self.statusbar.showMessage(self.tr.tr('message.rect_select_mode'))
         else:
-            self.statusbar.showMessage("涂抹选择模式已启用")
+            self.statusbar.showMessage(self.tr.tr('message.paint_select_mode'))
         
         self.canvas.update()
     
@@ -1029,7 +1033,8 @@ class MainWindow(QMainWindow):
         # 更新工具状态
         self._update_tool_states()
         
-        self.statusbar.showMessage(f"已切换到{self._get_mode_display_name(mode)}模式")
+        mode_name = self.tr.tr(f'view_mode.{mode}')
+        self.statusbar.showMessage(self.tr.tr('message.view_mode_changed', mode=mode_name))
     
     def _compute_preprocessed_pixels(self):
         """计算并缓存预处理结果"""
@@ -1044,14 +1049,21 @@ class MainWindow(QMainWindow):
             )
             self.image_data.set_preprocessed_pixels(preprocessed)
         except MemoryError:
-            QMessageBox.critical(self, "内存不足", 
-                "图像太大，无法缓存预处理结果。\n建议使用较小的图像或关闭预处理模式。")
+            QMessageBox.critical(
+                self,
+                self.tr.tr('dialog.error'),
+                self.tr.tr('dialog.memory_error')
+            )
             self.image_data.invalidate_preprocessed_cache()
             # 切换回原图模式
             self.image_data.set_view_mode('original')
             self.binarization_panel.view_mode_switcher.set_mode('original')
         except Exception as e:
-            QMessageBox.warning(self, "错误", f"预处理失败:\n{str(e)}")
+            QMessageBox.warning(
+                self,
+                self.tr.tr('dialog.error'),
+                self.tr.tr('dialog.preprocess_error', error=str(e))
+            )
             # 保持当前模式不变
             self.binarization_panel.view_mode_switcher.set_mode(self.image_data.view_mode)
     
@@ -1092,7 +1104,7 @@ class MainWindow(QMainWindow):
         if not brush_enabled and self.canvas.current_tool == self.canvas.brush_tool:
             self.canvas.set_tool(None)
             self.brush_button.setChecked(False)
-            self.current_tool_label.setText("当前工具：无")
+            self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
         
         # 选择工具：仅在二值化模式下可用
         selection_enabled = (mode == 'binary')
@@ -1100,7 +1112,7 @@ class MainWindow(QMainWindow):
         if not selection_enabled and self.canvas.current_tool == self.canvas.selection_tool:
             self.canvas.set_tool(None)
             self.selection_tool_button.setChecked(False)
-            self.current_tool_label.setText("当前工具：无")
+            self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
         
         # 裁剪工具：在所有模式下可用
         # （无需修改）
@@ -1122,7 +1134,7 @@ class MainWindow(QMainWindow):
         if dialog.exec():
             # 设置已保存，立即应用新配置
             self.apply_config()
-            self.statusbar.showMessage("设置已应用", 3000)
+            self.statusbar.showMessage(self.tr.tr('message.settings_applied'), 3000)
     
     def apply_config(self):
         """应用配置到各个组件"""
@@ -1166,7 +1178,7 @@ class MainWindow(QMainWindow):
         from src.__version__ import __version__, __app_name__, __author__, __release_date__
         
         dialog = QDialog(self)
-        dialog.setWindowTitle(f"关于 {__app_name__}")
+        dialog.setWindowTitle(self.tr.tr('about.title', app_name=__app_name__))
         dialog.setMinimumWidth(450)
         dialog.setMinimumHeight(350)
         
@@ -1180,12 +1192,12 @@ class MainWindow(QMainWindow):
         layout.addWidget(app_name_label)
         
         # 版本号
-        version_label = QLabel(f"版本 {__version__}")
+        version_label = QLabel(self.tr.tr('about.version', version=__version__))
         version_label.setStyleSheet("font-size: 16px; color: #212529; margin-bottom: 10px;")
         layout.addWidget(version_label)
         
         # 发布日期
-        date_label = QLabel(f"发布日期：{__release_date__}")
+        date_label = QLabel(self.tr.tr('about.release_date', date=__release_date__))
         date_label.setStyleSheet("font-size: 14px; color: #212529;")
         layout.addWidget(date_label)
         
@@ -1195,23 +1207,23 @@ class MainWindow(QMainWindow):
         layout.addWidget(separator)
         
         # 描述
-        desc_label = QLabel("基于 PySide6 的二值化图片编辑应用程序\n提供类似 Photoshop 的编辑功能")
+        desc_label = QLabel(self.tr.tr('about.description'))
         desc_label.setStyleSheet("font-size: 14px; color: #212529; line-height: 1.6;")
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
         
         # 作者
-        author_label = QLabel(f"作者：{__author__}")
+        author_label = QLabel(self.tr.tr('about.author', author=__author__))
         author_label.setStyleSheet("font-size: 14px; color: #212529; margin-top: 10px;")
         layout.addWidget(author_label)
         
         # 版权
-        copyright_label = QLabel("© 2026 夏次一定de. All rights reserved.")
+        copyright_label = QLabel(self.tr.tr('about.copyright'))
         copyright_label.setStyleSheet("font-size: 12px; color: #212529; margin-top: 5px;")
         layout.addWidget(copyright_label)
         
         # 许可证
-        license_label = QLabel("许可证：MIT License")
+        license_label = QLabel(self.tr.tr('about.license'))
         license_label.setStyleSheet("font-size: 12px; color: #212529;")
         layout.addWidget(license_label)
         
