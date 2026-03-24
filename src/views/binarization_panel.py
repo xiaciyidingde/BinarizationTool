@@ -174,6 +174,85 @@ class BinarizationPanel(QWidget):
         rgb_group.setLayout(rgb_layout)
         settings_layout.addWidget(rgb_group)
         
+        # === 边缘检测 ===
+        edge_group = QGroupBox("边缘检测")
+        edge_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 14px;
+                color: #495057;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 8px;
+                top: 0px;
+                padding: 0 4px;
+                background-color: #ffffff;
+            }
+        """)
+        edge_layout = QVBoxLayout()
+        edge_layout.setSpacing(6)
+        
+        # 边缘模式（左右布局）
+        edge_mode_row = QHBoxLayout()
+        edge_mode_label = QLabel("边缘模式:")
+        edge_mode_label.setMinimumWidth(70)
+        edge_mode_row.addWidget(edge_mode_label)
+        
+        # 添加占位空间（对齐数值标签位置）
+        edge_mode_row.addSpacing(25)
+        
+        self.edge_mode_combo = QComboBox()
+        self.edge_mode_combo.setFixedWidth(120)
+        self.edge_mode_combo.addItem("关闭", 0)
+        self.edge_mode_combo.addItem("Canny 边缘", 1)
+        self.edge_mode_combo.addItem("边缘增强", 2)
+        self.edge_mode_combo.addItem("轮廓保留", 3)
+        
+        edge_mode_row.addWidget(self.edge_mode_combo)
+        edge_mode_row.addStretch()
+        edge_layout.addLayout(edge_mode_row)
+        
+        # 边缘强度
+        self.edge_strength_slider = self._create_slider_with_label(
+            "边缘强度:", 0, 100, 50, edge_layout
+        )
+        
+        # 边缘阈值（仅 Canny 模式显示）- 手动创建以便隐藏整行
+        self.edge_threshold_row = QHBoxLayout()
+        
+        edge_threshold_label = QLabel("边缘阈值:")
+        edge_threshold_label.setMinimumWidth(70)
+        self.edge_threshold_row.addWidget(edge_threshold_label)
+        
+        self.edge_threshold_value_label = QLabel("150")
+        self.edge_threshold_value_label.setMinimumWidth(25)
+        self.edge_threshold_value_label.setMaximumWidth(25)
+        self.edge_threshold_value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.edge_threshold_row.addWidget(self.edge_threshold_value_label)
+        
+        self.edge_threshold_slider = QSlider(Qt.Horizontal)
+        self.edge_threshold_slider.setMinimum(0)
+        self.edge_threshold_slider.setMaximum(255)
+        self.edge_threshold_slider.setValue(150)
+        self.edge_threshold_slider.valueChanged.connect(
+            lambda v: self.edge_threshold_value_label.setText(str(v))
+        )
+        self.edge_threshold_row.addWidget(self.edge_threshold_slider, 1)
+        
+        # 创建一个容器 widget 来包装边缘阈值行，方便隐藏
+        self.edge_threshold_container = QWidget()
+        self.edge_threshold_container.setLayout(self.edge_threshold_row)
+        edge_layout.addWidget(self.edge_threshold_container)
+        
+        edge_group.setLayout(edge_layout)
+        settings_layout.addWidget(edge_group)
+        
         # === 二值化方法 ===
         binarization_group = QGroupBox("二值化")
         binarization_group.setStyleSheet("""
@@ -216,30 +295,63 @@ class BinarizationPanel(QWidget):
         self.method_combo.addItem("Wolf 阈值", 4)
         self.method_combo.addItem("Nick 阈值", 5)
         self.method_combo.addItem("Bernsen 阈值", 6)
+        # 添加分隔线（使用禁用的项）
+        self.method_combo.insertSeparator(7)
+        self.method_combo.addItem("Floyd-Steinberg 抖动", 7)
+        self.method_combo.addItem("Ordered 抖动", 8)
+        self.method_combo.addItem("Atkinson 抖动", 9)
         self.method_combo.setCurrentIndex(1)  # 默认自适应阈值
         
         method_row.addWidget(self.method_combo)
         method_row.addStretch()
         binarization_layout.addLayout(method_row)
         
-        # 阈值（左右布局）
-        threshold_row = QHBoxLayout()
+        # 阈值（左右布局）- 手动创建以便隐藏整行
+        self.threshold_row = QHBoxLayout()
         threshold_label_text = QLabel("阈值:")
         threshold_label_text.setMinimumWidth(70)
-        threshold_row.addWidget(threshold_label_text)
+        self.threshold_row.addWidget(threshold_label_text)
         
         self.threshold_label = QLabel("127")
         self.threshold_label.setMinimumWidth(25)
         self.threshold_label.setMaximumWidth(25)
         self.threshold_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        threshold_row.addWidget(self.threshold_label)
+        self.threshold_row.addWidget(self.threshold_label)
         
         self.threshold_slider = QSlider(Qt.Horizontal)
         self.threshold_slider.setMinimum(0)
         self.threshold_slider.setMaximum(255)
         self.threshold_slider.setValue(127)
-        threshold_row.addWidget(self.threshold_slider, 1)
-        binarization_layout.addLayout(threshold_row)
+        self.threshold_row.addWidget(self.threshold_slider, 1)
+        
+        # 创建一个容器 widget 来包装阈值行，方便隐藏
+        self.threshold_container = QWidget()
+        self.threshold_container.setLayout(self.threshold_row)
+        binarization_layout.addWidget(self.threshold_container)
+        
+        # === 自适应阈值参数 ===
+        self.adaptive_params_container = self._create_adaptive_params()
+        binarization_layout.addWidget(self.adaptive_params_container)
+        
+        # === Sauvola 参数 ===
+        self.sauvola_params_container = self._create_sauvola_params()
+        binarization_layout.addWidget(self.sauvola_params_container)
+        
+        # === Wolf 参数 ===
+        self.wolf_params_container = self._create_wolf_params()
+        binarization_layout.addWidget(self.wolf_params_container)
+        
+        # === Nick 参数 ===
+        self.nick_params_container = self._create_nick_params()
+        binarization_layout.addWidget(self.nick_params_container)
+        
+        # === Bernsen 参数 ===
+        self.bernsen_params_container = self._create_bernsen_params()
+        binarization_layout.addWidget(self.bernsen_params_container)
+        
+        # === 抖动参数 ===
+        self.dithering_params_container = self._create_dithering_params()
+        binarization_layout.addWidget(self.dithering_params_container)
         
         binarization_group.setLayout(binarization_layout)
         settings_layout.addWidget(binarization_group)
@@ -313,6 +425,7 @@ class BinarizationPanel(QWidget):
         
         # 初始状态:固定阈值控件启用
         self._update_threshold_enabled()
+        self._update_edge_threshold_enabled()
     
     def _create_slider_with_label(self, label_text, min_val, max_val, default_val, 
                                   parent_layout, scale=1.0):
@@ -351,6 +464,130 @@ class BinarizationPanel(QWidget):
         
         return slider
     
+    def _create_adaptive_params(self):
+        """创建自适应阈值参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 块大小
+        self.adaptive_block_size_slider = self._create_slider_with_label(
+            "块大小:", 3, 51, 11, layout
+        )
+        
+        return container
+    
+    def _create_sauvola_params(self):
+        """创建 Sauvola 参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 窗口大小
+        self.sauvola_window_slider = self._create_slider_with_label(
+            "窗口大小:", 3, 51, 15, layout
+        )
+        
+        # k 参数
+        self.sauvola_k_slider = self._create_slider_with_label(
+            "k 参数:", 0, 100, 20, layout, scale=0.01
+        )
+        
+        # R 参数
+        self.sauvola_r_slider = self._create_slider_with_label(
+            "R 参数:", 0, 255, 128, layout
+        )
+        
+        return container
+    
+    def _create_wolf_params(self):
+        """创建 Wolf 参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 窗口大小
+        self.wolf_window_slider = self._create_slider_with_label(
+            "窗口大小:", 3, 51, 15, layout
+        )
+        
+        # k 参数
+        self.wolf_k_slider = self._create_slider_with_label(
+            "k 参数:", 0, 100, 50, layout, scale=0.01
+        )
+        
+        return container
+    
+    def _create_nick_params(self):
+        """创建 Nick 参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 窗口大小
+        self.nick_window_slider = self._create_slider_with_label(
+            "窗口大小:", 3, 51, 15, layout
+        )
+        
+        # k 参数 (-1.0 到 0.0)
+        self.nick_k_slider = self._create_slider_with_label(
+            "k 参数:", -100, 0, -10, layout, scale=0.01
+        )
+        
+        return container
+    
+    def _create_bernsen_params(self):
+        """创建 Bernsen 参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 窗口大小
+        self.bernsen_window_slider = self._create_slider_with_label(
+            "窗口大小:", 3, 51, 15, layout
+        )
+        
+        # 对比度阈值
+        self.bernsen_contrast_slider = self._create_slider_with_label(
+            "对比度阈值:", 0, 255, 15, layout
+        )
+        
+        return container
+    
+    def _create_dithering_params(self):
+        """创建抖动参数容器"""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(6)
+        
+        # 抖动强度（用于 Floyd-Steinberg 和 Atkinson）
+        self.dither_strength_container = QWidget()
+        strength_layout = QVBoxLayout(self.dither_strength_container)
+        strength_layout.setContentsMargins(0, 0, 0, 0)
+        strength_layout.setSpacing(6)
+        self.dither_strength_slider = self._create_slider_with_label(
+            "抖动强度:", 0, 100, 100, strength_layout
+        )
+        layout.addWidget(self.dither_strength_container)
+        
+        # 矩阵大小（仅用于 Ordered 抖动）
+        self.dither_matrix_size_container = QWidget()
+        matrix_layout = QVBoxLayout(self.dither_matrix_size_container)
+        matrix_layout.setContentsMargins(0, 0, 0, 0)
+        matrix_layout.setSpacing(6)
+        self.dither_matrix_size_slider = self._create_slider_with_label(
+            "矩阵大小:", 2, 16, 8, matrix_layout
+        )
+        layout.addWidget(self.dither_matrix_size_container)
+        
+        return container
+    
     def connect_signals(self):
         """连接信号"""
         self.method_combo.currentIndexChanged.connect(self._on_parameters_changed)
@@ -368,6 +605,27 @@ class BinarizationPanel(QWidget):
         self.green_channel_slider.valueChanged.connect(self._on_parameters_changed)
         self.blue_channel_slider.valueChanged.connect(self._on_parameters_changed)
         
+        # 边缘检测参数信号
+        self.edge_mode_combo.currentIndexChanged.connect(self._on_edge_mode_changed)
+        self.edge_strength_slider.valueChanged.connect(self._on_parameters_changed)
+        self.edge_threshold_slider.valueChanged.connect(self._on_parameters_changed)
+        
+        # 二值化方法参数信号
+        self.adaptive_block_size_slider.valueChanged.connect(self._on_parameters_changed)
+        self.sauvola_window_slider.valueChanged.connect(self._on_parameters_changed)
+        self.sauvola_k_slider.valueChanged.connect(self._on_parameters_changed)
+        self.sauvola_r_slider.valueChanged.connect(self._on_parameters_changed)
+        self.wolf_window_slider.valueChanged.connect(self._on_parameters_changed)
+        self.wolf_k_slider.valueChanged.connect(self._on_parameters_changed)
+        self.nick_window_slider.valueChanged.connect(self._on_parameters_changed)
+        self.nick_k_slider.valueChanged.connect(self._on_parameters_changed)
+        self.bernsen_window_slider.valueChanged.connect(self._on_parameters_changed)
+        self.bernsen_contrast_slider.valueChanged.connect(self._on_parameters_changed)
+        
+        # 抖动参数信号
+        self.dither_strength_slider.valueChanged.connect(self._on_parameters_changed)
+        self.dither_matrix_size_slider.valueChanged.connect(self._on_parameters_changed)
+        
         # 降噪参数信号
         self.denoise_method_combo.currentIndexChanged.connect(self._on_parameters_changed)
         self.denoise_slider.valueChanged.connect(self._on_parameters_changed)
@@ -378,6 +636,12 @@ class BinarizationPanel(QWidget):
     def _on_parameters_changed(self):
         """参数改变事件"""
         self._update_threshold_enabled()
+        self._update_edge_threshold_enabled()
+        self._emit_change()
+    
+    def _on_edge_mode_changed(self):
+        """边缘模式改变事件"""
+        self._update_edge_threshold_enabled()
         self._emit_change()
     
     def _on_threshold_changed(self, value):
@@ -390,12 +654,53 @@ class BinarizationPanel(QWidget):
         self.view_mode_changed.emit(mode)
     
     def _update_threshold_enabled(self):
-        """更新阈值控件的启用状态"""
+        """更新二值化方法参数的显示状态"""
         method = self.method_combo.currentData()
-        # 固定阈值(0)和自适应阈值(1)需要手动设置阈值参数
-        enabled = (method == 0 or method == 1)
-        self.threshold_slider.setEnabled(enabled)
-        self.threshold_label.setEnabled(enabled)
+        
+        # 隐藏所有参数容器
+        self.threshold_container.setVisible(False)
+        self.adaptive_params_container.setVisible(False)
+        self.sauvola_params_container.setVisible(False)
+        self.wolf_params_container.setVisible(False)
+        self.nick_params_container.setVisible(False)
+        self.bernsen_params_container.setVisible(False)
+        self.dithering_params_container.setVisible(False)
+        
+        # 根据方法显示对应的参数
+        if method == 0:  # 固定阈值
+            self.threshold_container.setVisible(True)
+        elif method == 1:  # 自适应阈值
+            self.threshold_container.setVisible(True)
+            self.adaptive_params_container.setVisible(True)
+        elif method == 2:  # Otsu - 无参数
+            pass
+        elif method == 3:  # Sauvola
+            self.sauvola_params_container.setVisible(True)
+        elif method == 4:  # Wolf
+            self.wolf_params_container.setVisible(True)
+        elif method == 5:  # Nick
+            self.nick_params_container.setVisible(True)
+        elif method == 6:  # Bernsen
+            self.bernsen_params_container.setVisible(True)
+        elif method == 7:  # Floyd-Steinberg 抖动
+            self.dithering_params_container.setVisible(True)
+            self.dither_strength_container.setVisible(True)
+            self.dither_matrix_size_container.setVisible(False)
+        elif method == 8:  # Ordered 抖动
+            self.dithering_params_container.setVisible(True)
+            self.dither_strength_container.setVisible(False)
+            self.dither_matrix_size_container.setVisible(True)
+        elif method == 9:  # Atkinson 抖动
+            self.dithering_params_container.setVisible(True)
+            self.dither_strength_container.setVisible(True)
+            self.dither_matrix_size_container.setVisible(False)
+    
+    def _update_edge_threshold_enabled(self):
+        """更新边缘阈值控件的显示状态"""
+        edge_mode = self.edge_mode_combo.currentData()
+        # 仅 Canny 模式(1)显示边缘阈值
+        visible = (edge_mode == 1)
+        self.edge_threshold_container.setVisible(visible)
     
     def _emit_change(self):
         """发射参数改变信号"""
@@ -403,6 +708,38 @@ class BinarizationPanel(QWidget):
         method = self.get_method()
         threshold = self.get_threshold()
         self.parameters_changed.emit(preprocess_params, method, threshold)
+    
+    def get_method_params(self) -> dict:
+        """
+        获取当前二值化方法的特定参数
+        
+        Returns:
+            方法参数字典
+        """
+        method = self.get_method()
+        params = {}
+        
+        if method == 1:  # 自适应阈值
+            params['block_size'] = self.adaptive_block_size_slider.value()
+        elif method == 3:  # Sauvola
+            params['window_size'] = self.sauvola_window_slider.value()
+            params['sauvola_k'] = self.sauvola_k_slider.value() * 0.01
+            params['sauvola_r'] = self.sauvola_r_slider.value()
+        elif method == 4:  # Wolf
+            params['window_size'] = self.wolf_window_slider.value()
+            params['wolf_k'] = self.wolf_k_slider.value() * 0.01
+        elif method == 5:  # Nick
+            params['window_size'] = self.nick_window_slider.value()
+            params['nick_k'] = self.nick_k_slider.value() * 0.01
+        elif method == 6:  # Bernsen
+            params['window_size'] = self.bernsen_window_slider.value()
+            params['bernsen_contrast'] = self.bernsen_contrast_slider.value()
+        elif method in [7, 9]:  # Floyd-Steinberg 或 Atkinson 抖动
+            params['dither_strength'] = self.dither_strength_slider.value()
+        elif method == 8:  # Ordered 抖动
+            params['dither_matrix_size'] = self.dither_matrix_size_slider.value()
+        
+        return params
     
     def get_preprocess_params(self) -> dict:
         """
@@ -420,6 +757,9 @@ class BinarizationPanel(QWidget):
             'red_channel': self.red_channel_slider.value(),
             'green_channel': self.green_channel_slider.value(),
             'blue_channel': self.blue_channel_slider.value(),
+            'edge_mode': self.edge_mode_combo.currentData(),
+            'edge_strength': self.edge_strength_slider.value(),
+            'edge_threshold': self.edge_threshold_slider.value(),
             'denoise_method': self.denoise_method_combo.currentData(),
             'denoise': self.denoise_slider.value(),
         }
@@ -479,10 +819,13 @@ class BinarizationPanel(QWidget):
         self.red_channel_slider.setEnabled(enabled)
         self.green_channel_slider.setEnabled(enabled)
         self.blue_channel_slider.setEnabled(enabled)
+        self.edge_mode_combo.setEnabled(enabled)
+        self.edge_strength_slider.setEnabled(enabled)
+        self.edge_threshold_slider.setEnabled(enabled)
+        self.threshold_slider.setEnabled(enabled)
         self.denoise_method_combo.setEnabled(enabled)
         self.denoise_slider.setEnabled(enabled)
         
         if enabled:
             self._update_threshold_enabled()
-        else:
-            self.threshold_slider.setEnabled(False)
+            self._update_edge_threshold_enabled()

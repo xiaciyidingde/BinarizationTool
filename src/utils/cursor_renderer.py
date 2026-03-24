@@ -18,6 +18,48 @@ class CursorRenderer:
     """
     
     @staticmethod
+    def render_crosshair_cursor(painter: 'QPainter',
+                               view_x: float,
+                               view_y: float,
+                               color: 'QColor',
+                               size: int = 20):
+        """
+        渲染十字准星光标（用于矩形框选模式）
+        
+        Args:
+            painter: Qt QPainter 对象
+            view_x: 光标中心 X 坐标（视图坐标）
+            view_y: 光标中心 Y 坐标（视图坐标）
+            color: 十字准星颜色
+            size: 十字准星大小（像素）
+        """
+        from PySide6.QtGui import QPen
+        
+        # 保存当前画笔状态
+        old_pen = painter.pen()
+        
+        # 设置十字准星样式
+        pen = QPen(color, 2)
+        painter.setPen(pen)
+        
+        half_size = size // 2
+        
+        # 绘制水平线
+        painter.drawLine(
+            int(view_x - half_size), int(view_y),
+            int(view_x + half_size), int(view_y)
+        )
+        
+        # 绘制垂直线
+        painter.drawLine(
+            int(view_x), int(view_y - half_size),
+            int(view_x), int(view_y + half_size)
+        )
+        
+        # 恢复画笔状态
+        painter.setPen(old_pen)
+    
+    @staticmethod
     def render_circle_cursor(painter: 'QPainter', 
                             view_x: float, 
                             view_y: float, 

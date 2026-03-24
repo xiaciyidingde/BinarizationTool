@@ -6,6 +6,7 @@
 
 import numpy as np
 import cv2
+from ..cython_core import floyd_steinberg, atkinson, ordered_dithering
 
 
 class ImageEnhancer:
@@ -138,6 +139,72 @@ class ImageEnhancer:
         
         return cv2.filter2D(img, -1, kernel)
 
+    @staticmethod
+    def apply_edge_detection(img, mode=0, strength=50, threshold2=150):
+        """
+        边缘检测增强
+        
+        Args:
+            img: 输入图像
+            mode: 边缘检测模式
+                0 - 关闭
+                1 - Canny 边缘检测
+                2 - 边缘增强
+                3 - 轮廓保留
+            strength: 边缘强度 (0-100)
+                - Canny 模式：控制低阈值
+                - 增强模式：控制叠加权重
+                - 轮廓模式：控制形态学核大小
+            threshold2: Canny 高阈值 (仅 Canny 模式使用)
+        
+        Returns:
+            处理后的图像
+        """
+        if mode == 0 or strength <= 0:
+            return img
+        
+        img_uint8 = img.astype(np.uint8)
+        
+        if mode == 1:  # Canny 边缘检测
+            # 计算阈值
+            threshold1 = int(strength * 2.55)  # 0-100 映射到 0-255
+            threshold2 = max(threshold1 + 50, threshold2)  # 确保高阈值大于低阈值
+            
+            # Canny 边缘检测
+            edges = cv2.Canny(img_uint8, threshold1, threshold2)
+            
+            # 将边缘叠加到原图（白色边缘）
+            result = img.copy()
+            result[edges > 0] = 255
+            return result
+        
+        elif mode == 2:  # 边缘增强（叠加到原图）
+            # 使用 Sobel 算子检测边缘
+            sobelx = cv2.Sobel(img_uint8, cv2.CV_32F, 1, 0, ksize=3)
+            sobely = cv2.Sobel(img_uint8, cv2.CV_32F, 0, 1, ksize=3)
+            gradient = cv2.magnitude(sobelx, sobely)
+            gradient = cv2.normalize(gradient, None, 0, 255, cv2.NORM_MINMAX)
+            
+            # 根据强度叠加边缘
+            weight = strength / 100.0
+            result = cv2.addWeighted(img, 1.0, gradient, weight, 0)
+            return result
+        
+        elif mode == 3:  # 轮廓保留（形态学梯度）
+            # 计算核大小
+            kernel_size = max(3, int(strength / 20) * 2 + 1)
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+            
+            # 形态学梯度 = 膨胀 - 腐蚀
+            gradient = cv2.morphologyEx(img_uint8, cv2.MORPH_GRADIENT, kernel)
+            
+            # 叠加到原图
+            weight = min(1.0, strength / 50.0)
+            result = cv2.addWeighted(img, 1.0, gradient.astype(np.float32), weight, 0)
+            return result
+        
+        return img
+
 
 class BinarizationEngine:
     """
@@ -172,6 +239,95 @@ class BinarizationEngine:
         return image
     
     @staticmethod
+    def apply_floyd_steinberg(image: np.ndarray, strength: float = 1.0) -> np.ndarray:
+        """
+        Floyd-Steinberg 抖动算法
+        
+        经典的误差扩散算法，保留灰度细节。
+        
+        Args:
+            image: 输入灰度图
+            strength: 抖动强度 (0.0-1.0)，默认 1.0
+        
+        Returns:
+            二值化图片
+        """
+        # 确保是灰度图
+        img = BinarizationEngine.convert_to_grayscale(image)
+        img = img.astype(np.float64)
+        
+        # 使用 Cython 加速版本
+        img = floyd_steinberg(img, strength)
+        
+        return np.clip(img, 0, 255).astype(np.uint8)
+    
+    @staticmethod
+    def apply_ordered_dithering(image: np.ndarray, matrix_size: int = 8) -> np.ndarray:
+        """
+        Ordered Dithering (有序抖动)
+        
+        使用 Bayer 矩阵产生网点效果，适合打印。
+        
+        Args:
+            image: 输入灰度图
+            matrix_size: Bayer 矩阵大小 (2, 4, 8, 16)
+        
+        Returns:
+            二值化图片
+        """
+        # 确保是灰度图
+        img = BinarizationEngine.convert_to_grayscale(image)
+        
+        # 生成 Bayer 矩阵
+        def generate_bayer_matrix(n):
+            """递归生成 Bayer 矩阵"""
+            if n == 1:
+                return np.array([[0]])
+            else:
+                smaller = generate_bayer_matrix(n // 2)
+                return np.block([
+                    [4 * smaller + 0, 4 * smaller + 2],
+                    [4 * smaller + 3, 4 * smaller + 1]
+                ])
+        
+        # 确保 matrix_size 是 2 的幂
+        matrix_size = max(2, min(16, matrix_size))
+        if matrix_size not in [2, 4, 8, 16]:
+            matrix_size = 8
+        
+        bayer_matrix = generate_bayer_matrix(matrix_size)
+        threshold_map = (bayer_matrix / (matrix_size * matrix_size)) * 255
+        
+        # 使用 Cython 加速版本
+        result = ordered_dithering(img, threshold_map.astype(np.float64), matrix_size)
+        
+        return result
+    
+    @staticmethod
+    def apply_atkinson(image: np.ndarray, strength: float = 1.0) -> np.ndarray:
+        """
+        Atkinson 抖动算法
+        
+        Mac 风格的误差扩散，产生艺术效果。
+        误差扩散更轻，保留更多高光。
+        
+        Args:
+            image: 输入灰度图
+            strength: 抖动强度 (0.0-1.0)，默认 1.0
+        
+        Returns:
+            二值化图片
+        """
+        # 确保是灰度图
+        img = BinarizationEngine.convert_to_grayscale(image)
+        img = img.astype(np.float64)
+        
+        # 使用 Cython 加速版本
+        img = atkinson(img, strength)
+        
+        return np.clip(img, 0, 255).astype(np.uint8)
+    
+    @staticmethod
     def apply_preprocess(img: np.ndarray, **kwargs) -> np.ndarray:
         """
         图像预处理
@@ -191,6 +347,9 @@ class BinarizationEngine:
                 - local_contrast: 局部对比度 (0 到 100)
                 - detail_enhance: 细节增强 (0 到 100)
                 - edge_enhance: 边缘增强 (0 到 100)
+                - edge_mode: 边缘检测模式 (0-3)
+                - edge_strength: 边缘检测强度 (0 到 100)
+                - edge_threshold: Canny 高阈值 (0 到 255)
         
         Returns:
             预处理后的图像
@@ -254,6 +413,14 @@ class BinarizationEngine:
             gamma=kwargs.get('gamma', 1.0)
         )
         
+        # 边缘检测
+        img = enhancer.apply_edge_detection(
+            img,
+            mode=kwargs.get('edge_mode', 0),
+            strength=kwargs.get('edge_strength', 50),
+            threshold2=kwargs.get('edge_threshold', 150)
+        )
+        
         # 锐化
         img = enhancer.apply_sharpening(
             img,
@@ -266,7 +433,7 @@ class BinarizationEngine:
     
     @staticmethod
     def apply_threshold(image: np.ndarray, threshold_method: int = 1, 
-                       threshold_value: int = 150) -> np.ndarray:
+                       threshold_value: int = 150, **kwargs) -> np.ndarray:
         """
         应用阈值处理（支持多种方法）
         
@@ -280,7 +447,20 @@ class BinarizationEngine:
                 4 - Wolf 阈值
                 5 - Nick 阈值
                 6 - Bernsen 阈值
+                7 - Floyd-Steinberg 抖动
+                8 - Ordered 抖动
+                9 - Atkinson 抖动
             threshold_value: 阈值参数（用于固定阈值和自适应阈值的 C 参数）
+            **kwargs: 额外参数
+                - block_size: 自适应阈值的块大小 (3-51奇数，默认自动计算)
+                - window_size: Sauvola/Wolf/Nick/Bernsen的窗口大小 (3-51奇数，默认自动计算)
+                - sauvola_k: Sauvola的k参数 (0.0-1.0，默认0.2)
+                - sauvola_r: Sauvola的R参数 (0-255，默认128)
+                - wolf_k: Wolf的k参数 (0.0-1.0，默认0.5)
+                - nick_k: Nick的k参数 (-1.0-0.0，默认-0.1)
+                - bernsen_contrast: Bernsen的对比度阈值 (0-255，默认15)
+                - dither_strength: 抖动强度 (0.0-1.0，默认1.0)
+                - dither_matrix_size: Ordered抖动的矩阵大小 (2/4/8/16，默认8)
         
         Returns:
             二值化图片
@@ -288,15 +468,31 @@ class BinarizationEngine:
         # 确保是灰度图
         img = BinarizationEngine.convert_to_grayscale(image)
         
+        # 抖动算法 (7-9)
+        if threshold_method == 7:  # Floyd-Steinberg 抖动
+            strength = kwargs.get('dither_strength', 100) / 100.0
+            return BinarizationEngine.apply_floyd_steinberg(img, strength)
+        
+        elif threshold_method == 8:  # Ordered 抖动
+            matrix_size = kwargs.get('dither_matrix_size', 8)
+            return BinarizationEngine.apply_ordered_dithering(img, matrix_size)
+        
+        elif threshold_method == 9:  # Atkinson 抖动
+            strength = kwargs.get('dither_strength', 100) / 100.0
+            return BinarizationEngine.apply_atkinson(img, strength)
+        
+        # 传统二值化方法 (0-6)
         if threshold_method == 0:  # 固定阈值
             return cv2.threshold(img, threshold_value, 255, cv2.THRESH_BINARY)[1]
         
         elif threshold_method == 1:  # 自适应阈值
-            # 计算合适的块大小
-            block_size = min(img.shape) // 8
-            if block_size % 2 == 0:
-                block_size += 1
-            block_size = max(3, min(block_size, 51))
+            # 获取块大小参数，如果未指定则自动计算
+            block_size = kwargs.get('block_size', None)
+            if block_size is None or block_size == 0:
+                block_size = min(img.shape) // 8
+                if block_size % 2 == 0:
+                    block_size += 1
+                block_size = max(3, min(block_size, 51))
             
             # 优化自适应阈值参数
             C = max(0, threshold_value / 10 - 10)
@@ -310,38 +506,42 @@ class BinarizationEngine:
                                cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
         
         elif threshold_method == 3:  # Sauvola阈值
-            # 计算窗口大小
-            window = min(img.shape) // 8
-            if window % 2 == 0:
-                window += 1
-            window = max(3, min(window, 51))
+            # 获取窗口大小参数，如果未指定则自动计算
+            window = kwargs.get('window_size', None)
+            if window is None or window == 0:
+                window = min(img.shape) // 8
+                if window % 2 == 0:
+                    window += 1
+                window = max(3, min(window, 51))
             
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
             mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
             std = np.sqrt(mean_square - mean**2)
             
-            # Sauvola参数
-            k = 0.2
-            R = 128
+            # Sauvola参数（可自定义）
+            k = kwargs.get('sauvola_k', 0.2)
+            R = kwargs.get('sauvola_r', 128)
             threshold = mean * (1 + k * ((std / R) - 1))
             
             return np.where(img >= threshold, 255, 0).astype(np.uint8)
         
         elif threshold_method == 4:  # Wolf阈值
-            # 计算窗口大小
-            window = min(img.shape) // 8
-            if window % 2 == 0:
-                window += 1
-            window = max(3, min(window, 51))
+            # 获取窗口大小参数，如果未指定则自动计算
+            window = kwargs.get('window_size', None)
+            if window is None or window == 0:
+                window = min(img.shape) // 8
+                if window % 2 == 0:
+                    window += 1
+                window = max(3, min(window, 51))
             
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
             mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
             std = np.sqrt(mean_square - mean**2)
             
-            # Wolf参数
-            k = 0.5
+            # Wolf参数（可自定义）
+            k = kwargs.get('wolf_k', 0.5)
             R = 128
             min_std = 2
             threshold = mean - k * std * (1 - std/(R * np.clip(std, min_std, None)))
@@ -349,37 +549,41 @@ class BinarizationEngine:
             return np.where(img >= threshold, 255, 0).astype(np.uint8)
         
         elif threshold_method == 5:  # Nick阈值
-            # 计算窗口大小
-            window = min(img.shape) // 8
-            if window % 2 == 0:
-                window += 1
-            window = max(3, min(window, 51))
+            # 获取窗口大小参数，如果未指定则自动计算
+            window = kwargs.get('window_size', None)
+            if window is None or window == 0:
+                window = min(img.shape) // 8
+                if window % 2 == 0:
+                    window += 1
+                window = max(3, min(window, 51))
             
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
             mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
             std = np.sqrt(mean_square - mean**2)
             
-            # Nick参数
-            k = -0.1
+            # Nick参数（可自定义）
+            k = kwargs.get('nick_k', -0.1)
             threshold = mean + k * std
             
             return np.where(img >= threshold, 255, 0).astype(np.uint8)
         
         elif threshold_method == 6:  # Bernsen阈值
-            # 计算窗口大小
-            window = min(img.shape) // 8
-            if window % 2 == 0:
-                window += 1
-            window = max(3, min(window, 51))
+            # 获取窗口大小参数，如果未指定则自动计算
+            window = kwargs.get('window_size', None)
+            if window is None or window == 0:
+                window = min(img.shape) // 8
+                if window % 2 == 0:
+                    window += 1
+                window = max(3, min(window, 51))
             
             # 计算局部最大值和最小值
             kernel = np.ones((window, window), np.uint8)
             local_max = cv2.dilate(img, kernel)
             local_min = cv2.erode(img, kernel)
             
-            # Bernsen参数
-            contrast_threshold = 15
+            # Bernsen参数（可自定义）
+            contrast_threshold = kwargs.get('bernsen_contrast', 15)
             local_contrast = local_max - local_min
             local_mean = (local_max + local_min) / 2
             

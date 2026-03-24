@@ -138,13 +138,6 @@ class RectSelector:
         painter.setBrush(Qt.NoBrush)
         painter.drawRect(QRectF(x_min, y_min, width, height))
         
-        # 绘制黑色边框（增强可见性）
-        pen.setColor(Qt.black)
-        pen.setWidth(1)
-        pen.setStyle(Qt.SolidLine)
-        painter.setPen(pen)
-        painter.drawRect(QRectF(x_min - 1, y_min - 1, width + 2, height + 2))
-        
         # 绘制调整手柄（四个角）
         if show_handles:
             handle_size = 8

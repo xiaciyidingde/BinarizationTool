@@ -431,6 +431,30 @@ class SelectionTool:
             crosshair_threshold=self.crosshair_threshold
         )
     
+    def render_rect_cursor(self, painter: 'QPainter', view_x: float, view_y: float):
+        """
+        渲染矩形框选模式下的十字光标
+        
+        Args:
+            painter: Qt QPainter 对象
+            view_x: 光标中心 X 坐标（视图坐标）
+            view_y: 光标中心 Y 坐标（视图坐标）
+        """
+        from PySide6.QtGui import QColor
+        
+        # 根据模式选择十字颜色
+        if self.selection_mode == 'add':
+            crosshair_color = QColor(0, 255, 0)  # 绿色 - 添加
+        else:
+            crosshair_color = QColor(255, 0, 0)  # 红色 - 删除
+        
+        # 使用 CursorRenderer 渲染十字光标
+        CursorRenderer.render_crosshair_cursor(
+            painter, view_x, view_y,
+            color=crosshair_color,
+            size=20
+        )
+    
     def render_rect_select_overlay(self, painter: 'QPainter', view_transform):
         """
         渲染矩形框选覆盖层
@@ -441,11 +465,11 @@ class SelectionTool:
         """
         from PySide6.QtGui import QColor
         
-        # 根据模式选择颜色
+        # 框线颜色根据模式改变
         if self.selection_mode == 'add':
             border_color = QColor(0, 255, 0)  # 绿色 - 添加
         else:
-            border_color = QColor(255, 0, 0)  # 红色 - 减去
+            border_color = QColor(255, 0, 0)  # 红色 - 删除
         
         # 使用 RectSelector 渲染覆盖层
         self.rect_selector.render_overlay(

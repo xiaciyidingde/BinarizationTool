@@ -49,7 +49,7 @@ class MainWindow(QMainWindow):
         
         # 异步二值化
         self.binarization_worker: Optional[BinarizationWorker] = None
-        self.pending_binarization_params: Optional[tuple] = None  # (preprocess_params, method, threshold)
+        self.pending_binarization_params: Optional[tuple] = None  # (preprocess_params, method, threshold, method_params)
         self.binarization_debounce_timer = QTimer()
         self.binarization_debounce_timer.setSingleShot(True)
         self.binarization_debounce_timer.timeout.connect(self._start_binarization)
@@ -200,6 +200,7 @@ class MainWindow(QMainWindow):
         self.crop_action.setCheckable(True)
         self.crop_action.setToolTip("裁剪工具 (C)")
         self.crop_action.triggered.connect(self._select_crop_tool)
+        self.addAction(self.crop_action)  # 添加到主窗口以启用快捷键
         
         # 选择工具动作
         self.selection_tool_action = QAction("选择工具", self)
@@ -506,6 +507,7 @@ class MainWindow(QMainWindow):
             preprocess_params = self.binarization_panel.get_preprocess_params()
             method = self.binarization_panel.get_method()
             threshold = self.binarization_panel.get_threshold()
+            method_params = self.binarization_panel.get_method_params()
             
             # 预处理
             preprocessed = BinarizationEngine.apply_preprocess(
@@ -515,7 +517,7 @@ class MainWindow(QMainWindow):
             
             # 二值化
             binary_pixels = BinarizationEngine.apply_threshold(
-                preprocessed, method, threshold
+                preprocessed, method, threshold, **method_params
             )
             
             self.image_data.pixels = binary_pixels
@@ -723,8 +725,11 @@ class MainWindow(QMainWindow):
             # 二值化模式：使缓存失效并重新计算二值化结果
             self.image_data.invalidate_preprocessed_cache()
             
+            # 获取方法特定参数
+            method_params = self.binarization_panel.get_method_params()
+            
             # 保存待处理的参数
-            self.pending_binarization_params = (preprocess_params, method, threshold)
+            self.pending_binarization_params = (preprocess_params, method, threshold, method_params)
             
             # 重启防抖定时器（150ms 延迟，避免频繁触发）
             self.binarization_debounce_timer.start(150)
@@ -743,25 +748,32 @@ class MainWindow(QMainWindow):
             self.binarization_worker.wait()
         
         # 获取参数
-        preprocess_params, method, threshold = self.pending_binarization_params
+        preprocess_params, method, threshold, method_params = self.pending_binarization_params
         
         # 创建新的工作线程
         self.binarization_worker = BinarizationWorker(
             self.image_data.original_pixels,
             preprocess_params,
             method,
-            threshold
+            threshold,
+            method_params
         )
         
         # 连接信号
         self.binarization_worker.finished.connect(self._on_binarization_finished)
         self.binarization_worker.error.connect(self._on_binarization_error)
         
+        # 设置画布处理状态
+        self.canvas.set_processing(True)
+        
         # 启动线程
         self.binarization_worker.start()
     
     def _on_binarization_finished(self, binary_pixels):
         """二值化完成"""
+        # 清除画布处理状态
+        self.canvas.set_processing(False)
+        
         if self.image_data is None:
             return
         
@@ -779,6 +791,9 @@ class MainWindow(QMainWindow):
     
     def _on_binarization_error(self, error_message: str):
         """二值化出错"""
+        # 清除画布处理状态
+        self.canvas.set_processing(False)
+        
         QMessageBox.warning(self, "警告", f"图像处理失败:\n{error_message}")
         self.statusbar.showMessage("处理失败")
     
@@ -950,12 +965,12 @@ class MainWindow(QMainWindow):
         is_rect_mode = (button_id == 1)  # 0=涂抹, 1=框选
         self.canvas.selection_tool.rect_select_mode = is_rect_mode
         
-        # 更新光标
+        # 更新光标（无论哪种模式都隐藏系统光标，显示自定义光标）
+        self.canvas.setCursor(Qt.BlankCursor)
+        
         if is_rect_mode:
-            self.canvas.setCursor(Qt.CrossCursor)
             self.statusbar.showMessage("矩形框选模式已启用")
         else:
-            self.canvas.setCursor(Qt.BlankCursor)
             self.statusbar.showMessage("涂抹选择模式已启用")
         
         self.canvas.update()

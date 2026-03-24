@@ -80,6 +80,9 @@ class Canvas(QWidget):
         # 画笔绘制优化：记录已光栅化的点数
         self.rasterized_point_count = 0
         
+        # 处理状态
+        self.is_processing = False
+        
         # 设置
         self.setMouseTracking(True)  # 启用鼠标跟踪
         self.setFocusPolicy(Qt.StrongFocus)  # 接收键盘事件
@@ -121,20 +124,25 @@ class Canvas(QWidget):
             # 画笔工具：隐藏系统光标
             self.setCursor(Qt.BlankCursor)
         elif isinstance(tool, CropTool):
-            # 裁剪工具：十字光标
-            self.setCursor(Qt.CrossCursor)
+            # 裁剪工具：隐藏系统光标（显示自定义红色十字）
+            self.setCursor(Qt.BlankCursor)
         elif isinstance(tool, SelectionTool):
-            # 选择工具：根据模式设置光标
-            if tool.rect_select_mode:
-                # 矩形框选模式：十字光标
-                self.setCursor(Qt.CrossCursor)
-            else:
-                # 拖动选择模式：隐藏系统光标（显示自定义圆圈光标）
-                self.setCursor(Qt.BlankCursor)
+            # 选择工具：隐藏系统光标（无论哪种模式都显示自定义光标）
+            self.setCursor(Qt.BlankCursor)
         else:
             # 其他工具或无工具：恢复默认光标
             self.setCursor(Qt.ArrowCursor)
         
+        self.update()
+    
+    def set_processing(self, is_processing: bool):
+        """
+        设置处理状态
+        
+        Args:
+            is_processing: 是否正在处理
+        """
+        self.is_processing = is_processing
         self.update()
     
     def paintEvent(self, event: QPaintEvent):
@@ -158,10 +166,24 @@ class Canvas(QWidget):
         # 渲染工具覆盖层
         if isinstance(self.current_tool, CropTool):
             self.current_tool.render_overlay(painter, self.view_transform)
+            # 渲染裁剪工具的红色十字光标
+            if self.mouse_pos is not None:
+                self.current_tool.render_cursor(
+                    painter,
+                    self.mouse_pos.x(),
+                    self.mouse_pos.y()
+                )
         
-        # 渲染选择工具的矩形框选覆盖层
+        # 渲染选择工具的矩形框选覆盖层和十字光标
         if isinstance(self.current_tool, SelectionTool) and self.current_tool.rect_select_mode:
             self.current_tool.render_rect_select_overlay(painter, self.view_transform)
+            # 在矩形框选模式下显示十字光标
+            if self.mouse_pos is not None:
+                self.current_tool.render_rect_cursor(
+                    painter,
+                    self.mouse_pos.x(),
+                    self.mouse_pos.y()
+                )
         
         # 渲染画笔光标
         if isinstance(self.current_tool, BrushTool) and self.mouse_pos is not None:
@@ -182,6 +204,56 @@ class Canvas(QWidget):
                 self.mouse_pos.y(),
                 view_size
             )
+        
+        # 渲染处理中提示
+        if self.is_processing:
+            self._render_processing_indicator(painter)
+    
+    def _render_processing_indicator(self, painter: QPainter):
+        """
+        渲染处理中提示
+        
+        在画布顶部居中显示小巧的"处理中"提示。
+        """
+        # 设置字体（小号）
+        font = painter.font()
+        font.setPointSize(10)
+        painter.setFont(font)
+        
+        # 文本内容
+        text = "处理中..."
+        
+        # 计算文本尺寸
+        metrics = painter.fontMetrics()
+        text_width = metrics.horizontalAdvance(text)
+        text_height = metrics.height()
+        
+        # 计算位置（顶部居中，距离顶部 20px）
+        padding = 8
+        box_width = text_width + padding * 2
+        box_height = text_height + padding * 2
+        box_x = (self.width() - box_width) / 2
+        box_y = 20
+        
+        # 绘制半透明背景
+        from PySide6.QtGui import QColor
+        painter.save()
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(255, 255, 255, 230))  # 白色半透明
+        painter.drawRoundedRect(int(box_x), int(box_y), int(box_width), int(box_height), 4, 4)
+        
+        # 绘制边框
+        painter.setPen(QColor(200, 200, 200))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(int(box_x), int(box_y), int(box_width), int(box_height), 4, 4)
+        
+        # 绘制文本
+        painter.setPen(QColor(100, 100, 100))  # 深灰色文字
+        text_x = box_x + padding
+        text_y = box_y + padding + metrics.ascent()
+        painter.drawText(int(text_x), int(text_y), text)
+        
+        painter.restore()
     
     def mousePressEvent(self, event: QMouseEvent):
         """鼠标按下事件"""
@@ -237,6 +309,7 @@ class Canvas(QWidget):
             # 中键平移
             self.is_panning = True
             self.pan_start_pos = event.pos()
+            self.setCursor(Qt.ClosedHandCursor)  # 设置为抓取光标
     
     def mouseMoveEvent(self, event: QMouseEvent):
         """鼠标移动事件"""
@@ -343,6 +416,12 @@ class Canvas(QWidget):
                 if self.pending_pan_update:
                     self.pending_pan_update = False
                     self.update()
+                
+                # 恢复工具光标
+                if self.current_tool is not None:
+                    self.set_tool(self.current_tool)
+                else:
+                    self.setCursor(Qt.ArrowCursor)
             
             elif self.image_data is not None and self.current_tool is not None:
                 if isinstance(self.current_tool, BrushTool) and self.current_tool.is_drawing:
@@ -437,6 +516,12 @@ class Canvas(QWidget):
             if self.pending_pan_update:
                 self.pending_pan_update = False
                 self.update()
+            
+            # 恢复工具光标
+            if self.current_tool is not None:
+                self.set_tool(self.current_tool)
+            else:
+                self.setCursor(Qt.ArrowCursor)
     
     def _do_pan_update(self):
         """节流定时器回调：执行延迟的平移更新"""
