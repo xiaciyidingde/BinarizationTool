@@ -25,6 +25,7 @@ from ..utils.file_io import load_image, save_image
 from ..utils.binarization_engine import BinarizationEngine
 from ..utils.binarization_worker import BinarizationWorker
 from ..utils.theme_manager import ThemeManager
+from ..utils.config_manager import get_config_manager
 
 
 class MainWindow(QMainWindow):
@@ -37,6 +38,9 @@ class MainWindow(QMainWindow):
     def __init__(self):
         """初始化主窗口"""
         super().__init__()
+        
+        # 配置管理器
+        self.config_manager = get_config_manager()
         
         # 主题管理器
         self.theme_manager = ThemeManager()
@@ -54,6 +58,10 @@ class MainWindow(QMainWindow):
         self.binarization_debounce_timer.setSingleShot(True)
         self.binarization_debounce_timer.timeout.connect(self._start_binarization)
         
+        # 从配置加载防抖延迟
+        debounce_delay = self.config_manager.get('performance', 'debounce_delay', 150)
+        self.binarization_debounce_timer.setInterval(debounce_delay)
+        
         # 设置窗口
         self.setWindowTitle("BinarizationTool - 二值化图片编辑器")
         self.setGeometry(100, 100, 1550, 800)  # 宽度从 1450 增加到 1550
@@ -66,6 +74,9 @@ class MainWindow(QMainWindow):
         
         # 连接信号
         self.connect_signals()
+        
+        # 应用配置
+        self.apply_config()
         
         # 初始状态
         self._update_ui_state()
@@ -1105,26 +1116,49 @@ class MainWindow(QMainWindow):
 
     def _show_settings(self):
         """显示设置对话框"""
-        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QDialogButtonBox
+        from src.views.settings_dialog import SettingsDialog
         
-        dialog = QDialog(self)
-        dialog.setWindowTitle("设置")
-        dialog.setMinimumWidth(400)
-        dialog.setMinimumHeight(300)
+        dialog = SettingsDialog(self)
+        if dialog.exec():
+            # 设置已保存，立即应用新配置
+            self.apply_config()
+            self.statusbar.showMessage("设置已应用", 3000)
+    
+    def apply_config(self):
+        """应用配置到各个组件"""
+        config = self.config_manager
         
-        layout = QVBoxLayout(dialog)
+        # 1. 编辑器设置
+        # 画笔默认大小
+        default_brush_size = config.get('editor', 'default_brush_size', 20)
+        self.canvas.brush_tool.size = default_brush_size
+        # 更新属性面板 UI
+        self.properties_panel.brush_size_spinbox.setValue(default_brush_size)
         
-        # 设置内容（暂时显示占位文本）
-        label = QLabel("设置功能开发中...")
-        label.setStyleSheet("padding: 20px; font-size: 14px; color: #6c757d;")
-        layout.addWidget(label)
+        # 选择工具默认大小
+        default_selection_size = config.get('editor', 'default_selection_size', 50)
+        self.canvas.selection_tool.size = default_selection_size
+        # 更新属性面板 UI
+        self.properties_panel.selection_size_spinbox.setValue(default_selection_size)
         
-        # 按钮
-        button_box = QDialogButtonBox(QDialogButtonBox.Ok)
-        button_box.accepted.connect(dialog.accept)
-        layout.addWidget(button_box)
+        # 撤销历史限制
+        undo_limit = config.get('editor', 'undo_history_limit', 50)
+        self.history_manager.max_history = undo_limit
         
-        dialog.exec()
+        # 2. 性能设置
+        # Tile 缓存大小
+        tile_cache_size = config.get('performance', 'tile_cache_size', 1000)
+        self.canvas.tile_cache.max_tiles = tile_cache_size
+        
+        # 二值化防抖延迟
+        debounce_delay = config.get('performance', 'debounce_delay', 150)
+        self.binarization_debounce_timer.setInterval(debounce_delay)
+        
+        # 3. 文件设置（暂时不需要应用，在保存时使用）
+        
+        # 刷新画布以应用新设置
+        if self.image_data is not None:
+            self.canvas.update()
     
     def _show_about(self):
         """显示关于对话框"""

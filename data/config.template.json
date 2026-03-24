@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "general": {
+    "language": "zh_CN"
+  },
+  "interface": {
+    "theme": "light",
+    "window_geometry": {
+      "width": 1550,
+      "height": 900,
+      "x": 100,
+      "y": 100,
+      "maximized": false
+    }
+  },
+  "editor": {
+    "default_brush_size": 20,
+    "default_selection_size": 50,
+    "undo_history_limit": 50,
+    "canvas_background": "white"
+  },
+  "performance": {
+    "tile_cache_size": 1000,
+    "debounce_delay": 150,
+    "hardware_acceleration": true,
+    "max_image_size": 20000
+  },
+  "file": {
+    "default_save_format": "follow_original",
+    "filename_format": "timestamp",
+    "custom_prefix": "",
+    "custom_suffix": "",
+    "recent_files": [],
+    "last_open_directory": "",
+    "last_save_directory": ""
+  }
+}

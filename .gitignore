@@ -40,4 +40,7 @@ main.build/
 main.dist/
 BinarizationToolv*/
 
+# Data
+data/config.json
+
 *.bmp
