@@ -218,20 +218,20 @@ QRadioButton {
 }
 
 QRadioButton::indicator {
-    width: 16px;
-    height: 16px;
+    width: 8px;
+    height: 8px;
 }
 
 QRadioButton::indicator:unchecked {
     border: 2px solid #ced4da;
     background-color: white;
-    border-radius: 8px;
+    border-radius: 6px;
 }
 
 QRadioButton::indicator:checked {
     border: 2px solid #007bff;
     background-color: #007bff;
-    border-radius: 8px;
+    border-radius: 6px;
 }
 
 /* ========== 下拉框样式 ========== */
