@@ -38,6 +38,11 @@ class MainWindow(QMainWindow):
     管理应用程序的整体布局和功能集成。
     """
     
+    # 布局常量
+    LEFT_PANEL_WIDTH = 300  # 左侧二值化面板宽度
+    RIGHT_PANEL_WIDTH = 250  # 右侧属性面板宽度
+    CANVAS_MIN_WIDTH = 400  # 画布最小宽度
+    
     def __init__(self):
         """初始化主窗口"""
         super().__init__()
@@ -117,9 +122,9 @@ class MainWindow(QMainWindow):
         main_splitter.setChildrenCollapsible(False)  # 禁止折叠
         
         # 左侧：二值化面板
-        self.binarization_panel = BinarizationPanel()
-        self.binarization_panel.setMinimumWidth(280)
-        self.binarization_panel.setMaximumWidth(380)
+        self.binarization_panel = BinarizationPanel(panel_width=self.LEFT_PANEL_WIDTH)
+        self.binarization_panel.setMinimumWidth(self.LEFT_PANEL_WIDTH)
+        self.binarization_panel.setMaximumWidth(self.LEFT_PANEL_WIDTH)
         main_splitter.addWidget(self.binarization_panel)
         
         # 中右部分：Canvas + 属性面板
@@ -129,16 +134,16 @@ class MainWindow(QMainWindow):
         
         # 中间：Canvas
         self.canvas = Canvas()
-        self.canvas.setMinimumWidth(400)  # 确保画布有最小宽度
+        self.canvas.setMinimumWidth(self.CANVAS_MIN_WIDTH)
         center_right_splitter.addWidget(self.canvas)
         
         # 右侧：属性面板
+        # 右侧：属性面板
         from .properties_panel import PropertiesPanel
         self.properties_panel = PropertiesPanel()
-        self.properties_panel.setMinimumWidth(200)
-        self.properties_panel.setMaximumWidth(300)
+        self.properties_panel.setMinimumWidth(self.RIGHT_PANEL_WIDTH)
+        self.properties_panel.setMaximumWidth(self.RIGHT_PANEL_WIDTH)
         center_right_splitter.addWidget(self.properties_panel)
-        
         # 设置中右分割器比例（重要：让画布优先占用空间）
         center_right_splitter.setStretchFactor(0, 3)  # Canvas 高优先级伸缩
         center_right_splitter.setStretchFactor(1, 0)  # 属性面板固定
@@ -149,8 +154,8 @@ class MainWindow(QMainWindow):
         main_splitter.setStretchFactor(0, 0)  # 左侧面板固定
         main_splitter.setStretchFactor(1, 4)  # 中右部分高优先级伸缩
         
-        # 设置初始大小比例（左侧面板:中右部分 = 320:剩余空间）
-        main_splitter.setSizes([320, 1000])
+        # 设置初始大小比例
+        main_splitter.setSizes([self.LEFT_PANEL_WIDTH, 1000])
         
         # 禁用左侧面板的拖动（通过设置固定宽度已经实现）
         main_splitter.handle(1).setEnabled(False)  # 禁用第一个分隔条

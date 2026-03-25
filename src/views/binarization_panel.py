@@ -25,17 +25,23 @@ class BinarizationPanel(QWidget):
     # 信号：视图模式改变 (mode: 'original', 'preprocessed', 'binary')
     view_mode_changed = Signal(str)
     
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, panel_width=300):
         """
         初始化二值化面板
         
         Args:
             parent: 父窗口部件
+            panel_width: 面板宽度，用于动态调整内部组件宽度
         """
         super().__init__(parent)
         
         # 获取翻译器
         self.tr = get_translator()
+        
+        # 保存面板宽度
+        self.panel_width = panel_width
+        # 计算 QGroupBox 的最大宽度（面板宽度 - 左右边距）
+        self.group_max_width = panel_width - 24  # 减去左右各12px的边距
         
         self.setup_ui()
         self.connect_signals()
@@ -50,7 +56,7 @@ class BinarizationPanel(QWidget):
         # 外层容器
         outer_container = QWidget()
         outer_layout = QVBoxLayout(outer_container)
-        outer_layout.setContentsMargins(6, 6, 6, 6)
+        outer_layout.setContentsMargins(0, 6, 0, 6)  # 左右边距改为0
         outer_layout.setSpacing(8)
         
         # === 视图模式切换器区域（独立白色背景） ===
@@ -63,7 +69,7 @@ class BinarizationPanel(QWidget):
             }
         """)
         view_mode_layout = QVBoxLayout(view_mode_container)
-        view_mode_layout.setContentsMargins(8, 8, 8, 8)
+        view_mode_layout.setContentsMargins(12, 8, 12, 8)  # 左右边距12px
         view_mode_layout.setSpacing(0)
         
         self.view_mode_switcher = ViewModeSwitcher()
@@ -81,11 +87,12 @@ class BinarizationPanel(QWidget):
             }
         """)
         settings_layout = QVBoxLayout(settings_container)
-        settings_layout.setContentsMargins(8, 8, 8, 8)
+        settings_layout.setContentsMargins(12, 8, 12, 8)  # 左右边距12px
         settings_layout.setSpacing(8)
         
         # === 预处理参数 ===
         preprocess_group = QGroupBox(self.tr.tr('binarization_panel.preprocess'))
+        preprocess_group.setMaximumWidth(self.group_max_width)
         preprocess_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -138,6 +145,7 @@ class BinarizationPanel(QWidget):
         
         # === RGB 通道调整 ===
         rgb_group = QGroupBox(self.tr.tr('binarization_panel.rgb_channels'))
+        rgb_group.setMaximumWidth(self.group_max_width)
         rgb_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -180,6 +188,7 @@ class BinarizationPanel(QWidget):
         
         # === 边缘检测 ===
         edge_group = QGroupBox(self.tr.tr('binarization_panel.edge_detection'))
+        edge_group.setMaximumWidth(self.group_max_width)
         edge_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -212,14 +221,15 @@ class BinarizationPanel(QWidget):
         edge_mode_row.addSpacing(25)
         
         self.edge_mode_combo = QComboBox()
-        self.edge_mode_combo.setFixedWidth(120)
+        self.edge_mode_combo.setFixedWidth(140)
         self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_off'), 0)
         self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_canny'), 1)
         self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_enhance'), 2)
         self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_contour'), 3)
         
         edge_mode_row.addWidget(self.edge_mode_combo)
-        edge_mode_row.addStretch()
+        edge_mode_row.addStretch()  # 添加弹性空间
+        
         edge_layout.addLayout(edge_mode_row)
         
         # 边缘强度
@@ -296,6 +306,7 @@ class BinarizationPanel(QWidget):
         
         # === 二值化方法 ===
         binarization_group = QGroupBox(self.tr.tr('binarization_panel.binarization'))
+        binarization_group.setMaximumWidth(self.group_max_width)
         binarization_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -328,7 +339,7 @@ class BinarizationPanel(QWidget):
         method_row.addSpacing(25)
         
         self.method_combo = QComboBox()
-        self.method_combo.setFixedWidth(120)
+        self.method_combo.setFixedWidth(130)
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_fixed'), 0)
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_adaptive'), 1)
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_otsu'), 2)
@@ -343,10 +354,8 @@ class BinarizationPanel(QWidget):
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_atkinson'), 9)
         self.method_combo.setCurrentIndex(1)  # 默认自适应阈值
         
-        method_row.addWidget(self.method_combo, 1)  # 让下拉框占据剩余空间
-        
-        # 添加占位空间（对齐重置按钮位置）
-        method_row.addSpacing(24)
+        method_row.addWidget(self.method_combo)
+        method_row.addStretch()  # 添加弹性空间
         
         binarization_layout.addLayout(method_row)
         
@@ -439,6 +448,7 @@ class BinarizationPanel(QWidget):
         
         # === 降噪功能 ===
         denoise_group = QGroupBox(self.tr.tr('binarization_panel.denoise'))
+        denoise_group.setMaximumWidth(self.group_max_width)
         denoise_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -471,7 +481,7 @@ class BinarizationPanel(QWidget):
         denoise_method_row.addSpacing(25)
         
         self.denoise_method_combo = QComboBox()
-        self.denoise_method_combo.setFixedWidth(120)
+        self.denoise_method_combo.setFixedWidth(130)
         self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_gaussian'), 0)
         self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_median'), 1)
         self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_bilateral'), 2)
@@ -480,7 +490,8 @@ class BinarizationPanel(QWidget):
         self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_morph_close'), 5)
         
         denoise_method_row.addWidget(self.denoise_method_combo)
-        denoise_method_row.addStretch()
+        denoise_method_row.addStretch()  # 添加弹性空间
+        
         denoise_layout.addLayout(denoise_method_row)
         
         # 降噪强度
