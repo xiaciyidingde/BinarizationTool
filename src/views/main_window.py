@@ -117,8 +117,8 @@ class MainWindow(QMainWindow):
         
         # 左侧：二值化面板
         self.binarization_panel = BinarizationPanel()
-        self.binarization_panel.setMaximumWidth(290)
-        self.binarization_panel.setMinimumWidth(290)
+        self.binarization_panel.setMaximumWidth(320)
+        self.binarization_panel.setMinimumWidth(320)
         main_splitter.addWidget(self.binarization_panel)
         
         # 中右部分：Canvas + 属性面板

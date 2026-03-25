@@ -147,7 +147,7 @@ properties_panel.*       # 属性面板
 "language": {
     "中文": "zh_CN",
     "English": "en_US",
-    "日本語": "ja_JP"  # 新增
+    "日本語": "ja_JP"
 }
 ```
 

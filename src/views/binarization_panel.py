@@ -5,9 +5,9 @@
 """
 
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                                QComboBox, QSlider, QGroupBox, QScrollArea, QCheckBox, QStyledItemDelegate)
+                                QComboBox, QSlider, QGroupBox, QScrollArea, QCheckBox, QStyledItemDelegate, QPushButton)
 from PySide6.QtCore import Qt, Signal, QSize
-from PySide6.QtGui import QPixmap, QIcon, QPainter
+from PySide6.QtGui import QPixmap, QIcon, QPainter, QImage
 from .view_mode_switcher import ViewModeSwitcher
 from ..utils.translation_manager import get_translator
 
@@ -108,28 +108,28 @@ class BinarizationPanel(QWidget):
         preprocess_layout = QVBoxLayout()
         preprocess_layout.setSpacing(6)
         
-        # 曝光度
-        self.exposure_slider = self._create_slider_with_label(
+        # 曝光度（带重置按钮）
+        self.exposure_slider = self._create_slider_with_reset(
             "exposure", -100, 100, 0, preprocess_layout
         )
         
         # 对比度
-        self.contrast_slider = self._create_slider_with_label(
+        self.contrast_slider = self._create_slider_with_reset(
             "contrast", -100, 100, 0, preprocess_layout
         )
         
         # 锐化
-        self.sharpen_slider = self._create_slider_with_label(
+        self.sharpen_slider = self._create_slider_with_reset(
             "sharpness", 0, 100, 0, preprocess_layout
         )
         
         # 伽马
-        self.gamma_slider = self._create_slider_with_label(
+        self.gamma_slider = self._create_slider_with_reset(
             "gamma", 10, 300, 100, preprocess_layout, scale=0.01
         )
         
         # 平滑
-        self.smooth_slider = self._create_slider_with_label(
+        self.smooth_slider = self._create_slider_with_reset(
             "smooth", 0, 100, 0, preprocess_layout
         )
         
@@ -161,17 +161,17 @@ class BinarizationPanel(QWidget):
         rgb_layout.setSpacing(6)
         
         # 红色通道
-        self.red_channel_slider = self._create_slider_with_label(
+        self.red_channel_slider = self._create_slider_with_reset(
             "red_channel", -100, 100, 0, rgb_layout
         )
         
         # 绿色通道
-        self.green_channel_slider = self._create_slider_with_label(
+        self.green_channel_slider = self._create_slider_with_reset(
             "green_channel", -100, 100, 0, rgb_layout
         )
         
         # 蓝色通道
-        self.blue_channel_slider = self._create_slider_with_label(
+        self.blue_channel_slider = self._create_slider_with_reset(
             "blue_channel", -100, 100, 0, rgb_layout
         )
         
@@ -223,12 +223,13 @@ class BinarizationPanel(QWidget):
         edge_layout.addLayout(edge_mode_row)
         
         # 边缘强度
-        self.edge_strength_slider = self._create_slider_with_label(
+        self.edge_strength_slider = self._create_slider_with_reset(
             "edge_strength", 0, 100, 50, edge_layout
         )
         
         # 边缘阈值（仅 Canny 模式显示）- 手动创建以便隐藏整行
         self.edge_threshold_row = QHBoxLayout()
+        self.edge_threshold_row.setContentsMargins(0, 0, 0, 0)
         
         # 提取标签文本（移除占位符）
         full_text = self.tr.tr('binarization_panel.edge_threshold', value='')
@@ -254,6 +255,29 @@ class BinarizationPanel(QWidget):
             lambda v: self.edge_threshold_value_label.setText(str(v))
         )
         self.edge_threshold_row.addWidget(self.edge_threshold_slider, 1)
+        
+        # 重置按钮
+        from ..utils.resources import REFRESH
+        edge_threshold_reset_btn = QPushButton()
+        edge_threshold_reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
+        edge_threshold_reset_btn.setFixedSize(24, 24)
+        edge_threshold_reset_btn.setToolTip("重置为默认值")
+        edge_threshold_reset_btn.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background-color: transparent;
+                padding: 2px;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+                border-radius: 4px;
+            }
+            QPushButton:pressed {
+                background-color: #d0d0d0;
+            }
+        """)
+        edge_threshold_reset_btn.clicked.connect(lambda: self.edge_threshold_slider.setValue(150))
+        self.edge_threshold_row.addWidget(edge_threshold_reset_btn)
         
         # 创建一个容器 widget 来包装边缘阈值行，方便隐藏
         self.edge_threshold_container = QWidget()
@@ -312,12 +336,16 @@ class BinarizationPanel(QWidget):
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_atkinson'), 9)
         self.method_combo.setCurrentIndex(1)  # 默认自适应阈值
         
-        method_row.addWidget(self.method_combo)
-        method_row.addStretch()
+        method_row.addWidget(self.method_combo, 1)  # 让下拉框占据剩余空间
+        
+        # 添加占位空间（对齐重置按钮位置）
+        method_row.addSpacing(24)
+        
         binarization_layout.addLayout(method_row)
         
         # 阈值（左右布局）- 手动创建以便隐藏整行
         self.threshold_row = QHBoxLayout()
+        self.threshold_row.setContentsMargins(0, 0, 0, 0)
         
         # 提取标签文本（移除占位符）
         full_text = self.tr.tr('binarization_panel.threshold', value='')
@@ -340,6 +368,28 @@ class BinarizationPanel(QWidget):
         self.threshold_slider.setMaximum(255)
         self.threshold_slider.setValue(127)
         self.threshold_row.addWidget(self.threshold_slider, 1)
+        
+        # 重置按钮
+        threshold_reset_btn = QPushButton()
+        threshold_reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
+        threshold_reset_btn.setFixedSize(24, 24)
+        threshold_reset_btn.setToolTip("重置为默认值")
+        threshold_reset_btn.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background-color: transparent;
+                padding: 2px;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+                border-radius: 4px;
+            }
+            QPushButton:pressed {
+                background-color: #d0d0d0;
+            }
+        """)
+        threshold_reset_btn.clicked.connect(lambda: self.threshold_slider.setValue(127))
+        self.threshold_row.addWidget(threshold_reset_btn)
         
         # 创建一个容器 widget 来包装阈值行，方便隐藏
         self.threshold_container = QWidget()
@@ -420,7 +470,7 @@ class BinarizationPanel(QWidget):
         denoise_layout.addLayout(denoise_method_row)
         
         # 降噪强度
-        self.denoise_slider = self._create_slider_with_label(
+        self.denoise_slider = self._create_slider_with_reset(
             "denoise_strength", 0, 100, 0, denoise_layout
         )
         
@@ -497,6 +547,88 @@ class BinarizationPanel(QWidget):
         
         return slider
     
+    def _create_slider_with_reset(self, label_key, min_val, max_val, default_val, 
+                                   parent_layout, scale=1.0):
+        """创建带重置按钮的滑块（左右布局）
+        
+        Args:
+            label_key: 翻译键（不带冒号）
+            min_val: 最小值
+            max_val: 最大值
+            default_val: 默认值
+            parent_layout: 父布局
+            scale: 缩放比例
+        """
+        # 标签和滑块的水平布局
+        row_layout = QHBoxLayout()
+        
+        # 左侧：标签（使用翻译键，只取冒号前的部分）
+        full_text = self.tr.tr(f'binarization_panel.{label_key}', value='')
+        # 移除占位符，只保留标签文本
+        label_text = full_text.replace('{value}', '').replace('：', '：').replace(': ', ': ').strip()
+        if not label_text.endswith('：') and not label_text.endswith(':'):
+            label_text += '：' if '：' in full_text else ':'
+        
+        label = QLabel(label_text)
+        label.setMinimumWidth(70)
+        row_layout.addWidget(label)
+        
+        # 数值标签
+        value_label = QLabel(str(int(default_val * scale)))
+        value_label.setMinimumWidth(25)
+        value_label.setMaximumWidth(25)
+        value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        row_layout.addWidget(value_label)
+        
+        # 右侧：滑块
+        slider = QSlider(Qt.Horizontal)
+        slider.setMinimum(min_val)
+        slider.setMaximum(max_val)
+        slider.setValue(default_val)
+        row_layout.addWidget(slider, 1)  # 滑块占据剩余空间
+        
+        # 重置按钮
+        from ..utils.resources import REFRESH
+        reset_btn = QPushButton()
+        reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
+        reset_btn.setFixedSize(24, 24)
+        reset_btn.setToolTip("重置为默认值")
+        reset_btn.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background-color: transparent;
+                padding: 2px;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+                border-radius: 4px;
+            }
+            QPushButton:pressed {
+                background-color: #d0d0d0;
+            }
+        """)
+        
+        # 重置按钮点击事件
+        def reset_value():
+            slider.setValue(default_val)
+        
+        reset_btn.clicked.connect(reset_value)
+        row_layout.addWidget(reset_btn)
+        
+        parent_layout.addLayout(row_layout)
+        
+        # 连接信号更新标签
+        slider.valueChanged.connect(
+            lambda v: value_label.setText(f"{v * scale:.2f}" if scale != 1.0 else str(v))
+        )
+        
+        # 保存标签引用和默认值
+        slider.value_label = value_label
+        slider.text_label = label
+        slider.default_value = default_val
+        
+        return slider
+    
     def _create_adaptive_params(self):
         """创建自适应阈值参数容器"""
         container = QWidget()
@@ -505,7 +637,7 @@ class BinarizationPanel(QWidget):
         layout.setSpacing(6)
         
         # 块大小
-        self.adaptive_block_size_slider = self._create_slider_with_label(
+        self.adaptive_block_size_slider = self._create_slider_with_reset(
             "block_size", 3, 51, 11, layout
         )
         
@@ -519,17 +651,17 @@ class BinarizationPanel(QWidget):
         layout.setSpacing(6)
         
         # 窗口大小
-        self.sauvola_window_slider = self._create_slider_with_label(
+        self.sauvola_window_slider = self._create_slider_with_reset(
             "window_size", 3, 51, 15, layout
         )
         
         # k 参数
-        self.sauvola_k_slider = self._create_slider_with_label(
+        self.sauvola_k_slider = self._create_slider_with_reset(
             "k_param", 0, 100, 20, layout, scale=0.01
         )
         
         # R 参数
-        self.sauvola_r_slider = self._create_slider_with_label(
+        self.sauvola_r_slider = self._create_slider_with_reset(
             "r_param", 0, 255, 128, layout
         )
         
@@ -543,12 +675,12 @@ class BinarizationPanel(QWidget):
         layout.setSpacing(6)
         
         # 窗口大小
-        self.wolf_window_slider = self._create_slider_with_label(
+        self.wolf_window_slider = self._create_slider_with_reset(
             "window_size", 3, 51, 15, layout
         )
         
         # k 参数
-        self.wolf_k_slider = self._create_slider_with_label(
+        self.wolf_k_slider = self._create_slider_with_reset(
             "k_param", 0, 100, 50, layout, scale=0.01
         )
         
@@ -562,12 +694,12 @@ class BinarizationPanel(QWidget):
         layout.setSpacing(6)
         
         # 窗口大小
-        self.nick_window_slider = self._create_slider_with_label(
+        self.nick_window_slider = self._create_slider_with_reset(
             "window_size", 3, 51, 15, layout
         )
         
         # k 参数 (-1.0 到 0.0)
-        self.nick_k_slider = self._create_slider_with_label(
+        self.nick_k_slider = self._create_slider_with_reset(
             "k_param", -100, 0, -10, layout, scale=0.01
         )
         
@@ -581,12 +713,12 @@ class BinarizationPanel(QWidget):
         layout.setSpacing(6)
         
         # 窗口大小
-        self.bernsen_window_slider = self._create_slider_with_label(
+        self.bernsen_window_slider = self._create_slider_with_reset(
             "window_size", 3, 51, 15, layout
         )
         
         # 对比度阈值
-        self.bernsen_contrast_slider = self._create_slider_with_label(
+        self.bernsen_contrast_slider = self._create_slider_with_reset(
             "contrast_threshold", 0, 255, 15, layout
         )
         
@@ -604,7 +736,7 @@ class BinarizationPanel(QWidget):
         strength_layout = QVBoxLayout(self.dither_strength_container)
         strength_layout.setContentsMargins(0, 0, 0, 0)
         strength_layout.setSpacing(6)
-        self.dither_strength_slider = self._create_slider_with_label(
+        self.dither_strength_slider = self._create_slider_with_reset(
             "dither_strength", 0, 100, 100, strength_layout
         )
         layout.addWidget(self.dither_strength_container)
@@ -614,7 +746,7 @@ class BinarizationPanel(QWidget):
         matrix_layout = QVBoxLayout(self.dither_matrix_size_container)
         matrix_layout.setContentsMargins(0, 0, 0, 0)
         matrix_layout.setSpacing(6)
-        self.dither_matrix_size_slider = self._create_slider_with_label(
+        self.dither_matrix_size_slider = self._create_slider_with_reset(
             "matrix_size", 2, 16, 8, matrix_layout
         )
         layout.addWidget(self.dither_matrix_size_container)
