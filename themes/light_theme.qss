@@ -56,8 +56,9 @@ QFrame#viewModeSwitcher QPushButton:pressed {
 }
 
 QFrame#viewModeSwitcher QPushButton:checked {
-    background-color: rgba(74, 134, 232, 0.2);
+    background-color: transparent;
     color: #4a86e8;
+    font-weight: 600;
 }
 
 /* 工具栏容器中的按钮 - 扁平无边框样式 */

@@ -257,6 +257,7 @@
     "method_paint": "涂抹",
     "method_rect": "框选",
     "target_color": "目标颜色：",
+    "fill_selection": "填充选区：",
     "fill_white": "填充白色",
     "fill_black": "填充黑色",
     "deselect": "取消选择",

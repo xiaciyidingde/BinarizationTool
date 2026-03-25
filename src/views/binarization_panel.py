@@ -258,6 +258,7 @@ class BinarizationPanel(QWidget):
         
         # 重置按钮
         from ..utils.resources import REFRESH
+        from ..utils.animations import create_rotation_animation
         edge_threshold_reset_btn = QPushButton()
         edge_threshold_reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
         edge_threshold_reset_btn.setFixedSize(24, 24)
@@ -276,7 +277,13 @@ class BinarizationPanel(QWidget):
                 background-color: #d0d0d0;
             }
         """)
-        edge_threshold_reset_btn.clicked.connect(lambda: self.edge_threshold_slider.setValue(150))
+        
+        def reset_edge_threshold():
+            animation = create_rotation_animation(edge_threshold_reset_btn, duration=300, angle=360)
+            animation.start()
+            self.edge_threshold_slider.setValue(150)
+        
+        edge_threshold_reset_btn.clicked.connect(reset_edge_threshold)
         self.edge_threshold_row.addWidget(edge_threshold_reset_btn)
         
         # 创建一个容器 widget 来包装边缘阈值行，方便隐藏
@@ -370,6 +377,7 @@ class BinarizationPanel(QWidget):
         self.threshold_row.addWidget(self.threshold_slider, 1)
         
         # 重置按钮
+        from ..utils.animations import create_rotation_animation
         threshold_reset_btn = QPushButton()
         threshold_reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
         threshold_reset_btn.setFixedSize(24, 24)
@@ -388,7 +396,13 @@ class BinarizationPanel(QWidget):
                 background-color: #d0d0d0;
             }
         """)
-        threshold_reset_btn.clicked.connect(lambda: self.threshold_slider.setValue(127))
+        
+        def reset_threshold():
+            animation = create_rotation_animation(threshold_reset_btn, duration=300, angle=360)
+            animation.start()
+            self.threshold_slider.setValue(127)
+        
+        threshold_reset_btn.clicked.connect(reset_threshold)
         self.threshold_row.addWidget(threshold_reset_btn)
         
         # 创建一个容器 widget 来包装阈值行，方便隐藏
@@ -589,6 +603,7 @@ class BinarizationPanel(QWidget):
         
         # 重置按钮
         from ..utils.resources import REFRESH
+        from ..utils.animations import create_rotation_animation
         reset_btn = QPushButton()
         reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
         reset_btn.setFixedSize(24, 24)
@@ -608,8 +623,12 @@ class BinarizationPanel(QWidget):
             }
         """)
         
-        # 重置按钮点击事件
+        # 重置按钮点击事件（带动画）
         def reset_value():
+            # 播放旋转动画
+            animation = create_rotation_animation(reset_btn, duration=300, angle=360)
+            animation.start()
+            # 重置滑块值
             slider.setValue(default_val)
         
         reset_btn.clicked.connect(reset_value)

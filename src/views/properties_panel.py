@@ -385,7 +385,7 @@ class PropertiesPanel(QWidget):
         # 填充选区
         fill_layout = QHBoxLayout()
         fill_layout.setSpacing(12)
-        fill_label = QLabel(self.tr.tr('properties_panel.target_color').split(':')[0] + ':')
+        fill_label = QLabel(self.tr.tr('properties_panel.fill_selection'))
         fill_label.setMinimumWidth(40)
         fill_layout.addWidget(fill_label)
         

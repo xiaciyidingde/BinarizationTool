@@ -257,6 +257,7 @@
     "method_paint": "Paint",
     "method_rect": "Rectangle",
     "target_color": "Target Color:",
+    "fill_selection": "Fill Selection:",
     "fill_white": "Fill White",
     "fill_black": "Fill Black",
     "deselect": "Deselect",
