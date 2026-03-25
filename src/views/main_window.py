@@ -118,31 +118,39 @@ class MainWindow(QMainWindow):
         
         # 左侧：二值化面板
         self.binarization_panel = BinarizationPanel()
-        self.binarization_panel.setMaximumWidth(320)
-        self.binarization_panel.setMinimumWidth(320)
+        self.binarization_panel.setMinimumWidth(280)
+        self.binarization_panel.setMaximumWidth(380)
         main_splitter.addWidget(self.binarization_panel)
         
         # 中右部分：Canvas + 属性面板
         center_right_splitter = QSplitter(Qt.Horizontal)
+        center_right_splitter.setHandleWidth(1)  # 设置分隔条宽度
+        center_right_splitter.setChildrenCollapsible(False)
         
         # 中间：Canvas
         self.canvas = Canvas()
+        self.canvas.setMinimumWidth(400)  # 确保画布有最小宽度
         center_right_splitter.addWidget(self.canvas)
         
         # 右侧：属性面板
         from .properties_panel import PropertiesPanel
         self.properties_panel = PropertiesPanel()
+        self.properties_panel.setMinimumWidth(200)
+        self.properties_panel.setMaximumWidth(300)
         center_right_splitter.addWidget(self.properties_panel)
         
-        # 设置中右分割器比例
-        center_right_splitter.setStretchFactor(0, 1)  # Canvas 可伸缩
+        # 设置中右分割器比例（重要：让画布优先占用空间）
+        center_right_splitter.setStretchFactor(0, 3)  # Canvas 高优先级伸缩
         center_right_splitter.setStretchFactor(1, 0)  # 属性面板固定
         
         main_splitter.addWidget(center_right_splitter)
         
         # 设置主分割器比例
         main_splitter.setStretchFactor(0, 0)  # 左侧面板固定
-        main_splitter.setStretchFactor(1, 1)  # 中右部分可伸缩
+        main_splitter.setStretchFactor(1, 4)  # 中右部分高优先级伸缩
+        
+        # 设置初始大小比例（左侧面板:中右部分 = 320:剩余空间）
+        main_splitter.setSizes([320, 1000])
         
         # 禁用左侧面板的拖动（通过设置固定宽度已经实现）
         main_splitter.handle(1).setEnabled(False)  # 禁用第一个分隔条
