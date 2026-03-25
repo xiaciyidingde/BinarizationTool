@@ -6,6 +6,7 @@
 
 from typing import Optional
 import os
+import numpy as np
 from datetime import datetime
 from PySide6.QtWidgets import (QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, 
                                 QSplitter, QToolBar, QFileDialog, QMessageBox,
@@ -557,15 +558,16 @@ class MainWindow(QMainWindow):
     
     def _load_file_from_path(self, file_path: str):
         """从文件路径加载图片（支持打开文件和拖放）"""
+        # 显示处理中状态
+        self.canvas.set_processing(True)
+        self.statusbar.showMessage(self.tr.tr('app.processing'))
+        
+        # 使用 QTimer 延迟加载，确保 UI 有时间更新
+        QTimer.singleShot(50, lambda: self._do_load_file(file_path))
+    
+    def _do_load_file(self, file_path: str):
+        """实际执行文件加载（延迟调用）"""
         try:
-            # 显示处理中状态
-            self.canvas.is_processing = True
-            self.canvas.update()
-            self.statusbar.showMessage(self.tr.tr('app.processing'))
-            
-            # 强制处理事件，让UI更新
-            QApplication.processEvents()
-            
             # 加载图片（不自动二值化）
             self.image_data = load_image(file_path, binarize=False)
             
@@ -573,23 +575,42 @@ class MainWindow(QMainWindow):
             self.image_data.set_view_mode('binary')
             self.binarization_panel.view_mode_switcher.set_mode('binary')
             
-            # 应用预处理和二值化
+            # 获取二值化参数
             preprocess_params = self.binarization_panel.get_preprocess_params()
             method = self.binarization_panel.get_method()
             threshold = self.binarization_panel.get_threshold()
             method_params = self.binarization_panel.get_method_params()
             
-            # 预处理
-            preprocessed = BinarizationEngine.apply_preprocess(
-                self.image_data.original_pixels.copy(),
-                **preprocess_params
+            # 使用异步工作线程进行二值化
+            self.binarization_worker = BinarizationWorker(
+                self.image_data.original_pixels,
+                preprocess_params,
+                method,
+                threshold,
+                method_params
             )
             
-            # 二值化
-            binary_pixels = BinarizationEngine.apply_threshold(
-                preprocessed, method, threshold, **method_params
+            # 连接信号
+            self.binarization_worker.finished.connect(
+                lambda binary_pixels: self._on_initial_binarization_finished(
+                    binary_pixels, file_path
+                )
             )
+            self.binarization_worker.error.connect(self._on_binarization_error)
             
+            # 启动工作线程
+            self.binarization_worker.start()
+            
+        except Exception as e:
+            # 隐藏处理中状态
+            self.canvas.set_processing(False)
+            QMessageBox.critical(self, self.tr.tr('error.title'), 
+                               self.tr.tr('error.load_failed', error=str(e)))
+    
+    def _on_initial_binarization_finished(self, binary_pixels: np.ndarray, file_path: str):
+        """初始二值化完成的回调"""
+        try:
+            # 更新图片数据
             self.image_data.pixels = binary_pixels
             
             # 设置到 Canvas
@@ -607,18 +628,15 @@ class MainWindow(QMainWindow):
             self.properties_panel.set_image_info(self.image_data, file_path)
             
             # 隐藏处理中状态
-            self.canvas.is_processing = False
-            self.canvas.update()
+            self.canvas.set_processing(False)
             
             # 更新状态
             self.statusbar.showMessage(self.tr.tr('message.loaded', path=file_path))
             self._update_ui_state()
             
         except Exception as e:
-            # 隐藏处理中状态
-            self.canvas.is_processing = False
-            self.canvas.update()
-            QMessageBox.critical(self, self.tr.tr('dialog.error'), self.tr.tr('dialog.load_error', error=str(e)))
+            self.canvas.set_processing(False)
+            QMessageBox.critical(self, self.tr.tr('error.title'), str(e))
     
     def _save_file(self):
         """保存文件（第一次另存为，之后覆盖）"""
@@ -915,7 +933,9 @@ class MainWindow(QMainWindow):
     
     def _fill_selection(self, color: int):
         """
-        填充选区
+        填充选区（使用画笔批量填充逻辑）
+        
+        直接修改像素，不使用复杂的图层系统，保持性能一致。
         
         Args:
             color: 填充颜色（0=黑色, 255=白色）
@@ -939,17 +959,17 @@ class MainWindow(QMainWindow):
             self._safe_update_tile_cache(None)
             return
         
-        # 开始临时图层（用于编辑）
-        self.image_data.start_temp_layer()
+        # 使用画笔批量填充逻辑：直接修改像素数据
+        import numpy as np
         
-        # 填充选区到临时图层
-        self.image_data.temp_layer[selection_mask] = color
+        # 初始化编辑掩码（如果不存在）
+        if self.image_data.edit_mask is None:
+            self.image_data.edit_mask = np.zeros((self.image_data.height, self.image_data.width), dtype=bool)
+            self.image_data.edit_values = np.zeros((self.image_data.height, self.image_data.width), dtype=np.uint8)
         
-        # 标记这些像素为已编辑（关键！）
-        self.image_data.temp_edit_mask[selection_mask] = True
-        
-        # 提交修改到编辑图层
-        self.image_data.commit_temp_layer()
+        # 批量填充：直接设置编辑掩码和值
+        self.image_data.edit_mask[selection_mask] = True
+        self.image_data.edit_values[selection_mask] = color
         
         # 清除选区（这样才能看到填充效果）
         self.canvas.selection_tool.clear_selection()

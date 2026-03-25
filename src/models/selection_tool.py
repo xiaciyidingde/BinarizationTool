@@ -28,7 +28,7 @@ class SelectionStroke:
     在笔刷范围内只选择匹配目标颜色的像素。
     """
     
-    def __init__(self, size: float, target_color: int, selection_mode: str):
+    def __init__(self, size: float, target_color: int, selection_mode: str, cached_pixels: Optional[np.ndarray] = None):
         """
         初始化选择笔画
         
@@ -36,11 +36,13 @@ class SelectionStroke:
             size: 笔刷直径（像素单位）
             target_color: 目标颜色（0=黑色, 255=白色）
             selection_mode: 选择模式（'add'=添加, 'subtract'=减去）
+            cached_pixels: 缓存的像素数据（避免重复合成）
         """
         self.size = size
         self.target_color = target_color
         self.selection_mode = selection_mode
         self.points: list[tuple[int, int]] = []
+        self.cached_pixels = cached_pixels  # 缓存像素数据，避免重复调用 get_current_pixels()
     
     def add_point(self, x: int, y: int):
         """添加笔画点"""
@@ -66,7 +68,8 @@ class SelectionStroke:
             return (0, 0, 0, 0)
         
         radius = self.size / 2.0
-        pixels = image_data.get_current_pixels()
+        # 使用缓存的像素数据，避免重复合成（性能优化）
+        pixels = self.cached_pixels if self.cached_pixels is not None else image_data.get_current_pixels()
         
         # 计算受影响的区域
         x_min = image_data.width
@@ -230,8 +233,11 @@ class SelectionTool:
         self.is_dragging = True
         self.last_point = (x, y)
         
-        # 创建新的选择笔画
-        self.current_stroke = SelectionStroke(self.size, self.target_color, self.selection_mode)
+        # 缓存像素数据（性能优化：避免在拖动过程中重复合成）
+        cached_pixels = image_data.get_current_pixels()
+        
+        # 创建新的选择笔画，传入缓存的像素数据
+        self.current_stroke = SelectionStroke(self.size, self.target_color, self.selection_mode, cached_pixels)
         self.current_stroke.add_point(x, y)
         
         # 初始化选区蒙版

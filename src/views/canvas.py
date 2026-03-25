@@ -166,6 +166,10 @@ class Canvas(QWidget):
         # 填充背景
         painter.fillRect(self.rect(), Qt.gray)
         
+        # 渲染处理中提示（在检查 image_data 之前，这样加载时也能显示）
+        if self.is_processing:
+            self._render_processing_indicator(painter)
+        
         if self.image_data is None:
             return
         
@@ -213,10 +217,6 @@ class Canvas(QWidget):
                 self.mouse_pos.y(),
                 view_size
             )
-        
-        # 渲染处理中提示
-        if self.is_processing:
-            self._render_processing_indicator(painter)
     
     def _render_processing_indicator(self, painter: QPainter):
         """
