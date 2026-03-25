@@ -1160,7 +1160,9 @@ class MainWindow(QMainWindow):
         # 动画开关
         animations_enabled = config.get('interface', 'animations_enabled', True)
         from ..utils.animations import set_global_animation_enabled
+        from ..widgets.toggle_switch import ToggleSwitch
         set_global_animation_enabled(animations_enabled)
+        ToggleSwitch.set_global_animation_enabled(animations_enabled)
         
         # 1. 编辑器设置
         # 画笔默认大小

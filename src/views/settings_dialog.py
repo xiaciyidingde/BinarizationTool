@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 from src.utils.config_manager import get_config_manager
 from src.utils.translation_manager import get_translator
+from src.widgets.toggle_switch import ToggleSwitch
 
 
 class SettingsDialog(QDialog):
@@ -232,10 +233,14 @@ class SettingsDialog(QDialog):
         
         # 动画设置
         animation_group = QGroupBox(self.tr.tr('settings.animations'))
-        animation_layout = QVBoxLayout()
+        animation_layout = QHBoxLayout()
         
-        self.animations_checkbox = QCheckBox(self.tr.tr('settings.enable_animations'))
+        animation_label = QLabel(self.tr.tr('settings.enable_animations'))
+        self.animations_checkbox = ToggleSwitch()
+        
+        animation_layout.addWidget(animation_label)
         animation_layout.addWidget(self.animations_checkbox)
+        animation_layout.addStretch()
         
         animation_group.setLayout(animation_layout)
         layout.addWidget(animation_group)
@@ -370,8 +375,13 @@ class SettingsDialog(QDialog):
         hw_group = QGroupBox(self.tr.tr('settings.hardware_acceleration'))
         hw_layout = QVBoxLayout()
         
-        self.hw_accel_checkbox = QCheckBox(self.tr.tr('settings.enable_hw_accel'))
-        hw_layout.addWidget(self.hw_accel_checkbox)
+        hw_switch_layout = QHBoxLayout()
+        hw_label = QLabel(self.tr.tr('settings.enable_hw_accel'))
+        self.hw_accel_checkbox = ToggleSwitch()
+        hw_switch_layout.addWidget(hw_label)
+        hw_switch_layout.addWidget(self.hw_accel_checkbox)
+        hw_switch_layout.addStretch()
+        hw_layout.addLayout(hw_switch_layout)
         
         hw_note = QLabel(self.tr.tr('settings.hw_accel_note'))
         hw_note.setStyleSheet("color: #6c757d; font-size: 12px;")
@@ -531,7 +541,9 @@ class SettingsDialog(QDialog):
         
         # 应用动画设置到全局配置
         from ..utils.animations import set_global_animation_enabled
+        from ..widgets.toggle_switch import ToggleSwitch
         set_global_animation_enabled(animations_enabled)
+        ToggleSwitch.set_global_animation_enabled(animations_enabled)
         
         # 编辑器设置
         config.set('editor', 'default_brush_size', self.brush_size_slider.value())
