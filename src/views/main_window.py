@@ -211,6 +211,14 @@ class MainWindow(QMainWindow):
         # 初始化快捷键处理器
         self.shortcut_handler = ShortcutHandler(self)
         
+        # 抓取工具动作
+        self.pan_action = QAction(self.tr.tr('toolbar.pan'), self)
+        self.pan_action.setShortcut("H")
+        self.pan_action.setCheckable(True)
+        self.pan_action.setToolTip(self.tr.tr('tooltip.pan_tool'))
+        self.pan_action.triggered.connect(self._select_pan_tool)
+        self.addAction(self.pan_action)
+        
         self.crop_action = QAction(self.tr.tr('toolbar.crop'), self)
         self.crop_action.setShortcut("C")
         self.crop_action.setCheckable(True)
@@ -307,6 +315,10 @@ class MainWindow(QMainWindow):
         
         # 工具选择组
         tool_group, tool_layout = create_button_group()
+        self.pan_button = create_toolbar_button(self.tr.tr('toolbar.pan'), self.tr.tr('tooltip.pan_tool'), checkable=True)
+        self.pan_button.clicked.connect(self._select_pan_tool)
+        tool_layout.addWidget(self.pan_button)
+        
         self.brush_button = create_toolbar_button(self.tr.tr('toolbar.brush'), self.tr.tr('tooltip.brush_tool'), checkable=True)
         self.brush_button.clicked.connect(self._select_brush_tool)
         self.brush_button.installEventFilter(self)
@@ -401,6 +413,26 @@ class MainWindow(QMainWindow):
         select_menu.addAction(self.select_black_action)
         select_menu.addAction(self.select_white_action)
     
+    def _select_pan_tool(self):
+        """选择抓取工具"""
+        if self.image_data is None:
+            self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
+            return
+        
+        self.canvas.set_tool(self.canvas.pan_tool)
+        self.pan_button.setChecked(True)
+        self.brush_button.setChecked(False)
+        self.crop_button.setChecked(False)
+        self.selection_tool_button.setChecked(False)
+        self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.pan')))
+        self.statusbar.showMessage(self.tr.tr('message.pan_activated'))
+        
+        # 隐藏所有工具设置（抓取工具没有设置）
+        self.properties_panel.hide_all_tool_settings()
+        
+        # 确保 Canvas 获得焦点
+        self.canvas.setFocus()
+    
     def _select_brush_tool(self):
         """选择画笔工具"""
         if self.image_data is None:
@@ -408,6 +440,7 @@ class MainWindow(QMainWindow):
             return
         
         self.canvas.set_tool(self.canvas.brush_tool)
+        self.pan_button.setChecked(False)
         self.brush_button.setChecked(True)
         self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(False)
@@ -426,6 +459,7 @@ class MainWindow(QMainWindow):
             return
         
         self.canvas.set_tool(self.canvas.crop_tool)
+        self.pan_button.setChecked(False)
         self.brush_button.setChecked(False)
         self.crop_button.setChecked(True)
         self.selection_tool_button.setChecked(False)
@@ -442,6 +476,7 @@ class MainWindow(QMainWindow):
             return
         
         self.canvas.set_tool(self.canvas.selection_tool)
+        self.pan_button.setChecked(False)
         self.brush_button.setChecked(False)
         self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(True)
@@ -1110,9 +1145,18 @@ class MainWindow(QMainWindow):
     def _update_tool_states(self):
         """根据当前视图模式更新工具状态"""
         if self.image_data is None:
+            # 没有图片时，所有工具都不可用
+            self.pan_button.setEnabled(False)
+            self.brush_button.setEnabled(False)
+            self.crop_button.setEnabled(False)
+            self.selection_tool_button.setEnabled(False)
             return
         
         mode = self.image_data.view_mode
+        
+        # 抓取工具和裁剪工具：在所有模式下可用
+        self.pan_button.setEnabled(True)
+        self.crop_button.setEnabled(True)
         
         # 画笔工具：仅在二值化模式下可用
         brush_enabled = (mode == 'binary')
@@ -1129,9 +1173,6 @@ class MainWindow(QMainWindow):
             self.canvas.set_tool(None)
             self.selection_tool_button.setChecked(False)
             self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
-        
-        # 裁剪工具：在所有模式下可用
-        # （无需修改）
     
     def _get_mode_display_name(self, mode: str) -> str:
         """获取模式的显示名称"""

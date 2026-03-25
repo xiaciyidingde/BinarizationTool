@@ -15,6 +15,7 @@ from ..models.image_data import ImageData
 from ..models.brush_tool import BrushTool
 from ..models.crop_tool import CropTool
 from ..models.selection_tool import SelectionTool
+from ..models.pan_tool import PanTool
 from ..models.tile_cache import TileCache
 from ..utils.translation_manager import get_translator
 
@@ -49,7 +50,8 @@ class Canvas(QWidget):
         self.view_transform = ViewTransform()
         
         # 工具
-        self.current_tool: Optional[BrushTool | CropTool | SelectionTool] = None
+        self.current_tool: Optional[BrushTool | CropTool | SelectionTool | PanTool] = None
+        self.pan_tool = PanTool()
         self.brush_tool = BrushTool()
         self.crop_tool = CropTool()
         self.selection_tool = SelectionTool()
@@ -114,17 +116,20 @@ class Canvas(QWidget):
         
         self.update()
     
-    def set_tool(self, tool: Optional[BrushTool | CropTool | SelectionTool]):
+    def set_tool(self, tool: Optional[BrushTool | CropTool | SelectionTool | PanTool]):
         """
         设置当前工具
         
         Args:
-            tool: 工具对象（BrushTool、CropTool 或 SelectionTool）
+            tool: 工具对象（BrushTool、CropTool、SelectionTool 或 PanTool）
         """
         self.current_tool = tool
         
         # 根据工具类型设置光标
-        if isinstance(tool, BrushTool):
+        if isinstance(tool, PanTool):
+            # 抓取工具：显示张开的手
+            self.setCursor(Qt.OpenHandCursor)
+        elif isinstance(tool, BrushTool):
             # 画笔工具：隐藏系统光标
             self.setCursor(Qt.BlankCursor)
         elif isinstance(tool, CropTool):
@@ -266,6 +271,10 @@ class Canvas(QWidget):
                 # 开始平移
                 self.is_panning = True
                 self.pan_start_pos = event.pos()
+            elif isinstance(self.current_tool, PanTool):
+                # 抓取工具：开始平移
+                self.current_tool.start_pan(event.pos().x(), event.pos().y())
+                self.setCursor(Qt.ClosedHandCursor)
             elif self.image_data is not None and self.current_tool is not None:
                 # 工具操作
                 pixel_x, pixel_y = self.view_transform.view_to_pixel(
@@ -330,6 +339,17 @@ class Canvas(QWidget):
             self.pending_pan_update = True
             if not self.pan_update_timer.isActive():
                 # 立即更新第一次，然后启动定时器
+                self.update()
+                self.pan_update_timer.start(self.pan_throttle_interval)
+        
+        elif isinstance(self.current_tool, PanTool) and self.current_tool.is_panning:
+            # 抓取工具平移
+            delta_x, delta_y = self.current_tool.continue_pan(event.pos().x(), event.pos().y())
+            self.view_transform.translate(delta_x, delta_y)
+            
+            # 使用节流优化
+            self.pending_pan_update = True
+            if not self.pan_update_timer.isActive():
                 self.update()
                 self.pan_update_timer.start(self.pan_throttle_interval)
         
@@ -426,6 +446,20 @@ class Canvas(QWidget):
                     self.set_tool(self.current_tool)
                 else:
                     self.setCursor(Qt.ArrowCursor)
+            
+            elif isinstance(self.current_tool, PanTool) and self.current_tool.is_panning:
+                # 结束抓取工具平移
+                self.current_tool.end_pan()
+                
+                # 停止节流定时器并执行最后一次更新
+                if self.pan_update_timer.isActive():
+                    self.pan_update_timer.stop()
+                if self.pending_pan_update:
+                    self.pending_pan_update = False
+                    self.update()
+                
+                # 恢复张开的手光标
+                self.setCursor(Qt.OpenHandCursor)
             
             elif self.image_data is not None and self.current_tool is not None:
                 if isinstance(self.current_tool, BrushTool) and self.current_tool.is_drawing:

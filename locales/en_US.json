@@ -22,6 +22,7 @@
     "undo": "Undo",
     "redo": "Redo",
     "reset": "Reset",
+    "pan": "Pan",
     "brush": "Brush",
     "crop": "Crop",
     "selection": "Selection",
@@ -31,6 +32,7 @@
   },
   "tool": {
     "none": "None",
+    "pan": "Pan",
     "brush": "Brush",
     "crop": "Crop",
     "selection": "Selection"
@@ -43,6 +45,7 @@
     "undo": "Undo (Ctrl+Z)",
     "redo": "Redo (Ctrl+Y)",
     "reset": "Reset to Initial State (Ctrl+R)",
+    "pan_tool": "Pan Tool (H) - Drag canvas",
     "brush_tool": "Brush Tool (B)",
     "crop_tool": "Crop Tool (C)",
     "selection_tool": "Selection Tool (W)",
@@ -57,6 +60,7 @@
     "reset": "Reset to initial state",
     "no_edits": "No edits to reset",
     "load_image_first": "Please load an image first",
+    "pan_activated": "Pan tool activated",
     "brush_activated": "Brush tool activated",
     "crop_activated": "Crop tool activated",
     "selection_activated": "Selection tool activated - Mode: {mode}",

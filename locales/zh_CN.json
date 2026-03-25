@@ -22,6 +22,7 @@
     "undo": "后退",
     "redo": "前进",
     "reset": "重置",
+    "pan": "抓取",
     "brush": "画笔",
     "crop": "裁剪",
     "selection": "选择",
@@ -31,6 +32,7 @@
   },
   "tool": {
     "none": "无",
+    "pan": "抓取",
     "brush": "画笔",
     "crop": "裁剪",
     "selection": "选择"
@@ -43,6 +45,7 @@
     "undo": "后退到上一步 (Ctrl+Z)",
     "redo": "前进到下一步 (Ctrl+Y)",
     "reset": "重置到初始状态 (Ctrl+R)",
+    "pan_tool": "抓取工具 (H) - 拖动画布",
     "brush_tool": "画笔工具 (B)",
     "crop_tool": "裁剪工具 (C)",
     "selection_tool": "选择工具 (W)",
@@ -57,6 +60,7 @@
     "reset": "已重置到初始状态",
     "no_edits": "没有需要重置的编辑内容",
     "load_image_first": "请先加载图片",
+    "pan_activated": "抓取工具已激活",
     "brush_activated": "画笔工具已激活",
     "crop_activated": "裁剪工具已激活",
     "selection_activated": "选择工具已激活 - 模式：{mode}",
