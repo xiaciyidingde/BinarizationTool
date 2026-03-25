@@ -20,6 +20,7 @@ class ConfigManager:
         },
         "interface": {
             "theme": "light",  # light, dark, system
+            "animations_enabled": True,  # 启用 UI 动画
             "window_geometry": {
                 "width": 1550,
                 "height": 900,

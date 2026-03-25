@@ -50,6 +50,9 @@ class SettingsDialog(QDialog):
         else:
             self.theme_system.setChecked(True)
         
+        # 动画设置
+        self.animations_checkbox.setChecked(config.get('interface', 'animations_enabled', True))
+        
         # 编辑器设置
         self.brush_size_slider.setValue(config.get('editor', 'default_brush_size', 20))
         self.selection_size_slider.setValue(config.get('editor', 'default_selection_size', 50))
@@ -124,19 +127,16 @@ class SettingsDialog(QDialog):
             }
         """)
         
-        # 1. 通用设置
-        tab_widget.addTab(self.create_general_tab(), self.tr.tr('settings.general'))
-        
-        # 2. 界面设置
+        # 1. 界面设置
         tab_widget.addTab(self.create_interface_tab(), self.tr.tr('settings.interface'))
         
-        # 3. 编辑器设置
+        # 2. 编辑器设置
         tab_widget.addTab(self.create_editor_tab(), self.tr.tr('settings.editor'))
         
-        # 4. 性能设置
+        # 3. 性能设置
         tab_widget.addTab(self.create_performance_tab(), self.tr.tr('settings.performance'))
         
-        # 5. 文件设置
+        # 4. 文件设置
         tab_widget.addTab(self.create_file_tab(), self.tr.tr('settings.file'))
         
         layout.addWidget(tab_widget)
@@ -169,8 +169,8 @@ class SettingsDialog(QDialog):
         
         layout.addWidget(button_container)
     
-    def create_general_tab(self):
-        """创建通用设置选项卡"""
+    def create_interface_tab(self):
+        """创建界面设置选项卡"""
         widget = QWidget()
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignTop)
@@ -200,15 +200,6 @@ class SettingsDialog(QDialog):
         lang_group.setLayout(lang_layout)
         layout.addWidget(lang_group)
         
-        layout.addStretch()
-        return widget
-    
-    def create_interface_tab(self):
-        """创建界面设置选项卡"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setAlignment(Qt.AlignTop)
-        
         # 主题设置
         theme_group = QGroupBox(self.tr.tr('settings.theme'))
         theme_layout = QVBoxLayout()
@@ -231,13 +222,23 @@ class SettingsDialog(QDialog):
         theme_layout.addWidget(self.theme_dark)
         theme_layout.addWidget(self.theme_system)
         
-        note_label = QLabel(self.tr.tr('settings.theme_note'))
-        note_label.setStyleSheet("color: #6c757d; font-size: 12px;")
-        note_label.setWordWrap(True)
-        theme_layout.addWidget(note_label)
+        theme_note = QLabel(self.tr.tr('settings.theme_note'))
+        theme_note.setStyleSheet("color: #6c757d; font-size: 12px;")
+        theme_note.setWordWrap(True)
+        theme_layout.addWidget(theme_note)
         
         theme_group.setLayout(theme_layout)
         layout.addWidget(theme_group)
+        
+        # 动画设置
+        animation_group = QGroupBox(self.tr.tr('settings.animations'))
+        animation_layout = QVBoxLayout()
+        
+        self.animations_checkbox = QCheckBox(self.tr.tr('settings.enable_animations'))
+        animation_layout.addWidget(self.animations_checkbox)
+        
+        animation_group.setLayout(animation_layout)
+        layout.addWidget(animation_group)
         
         layout.addStretch()
         return widget
@@ -523,6 +524,14 @@ class SettingsDialog(QDialog):
             config.set('interface', 'theme', 'dark')
         else:
             config.set('interface', 'theme', 'system')
+        
+        # 动画设置
+        animations_enabled = self.animations_checkbox.isChecked()
+        config.set('interface', 'animations_enabled', animations_enabled)
+        
+        # 应用动画设置到全局配置
+        from ..utils.animations import set_global_animation_enabled
+        set_global_animation_enabled(animations_enabled)
         
         # 编辑器设置
         config.set('editor', 'default_brush_size', self.brush_size_slider.value())

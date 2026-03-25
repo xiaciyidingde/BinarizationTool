@@ -1156,6 +1156,12 @@ class MainWindow(QMainWindow):
         """应用配置到各个组件"""
         config = self.config_manager
         
+        # 0. 界面设置
+        # 动画开关
+        animations_enabled = config.get('interface', 'animations_enabled', True)
+        from ..utils.animations import set_global_animation_enabled
+        set_global_animation_enabled(animations_enabled)
+        
         # 1. 编辑器设置
         # 画笔默认大小
         default_brush_size = config.get('editor', 'default_brush_size', 20)
