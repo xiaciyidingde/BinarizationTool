@@ -5,8 +5,9 @@
 """
 
 from PySide6.QtWidgets import QAbstractButton
-from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Property, Signal
+from PySide6.QtCore import Qt, QPropertyAnimation, QEasingCurve, Property
 from PySide6.QtGui import QPainter, QColor, QPen
+from ..utils.animations import is_global_animation_enabled
 
 
 class ToggleSwitch(QAbstractButton):
@@ -16,14 +17,6 @@ class ToggleSwitch(QAbstractButton):
     提供类似移动端的滑块开关效果，带有平滑的动画过渡。
     支持全局动画开关控制。
     """
-    
-    # 类级别的动画开关状态
-    _animation_enabled = True
-    
-    @classmethod
-    def set_global_animation_enabled(cls, enabled: bool):
-        """设置全局动画开关状态"""
-        cls._animation_enabled = enabled
     
     def __init__(self, parent=None):
         """初始化滑块开关"""
@@ -80,7 +73,7 @@ class ToggleSwitch(QAbstractButton):
         target_pos = self._knob_on_x if checked else self._knob_off_x
         
         # 检查是否启用动画
-        if ToggleSwitch._animation_enabled:
+        if is_global_animation_enabled():
             # 启动动画
             self._animation.stop()
             self._animation.setStartValue(self._circle_position)

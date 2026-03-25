@@ -7,13 +7,14 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QComboBox,
     QSpinBox, QSlider, QCheckBox, QGroupBox, QPushButton,
-    QTabWidget, QWidget, QRadioButton, QButtonGroup, QLineEdit,
+    QWidget, QRadioButton, QButtonGroup, QLineEdit,
     QMessageBox
 )
 from PySide6.QtCore import Qt
 from src.utils.config_manager import get_config_manager
 from src.utils.translation_manager import get_translator
 from src.widgets.toggle_switch import ToggleSwitch
+from src.widgets.animated_tab_widget import AnimatedTabWidget
 
 
 class SettingsDialog(QDialog):
@@ -96,7 +97,7 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         
         # 创建选项卡
-        tab_widget = QTabWidget()
+        tab_widget = AnimatedTabWidget()
         # 设置选项卡样式（参考属性面板）
         tab_widget.setStyleSheet("""
             QTabWidget::pane {
@@ -541,9 +542,7 @@ class SettingsDialog(QDialog):
         
         # 应用动画设置到全局配置
         from ..utils.animations import set_global_animation_enabled
-        from ..widgets.toggle_switch import ToggleSwitch
         set_global_animation_enabled(animations_enabled)
-        ToggleSwitch.set_global_animation_enabled(animations_enabled)
         
         # 编辑器设置
         config.set('editor', 'default_brush_size', self.brush_size_slider.value())

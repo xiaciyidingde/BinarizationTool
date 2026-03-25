@@ -5,12 +5,13 @@
 """
 
 from typing import Optional
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QTabWidget, QLabel, QGroupBox, 
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QLabel, QGroupBox, 
                                 QFormLayout, QSpinBox, QRadioButton, QButtonGroup, 
                                 QHBoxLayout, QPushButton, QFrame)
 from PySide6.QtCore import Qt
 import os
 from ..utils.translation_manager import get_translator
+from ..widgets.animated_tab_widget import AnimatedTabWidget
 
 
 class PropertiesPanel(QWidget):
@@ -58,7 +59,7 @@ class PropertiesPanel(QWidget):
         layout.setSpacing(8)
         
         # 创建选项卡
-        self.tab_widget = QTabWidget()
+        self.tab_widget = AnimatedTabWidget()
         # 设置选项卡样式
         self.tab_widget.setStyleSheet("""
             QTabWidget::pane {
