@@ -7,7 +7,7 @@ Canvas 画布组件
 from typing import Optional
 from PySide6.QtWidgets import QWidget
 from PySide6.QtCore import Qt, Signal, QPoint, QUrl, QTimer
-from PySide6.QtGui import QPainter, QPixmap, QImage, QPaintEvent, QMouseEvent, QWheelEvent, QDragEnterEvent, QDropEvent
+from PySide6.QtGui import QPainter, QPixmap, QImage, QPaintEvent, QMouseEvent, QWheelEvent, QDragEnterEvent, QDropEvent, QColor
 import numpy as np
 
 from ..models.view_transform import ViewTransform
@@ -18,6 +18,7 @@ from ..models.selection_tool import SelectionTool
 from ..models.pan_tool import PanTool
 from ..models.tile_cache import TileCache
 from ..utils.translation_manager import get_translator
+from ..utils.config_manager import ConfigManager
 
 
 class Canvas(QWidget):
@@ -44,6 +45,9 @@ class Canvas(QWidget):
         
         # 翻译器
         self.tr = get_translator()
+        
+        # 配置管理器
+        self.config = ConfigManager()
         
         # 数据
         self.image_data: Optional[ImageData] = None
@@ -163,14 +167,22 @@ class Canvas(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing)
         
-        # 填充背景
-        painter.fillRect(self.rect(), Qt.gray)
+        # 从配置读取背景色
+        canvas_bg = self.config.get('editor', 'canvas_background', 'white')
+        if canvas_bg == 'white':
+            bg_color = QColor(255, 255, 255)
+        elif canvas_bg == 'gray':
+            bg_color = QColor(128, 128, 128)
+        else:  # black
+            bg_color = QColor(0, 0, 0)
         
-        # 渲染处理中提示（在检查 image_data 之前，这样加载时也能显示）
-        if self.is_processing:
-            self._render_processing_indicator(painter)
+        # 填充背景
+        painter.fillRect(self.rect(), bg_color)
         
         if self.image_data is None:
+            # 如果没有图片，也要渲染处理中提示
+            if self.is_processing:
+                self._render_processing_indicator(painter)
             return
         
         # 渲染图片
@@ -217,6 +229,10 @@ class Canvas(QWidget):
                 self.mouse_pos.y(),
                 view_size
             )
+        
+        # 渲染处理中提示（最后渲染，确保在最上层）
+        if self.is_processing:
+            self._render_processing_indicator(painter)
     
     def _render_processing_indicator(self, painter: QPainter):
         """

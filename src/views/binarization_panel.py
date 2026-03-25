@@ -5,10 +5,12 @@
 """
 
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
-                                QComboBox, QSlider, QGroupBox, QScrollArea, QCheckBox, QStyledItemDelegate, QPushButton)
+                                QSlider, QGroupBox, QScrollArea, QCheckBox, QStyledItemDelegate, QPushButton, QSizePolicy)
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QPixmap, QIcon, QPainter, QImage
 from .view_mode_switcher import ViewModeSwitcher
+from ..widgets.animated_tab_widget import AnimatedTabWidget
+from ..widgets.custom_combobox import CustomComboBox
 from ..utils.translation_manager import get_translator
 
 
@@ -40,8 +42,9 @@ class BinarizationPanel(QWidget):
         
         # 保存面板宽度
         self.panel_width = panel_width
-        # 计算 QGroupBox 的最大宽度（面板宽度 - 左右边距）
-        self.group_max_width = panel_width - 24  # 减去左右各12px的边距
+        # 计算 QGroupBox 的最大宽度
+        # 面板宽度 - 外层左右边距(12*2) - 标签页内容左右边距(12*2) = 300 - 48 = 252
+        self.group_max_width = panel_width - 48
         
         self.setup_ui()
         self.connect_signals()
@@ -56,7 +59,7 @@ class BinarizationPanel(QWidget):
         # 外层容器
         outer_container = QWidget()
         outer_layout = QVBoxLayout(outer_container)
-        outer_layout.setContentsMargins(0, 6, 0, 6)  # 左右边距改为0
+        outer_layout.setContentsMargins(12, 6, 12, 6)  # 恢复左右边距12px
         outer_layout.setSpacing(8)
         
         # === 视图模式切换器区域（独立白色背景） ===
@@ -77,22 +80,87 @@ class BinarizationPanel(QWidget):
         
         outer_layout.addWidget(view_mode_container)
         
-        # === 二值化设置区域（独立白色背景） ===
-        settings_container = QWidget()
-        settings_container.setObjectName("settingsContainer")
-        settings_container.setStyleSheet("""
-            QWidget#settingsContainer {
+        # === 标签页组件 ===
+        # 创建标签页组件
+        self.tab_widget = AnimatedTabWidget()
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border: none;
                 background-color: #ffffff;
-                border-radius: 8px;
+                border-top-left-radius: 0px;
+                border-top-right-radius: 8px;
+                border-bottom-left-radius: 8px;
+                border-bottom-right-radius: 8px;
+                margin-top: -1px;
+            }
+            QTabBar::tab {
+                background-color: #f8f9fa;
+                color: #495057;
+                padding: 8px 16px;
+                margin-right: 2px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+            }
+            QTabBar::tab:selected {
+                background-color: #ffffff;
+                color: #007bff;
+                font-weight: bold;
+            }
+            QTabBar::tab:hover:!selected {
+                background-color: #e9ecef;
             }
         """)
-        settings_layout = QVBoxLayout(settings_container)
+        
+        # 创建预处理标签页
+        preprocess_tab = self._create_preprocess_tab()
+        self.tab_widget.addTab(preprocess_tab, self.tr.tr('binarization_panel.tab_preprocess'))
+        
+        # 创建二值化标签页
+        binarization_tab = self._create_binarization_tab()
+        self.tab_widget.addTab(binarization_tab, self.tr.tr('binarization_panel.tab_binarization'))
+        
+        # 默认显示预处理标签页
+        self.tab_widget.setCurrentIndex(0)
+        
+        outer_layout.addWidget(self.tab_widget)
+        
+        # 设置滚动区域
+        scroll.setWidget(outer_container)
+        
+        # 主布局
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+        
+        # 初始状态:固定阈值控件启用
+        self._update_threshold_enabled()
+        self._update_edge_threshold_enabled()
+    
+    def _create_preprocess_tab(self):
+        """创建预处理标签页"""
+        # 创建滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("""
+            QScrollArea { 
+                border: none; 
+                background-color: transparent;
+            }
+            QScrollArea > QWidget > QWidget {
+                background-color: transparent;
+            }
+        """)
+        
+        # 标签页内容容器
+        tab_content = QWidget()
+        tab_content.setStyleSheet("background-color: transparent;")
+        settings_layout = QVBoxLayout(tab_content)
         settings_layout.setContentsMargins(12, 8, 12, 8)  # 左右边距12px
         settings_layout.setSpacing(8)
         
         # === 预处理参数 ===
         preprocess_group = QGroupBox(self.tr.tr('binarization_panel.preprocess'))
-        preprocess_group.setMaximumWidth(self.group_max_width)
         preprocess_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -145,7 +213,6 @@ class BinarizationPanel(QWidget):
         
         # === RGB 通道调整 ===
         rgb_group = QGroupBox(self.tr.tr('binarization_panel.rgb_channels'))
-        rgb_group.setMaximumWidth(self.group_max_width)
         rgb_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -186,9 +253,37 @@ class BinarizationPanel(QWidget):
         rgb_group.setLayout(rgb_layout)
         settings_layout.addWidget(rgb_group)
         
+        # 添加弹性空间
+        settings_layout.addStretch()
+        
+        scroll.setWidget(tab_content)
+        return scroll
+    
+    def _create_binarization_tab(self):
+        """创建二值化标签页"""
+        # 创建滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("""
+            QScrollArea { 
+                border: none; 
+                background-color: transparent;
+            }
+            QScrollArea > QWidget > QWidget {
+                background-color: transparent;
+            }
+        """)
+        
+        # 标签页内容容器
+        tab_content = QWidget()
+        tab_content.setStyleSheet("background-color: transparent;")
+        settings_layout = QVBoxLayout(tab_content)
+        settings_layout.setContentsMargins(12, 8, 12, 8)  # 左右边距12px
+        settings_layout.setSpacing(8)
+        
         # === 边缘检测 ===
         edge_group = QGroupBox(self.tr.tr('binarization_panel.edge_detection'))
-        edge_group.setMaximumWidth(self.group_max_width)
         edge_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -217,25 +312,80 @@ class BinarizationPanel(QWidget):
         edge_mode_label.setMinimumWidth(70)
         edge_mode_row.addWidget(edge_mode_label)
         
-        # 添加占位空间（对齐数值标签位置）
-        edge_mode_row.addSpacing(25)
-        
-        self.edge_mode_combo = QComboBox()
-        self.edge_mode_combo.setFixedWidth(140)
+        self.edge_mode_combo = CustomComboBox()
+        self.edge_mode_combo.setFixedWidth(130)
         self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_off'), 0)
         self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_canny'), 1)
         self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_enhance'), 2)
         self.edge_mode_combo.addItem(self.tr.tr('binarization_panel.edge_contour'), 3)
         
         edge_mode_row.addWidget(self.edge_mode_combo)
-        edge_mode_row.addStretch()  # 添加弹性空间
         
         edge_layout.addLayout(edge_mode_row)
         
-        # 边缘强度
-        self.edge_strength_slider = self._create_slider_with_reset(
-            "edge_strength", 0, 100, 50, edge_layout
+        # 边缘强度 - 创建行布局以便隐藏
+        self.edge_strength_row = QHBoxLayout()
+        self.edge_strength_row.setContentsMargins(0, 0, 0, 0)
+        
+        # 提取标签文本
+        full_text = self.tr.tr('binarization_panel.edge_strength', value='')
+        label_text = full_text.replace('{value}', '').strip()
+        if not label_text.endswith('：') and not label_text.endswith(':'):
+            label_text += '：' if '：' in full_text else ':'
+        
+        edge_strength_label = QLabel(label_text)
+        edge_strength_label.setMinimumWidth(70)
+        self.edge_strength_row.addWidget(edge_strength_label)
+        
+        self.edge_strength_value_label = QLabel("50")
+        self.edge_strength_value_label.setMinimumWidth(25)
+        self.edge_strength_value_label.setMaximumWidth(25)
+        self.edge_strength_value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.edge_strength_row.addWidget(self.edge_strength_value_label)
+        
+        self.edge_strength_slider = QSlider(Qt.Horizontal)
+        self.edge_strength_slider.setMinimum(0)
+        self.edge_strength_slider.setMaximum(100)
+        self.edge_strength_slider.setValue(50)
+        self.edge_strength_slider.valueChanged.connect(
+            lambda v: self.edge_strength_value_label.setText(str(v))
         )
+        self.edge_strength_row.addWidget(self.edge_strength_slider, 1)
+        
+        # 重置按钮
+        from ..utils.resources import REFRESH
+        from ..utils.animations import create_rotation_animation
+        edge_strength_reset_btn = QPushButton()
+        edge_strength_reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
+        edge_strength_reset_btn.setFixedSize(24, 24)
+        edge_strength_reset_btn.setStyleSheet("""
+            QPushButton {
+                border: none;
+                background-color: transparent;
+                padding: 2px;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+                border-radius: 4px;
+            }
+            QPushButton:pressed {
+                background-color: #d0d0d0;
+            }
+        """)
+        
+        def reset_edge_strength():
+            animation = create_rotation_animation(edge_strength_reset_btn, duration=300, angle=360)
+            animation.start()
+            self.edge_strength_slider.setValue(50)
+        
+        edge_strength_reset_btn.clicked.connect(reset_edge_strength)
+        self.edge_strength_row.addWidget(edge_strength_reset_btn)
+        
+        # 创建容器以便隐藏
+        self.edge_strength_container = QWidget()
+        self.edge_strength_container.setLayout(self.edge_strength_row)
+        self.edge_strength_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        edge_layout.addWidget(self.edge_strength_container)
         
         # 边缘阈值（仅 Canny 模式显示）- 手动创建以便隐藏整行
         self.edge_threshold_row = QHBoxLayout()
@@ -272,7 +422,6 @@ class BinarizationPanel(QWidget):
         edge_threshold_reset_btn = QPushButton()
         edge_threshold_reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
         edge_threshold_reset_btn.setFixedSize(24, 24)
-        edge_threshold_reset_btn.setToolTip("重置为默认值")
         edge_threshold_reset_btn.setStyleSheet("""
             QPushButton {
                 border: none;
@@ -299,6 +448,7 @@ class BinarizationPanel(QWidget):
         # 创建一个容器 widget 来包装边缘阈值行，方便隐藏
         self.edge_threshold_container = QWidget()
         self.edge_threshold_container.setLayout(self.edge_threshold_row)
+        self.edge_threshold_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         edge_layout.addWidget(self.edge_threshold_container)
         
         edge_group.setLayout(edge_layout)
@@ -306,7 +456,6 @@ class BinarizationPanel(QWidget):
         
         # === 二值化方法 ===
         binarization_group = QGroupBox(self.tr.tr('binarization_panel.binarization'))
-        binarization_group.setMaximumWidth(self.group_max_width)
         binarization_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -335,10 +484,7 @@ class BinarizationPanel(QWidget):
         method_label.setMinimumWidth(70)
         method_row.addWidget(method_label)
         
-        # 添加占位空间（对齐数值标签位置）
-        method_row.addSpacing(25)
-        
-        self.method_combo = QComboBox()
+        self.method_combo = CustomComboBox()
         self.method_combo.setFixedWidth(130)
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_fixed'), 0)
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_adaptive'), 1)
@@ -347,7 +493,7 @@ class BinarizationPanel(QWidget):
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_wolf'), 4)
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_nick'), 5)
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_bernsen'), 6)
-        # 添加分隔线（使用禁用的项）
+        # 添加分隔线
         self.method_combo.insertSeparator(7)
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_floyd'), 7)
         self.method_combo.addItem(self.tr.tr('binarization_panel.method_ordered'), 8)
@@ -355,7 +501,6 @@ class BinarizationPanel(QWidget):
         self.method_combo.setCurrentIndex(1)  # 默认自适应阈值
         
         method_row.addWidget(self.method_combo)
-        method_row.addStretch()  # 添加弹性空间
         
         binarization_layout.addLayout(method_row)
         
@@ -390,7 +535,6 @@ class BinarizationPanel(QWidget):
         threshold_reset_btn = QPushButton()
         threshold_reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
         threshold_reset_btn.setFixedSize(24, 24)
-        threshold_reset_btn.setToolTip("重置为默认值")
         threshold_reset_btn.setStyleSheet("""
             QPushButton {
                 border: none;
@@ -417,6 +561,7 @@ class BinarizationPanel(QWidget):
         # 创建一个容器 widget 来包装阈值行，方便隐藏
         self.threshold_container = QWidget()
         self.threshold_container.setLayout(self.threshold_row)
+        self.threshold_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         binarization_layout.addWidget(self.threshold_container)
         
         # === 自适应阈值参数 ===
@@ -448,7 +593,6 @@ class BinarizationPanel(QWidget):
         
         # === 降噪功能 ===
         denoise_group = QGroupBox(self.tr.tr('binarization_panel.denoise'))
-        denoise_group.setMaximumWidth(self.group_max_width)
         denoise_group.setStyleSheet("""
             QGroupBox {
                 font-weight: bold;
@@ -477,10 +621,7 @@ class BinarizationPanel(QWidget):
         denoise_method_label.setMinimumWidth(70)
         denoise_method_row.addWidget(denoise_method_label)
         
-        # 添加占位空间（对齐数值标签位置）
-        denoise_method_row.addSpacing(25)
-        
-        self.denoise_method_combo = QComboBox()
+        self.denoise_method_combo = CustomComboBox()
         self.denoise_method_combo.setFixedWidth(130)
         self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_gaussian'), 0)
         self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_median'), 1)
@@ -490,7 +631,6 @@ class BinarizationPanel(QWidget):
         self.denoise_method_combo.addItem(self.tr.tr('binarization_panel.denoise_morph_close'), 5)
         
         denoise_method_row.addWidget(self.denoise_method_combo)
-        denoise_method_row.addStretch()  # 添加弹性空间
         
         denoise_layout.addLayout(denoise_method_row)
         
@@ -505,19 +645,8 @@ class BinarizationPanel(QWidget):
         # 添加弹性空间
         settings_layout.addStretch()
         
-        outer_layout.addWidget(settings_container)
-        
-        # 设置滚动区域
-        scroll.setWidget(outer_container)
-        
-        # 主布局
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll)
-        
-        # 初始状态:固定阈值控件启用
-        self._update_threshold_enabled()
-        self._update_edge_threshold_enabled()
+        scroll.setWidget(tab_content)
+        return scroll
     
     def _create_slider_with_label(self, label_key, min_val, max_val, default_val, 
                                   parent_layout, scale=1.0):
@@ -618,7 +747,6 @@ class BinarizationPanel(QWidget):
         reset_btn = QPushButton()
         reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
         reset_btn.setFixedSize(24, 24)
-        reset_btn.setToolTip("重置为默认值")
         reset_btn.setStyleSheet("""
             QPushButton {
                 border: none;
@@ -893,9 +1021,17 @@ class BinarizationPanel(QWidget):
     def _update_edge_threshold_enabled(self):
         """更新边缘阈值控件的显示状态"""
         edge_mode = self.edge_mode_combo.currentData()
-        # 仅 Canny 模式(1)显示边缘阈值
-        visible = (edge_mode == 1)
-        self.edge_threshold_container.setVisible(visible)
+        
+        # 关闭模式(0)：隐藏强度和阈值
+        # 其他模式：显示强度
+        # Canny 模式(1)：显示强度和阈值
+        if edge_mode == 0:
+            self.edge_strength_container.setVisible(False)
+            self.edge_threshold_container.setVisible(False)
+        else:
+            self.edge_strength_container.setVisible(True)
+            # 仅 Canny 模式(1)显示边缘阈值
+            self.edge_threshold_container.setVisible(edge_mode == 1)
     
     def _emit_change(self):
         """发射参数改变信号"""

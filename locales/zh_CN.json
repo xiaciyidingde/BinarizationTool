@@ -236,7 +236,9 @@
     "denoise_nlmeans": "NLMeans降噪",
     "denoise_morph_open": "形态学-开运算",
     "denoise_morph_close": "形态学-闭运算",
-    "denoise_strength": "强度：{value}"
+    "denoise_strength": "强度：{value}",
+    "tab_preprocess": "预处理",
+    "tab_binarization": "二值化"
   },
   "properties_panel": {
     "properties": "属性",

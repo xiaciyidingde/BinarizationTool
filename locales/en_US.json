@@ -236,7 +236,9 @@
     "denoise_nlmeans": "NLMeans",
     "denoise_morph_open": "Morph Open",
     "denoise_morph_close": "Morph Close",
-    "denoise_strength": "Strength: {value}"
+    "denoise_strength": "Strength: {value}",
+    "tab_preprocess": "Preprocess",
+    "tab_binarization": "Binarization"
   },
   "properties_panel": {
     "properties": "Properties",

@@ -83,6 +83,18 @@ class MainWindow(QMainWindow):
         self.create_toolbars()
         self.create_statusbar()
         
+        # 设置全局 QToolTip 样式
+        self.setStyleSheet("""
+            QToolTip {
+                background-color: #ffffff;
+                color: #212529;
+                border: 1px solid #dee2e6;
+                border-radius: 4px;
+                padding: 4px 8px;
+                font-size: 12px;
+            }
+        """)
+        
         # 连接信号
         self.connect_signals()
         

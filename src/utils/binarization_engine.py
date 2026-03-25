@@ -167,9 +167,12 @@ class ImageEnhancer:
         img_uint8 = img.astype(np.uint8)
         
         if mode == 1:  # Canny 边缘检测
-            # 计算阈值
+            # 计算低阈值
             threshold1 = int(strength * 2.55)  # 0-100 映射到 0-255
-            threshold2 = max(threshold1 + 50, threshold2)  # 确保高阈值大于低阈值
+            
+            # 确保高阈值大于低阈值，只在用户设置不合理时才调整
+            if threshold2 <= threshold1:
+                threshold2 = min(threshold1 + 50, 255)  # 限制在 255 以内
             
             # Canny 边缘检测
             edges = cv2.Canny(img_uint8, threshold1, threshold2)
