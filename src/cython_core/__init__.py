@@ -2,9 +2,9 @@
 Cython 加速模块
 """
 
-import sys
-import os
 import glob
+import os
+import sys
 
 # 智能 DLL 加载：同时查询当前目录和根目录
 # 开发环境：DLL 在 src/cython_core/
@@ -33,7 +33,7 @@ for search_path in search_paths:
         continue
     break
 
-from .dithering import floyd_steinberg, atkinson, ordered_dithering
+from .dithering import atkinson, floyd_steinberg, ordered_dithering
 
 __all__ = [
     'floyd_steinberg',

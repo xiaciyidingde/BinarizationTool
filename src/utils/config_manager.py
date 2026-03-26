@@ -6,12 +6,12 @@
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class ConfigManager:
     """配置管理器"""
-    
+
     # 默认配置
     DEFAULT_CONFIG = {
         "version": "1.0",
@@ -51,7 +51,7 @@ class ConfigManager:
             "last_save_directory": ""
         }
     }
-    
+
     # 值映射：配置文件值 -> 翻译键
     # UI 显示时使用翻译键获取本地化文本
     VALUE_TRANSLATION_KEYS = {
@@ -87,7 +87,7 @@ class ConfigManager:
             "custom": "settings.filename_custom"
         }
     }
-    
+
     # 值映射：UI显示值 <-> 配置文件值（向后兼容，逐步废弃）
     VALUE_MAPPING = {
         # 语言
@@ -122,49 +122,49 @@ class ConfigManager:
             "自定义": "custom"
         }
     }
-    
+
     def __init__(self):
         """初始化配置管理器"""
         self.config_file = self.get_config_file()
         self.config = self.load()
-    
+
     @staticmethod
     def get_config_dir() -> Path:
         """获取配置目录（项目根目录的 data 文件夹）"""
         # 获取项目根目录
         current_file = Path(__file__)
         project_root = current_file.parent.parent.parent
-        
+
         config_dir = project_root / 'data'
         config_dir.mkdir(parents=True, exist_ok=True)
         return config_dir
-    
+
     @staticmethod
     def get_config_file() -> Path:
         """获取配置文件路径"""
         return ConfigManager.get_config_dir() / 'config.json'
-    
-    def load(self) -> Dict[str, Any]:
+
+    def load(self) -> dict[str, Any]:
         """加载配置"""
         import copy
-        
+
         if not self.config_file.exists():
             # 配置文件不存在，创建默认配置
             self.config = copy.deepcopy(self.DEFAULT_CONFIG)
             self.save()
             return self.config
-        
+
         try:
-            with open(self.config_file, 'r', encoding='utf-8') as f:
+            with open(self.config_file, encoding='utf-8') as f:
                 config = json.load(f)
-            
+
             # 合并默认配置（处理新增的配置项）
             merged = self._merge_config(copy.deepcopy(self.DEFAULT_CONFIG), config)
             return merged
         except Exception as e:
             print(f"加载配置失败: {e}，使用默认配置")
             return copy.deepcopy(self.DEFAULT_CONFIG)
-    
+
     def save(self):
         """保存配置"""
         try:
@@ -174,25 +174,25 @@ class ConfigManager:
         except Exception as e:
             print(f"保存配置失败: {e}")
             return False
-    
+
     def get(self, section: str, key: str, default=None) -> Any:
         """
         获取配置值
-        
+
         Args:
             section: 配置节名称
             key: 配置键名称
             default: 默认值
-        
+
         Returns:
             配置值
         """
         return self.config.get(section, {}).get(key, default)
-    
+
     def set(self, section: str, key: str, value: Any):
         """
         设置配置值
-        
+
         Args:
             section: 配置节名称
             key: 配置键名称
@@ -201,43 +201,43 @@ class ConfigManager:
         if section not in self.config:
             self.config[section] = {}
         self.config[section][key] = value
-    
-    def get_all(self, section: str) -> Dict[str, Any]:
+
+    def get_all(self, section: str) -> dict[str, Any]:
         """
         获取整个配置节
-        
+
         Args:
             section: 配置节名称
-        
+
         Returns:
             配置节字典
         """
         return self.config.get(section, {})
-    
-    def set_all(self, section: str, values: Dict[str, Any]):
+
+    def set_all(self, section: str, values: dict[str, Any]):
         """
         设置整个配置节
-        
+
         Args:
             section: 配置节名称
             values: 配置值字典
         """
         self.config[section] = values
-    
+
     def reset_to_default(self):
         """重置为默认配置"""
         import copy
         self.config = copy.deepcopy(self.DEFAULT_CONFIG)
         self.save()
-    
+
     def _merge_config(self, default: dict, user: dict) -> dict:
         """
         合并配置（用户配置覆盖默认配置）
-        
+
         Args:
             default: 默认配置
             user: 用户配置
-        
+
         Returns:
             合并后的配置
         """
@@ -248,92 +248,92 @@ class ConfigManager:
             else:
                 result[key] = value
         return result
-    
+
     @classmethod
     def get_ui_options(cls, category: str, translator=None) -> list:
         """
         获取某个类别的所有 UI 选项
-        
+
         Args:
             category: 值类别
             translator: 翻译器实例（可选）
-        
+
         Returns:
             UI 选项列表
         """
         translation_keys = cls.VALUE_TRANSLATION_KEYS.get(category, {})
-        
+
         if translator:
             # 使用翻译器
-            return [translator.tr(key) if key.count('.') > 0 else key 
+            return [translator.tr(key) if key.count('.') > 0 else key
                    for key in translation_keys.values()]
         else:
             # 回退到旧的映射
             return list(cls.VALUE_MAPPING.get(category, {}).keys())
-    
+
     @classmethod
     def config_value_to_ui_index(cls, category: str, config_value: str) -> int:
         """
         将配置值转换为 UI 选项索引
-        
+
         Args:
             category: 值类别
             config_value: 配置文件值
-        
+
         Returns:
             UI 选项索引
         """
         translation_keys = cls.VALUE_TRANSLATION_KEYS.get(category, {})
         config_values = list(translation_keys.keys())
-        
+
         try:
             return config_values.index(config_value)
         except ValueError:
             return 0
-    
+
     @classmethod
     def ui_index_to_config_value(cls, category: str, index: int) -> str:
         """
         将 UI 选项索引转换为配置值
-        
+
         Args:
             category: 值类别
             index: UI 选项索引
-        
+
         Returns:
             配置文件值
         """
         translation_keys = cls.VALUE_TRANSLATION_KEYS.get(category, {})
         config_values = list(translation_keys.keys())
-        
+
         if 0 <= index < len(config_values):
             return config_values[index]
         return config_values[0] if config_values else ""
-    
+
     @classmethod
     def ui_to_config(cls, category: str, ui_value: str) -> str:
         """
         将 UI 显示值转换为配置文件值
-        
+
         Args:
             category: 值类别（language, theme, canvas_background 等）
             ui_value: UI 显示值
-        
+
         Returns:
             配置文件值
         """
         mapping = cls.VALUE_MAPPING.get(category, {})
         return mapping.get(ui_value, ui_value)
-    
+
     @classmethod
     def config_to_ui(cls, category: str, config_value: str) -> str:
         """
         将配置文件值转换为 UI 显示值
-        
+
         Args:
             category: 值类别
             config_value: 配置文件值
-        
+
         Returns:
             UI 显示值
         """
@@ -343,32 +343,32 @@ class ConfigManager:
             if cfg_val == config_value:
                 return ui_val
         return config_value
-    
+
     def add_recent_file(self, file_path: str, max_count: int = 10):
         """
         添加到最近文件列表
-        
+
         Args:
             file_path: 文件路径
             max_count: 最大保留数量
         """
         recent = self.config['file']['recent_files']
-        
+
         # 移除已存在的相同路径
         if file_path in recent:
             recent.remove(file_path)
-        
+
         # 添加到列表开头
         recent.insert(0, file_path)
-        
+
         # 限制数量
         self.config['file']['recent_files'] = recent[:max_count]
         self.save()
-    
+
     def get_recent_files(self) -> list:
         """获取最近文件列表"""
         return self.config['file']['recent_files']
-    
+
     def clear_recent_files(self):
         """清除最近文件列表"""
         self.config['file']['recent_files'] = []
@@ -376,7 +376,7 @@ class ConfigManager:
 
 
 # 全局配置管理器实例
-_config_manager: Optional[ConfigManager] = None
+_config_manager: ConfigManager | None = None
 
 
 def get_config_manager() -> ConfigManager:

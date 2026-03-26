@@ -2,8 +2,8 @@
 视图组件模块
 """
 
-from .canvas import Canvas
 from .binarization_panel import BinarizationPanel
+from .canvas import Canvas
 from .main_window import MainWindow
 from .shortcut_handler import ShortcutHandler
 

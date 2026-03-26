@@ -144,25 +144,21 @@ QLineEdit:focus {
 
 /* ========== 分组框样式 ========== */
 QGroupBox {
-    font-weight: 600;
+    font-weight: bold;
+    font-size: 14px;
+    color: #495057;
     border: 1px solid #dee2e6;
-    border-radius: 8px;
-    margin-top: 20px;
-    padding-top: 24px;
-    padding-left: 12px;
-    padding-right: 12px;
-    padding-bottom: 12px;
-    background-color: #ffffff;
+    border-radius: 4px;
+    margin-top: 10px;
+    padding-top: 10px;
 }
 
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 0 8px;
-    color: #495057;
-    font-size: 13px;
-    top: 8px;
-    left: 12px;
+    left: 8px;
+    top: 0px;
+    padding: 0 4px;
     background-color: #ffffff;
 }
 

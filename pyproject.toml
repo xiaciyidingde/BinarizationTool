@@ -1,0 +1,88 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "Cython>=3.0.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "BinarizationTool"
+version = "1.4.11.0"
+description = "二值化图片编辑器"
+authors = [{name = "夏次一定de"}]
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.20.0",
+    "opencv-python>=4.8.0",
+    "PySide6>=6.5.0",
+    "Pillow>=10.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "cython>=3.0.0",
+    "pytest>=7.0.0",
+    "hypothesis>=6.0.0",
+    "ruff>=0.1.0",
+]
+
+[tool.ruff]
+# 目标 Python 版本
+target-version = "py312"
+
+# 每行最大字符数
+line-length = 120
+
+# 排除的目录
+exclude = [
+    ".git",
+    ".pytest_cache",
+    ".hypothesis",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.egg-info",
+    "BinarizationToolv1.4.0.1",
+    ".vscode",
+    ".kiro",
+]
+
+# Linting 配置
+[tool.ruff.lint]
+# 启用的规则集
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort (import sorting)
+    "N",   # pep8-naming
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "SIM", # flake8-simplify
+]
+
+# 忽略的规则
+ignore = [
+    "E501",   # 行太长（已通过 line-length 控制）
+    "B008",   # 函数调用中的默认参数（Qt 信号常用）
+    "N802",   # 函数名应该小写（Qt 方法名是驼峰）
+    "N803",   # 参数名应该小写（Qt 参数名是驼峰）
+    "N806",   # 变量名应该小写（Qt 变量名是驼峰）
+    "N815",   # 类变量名应该小写（Qt 类变量是驼峰）
+    "SIM108", # 使用三元运算符（有时 if-else 更清晰）
+]
+
+# 每个文件允许的未使用导入
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # 允许未使用的导入
+"src/cython_core/__init__.py" = ["E402"]  # 允许导入前的代码
+
+# Import sorting 配置
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+
+# 格式化配置
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+skip-magic-trailing-comma = false
