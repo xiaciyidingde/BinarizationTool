@@ -35,4 +35,12 @@ ENV/
 .coverage
 htmlcov/
 
+# Nuitka Build Output
+main.build/
+main.dist/
+BinarizationToolv*/
+
+# Data
+data/config.json
+
 *.bmp

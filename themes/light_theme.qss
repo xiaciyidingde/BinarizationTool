@@ -56,8 +56,9 @@ QFrame#viewModeSwitcher QPushButton:pressed {
 }
 
 QFrame#viewModeSwitcher QPushButton:checked {
-    background-color: rgba(74, 134, 232, 0.2);
+    background-color: transparent;
     color: #4a86e8;
+    font-weight: 600;
 }
 
 /* 工具栏容器中的按钮 - 扁平无边框样式 */
@@ -143,25 +144,21 @@ QLineEdit:focus {
 
 /* ========== 分组框样式 ========== */
 QGroupBox {
-    font-weight: 600;
+    font-weight: bold;
+    font-size: 14px;
+    color: #495057;
     border: 1px solid #dee2e6;
-    border-radius: 8px;
-    margin-top: 20px;
-    padding-top: 24px;
-    padding-left: 12px;
-    padding-right: 12px;
-    padding-bottom: 12px;
-    background-color: #ffffff;
+    border-radius: 4px;
+    margin-top: 10px;
+    padding-top: 10px;
 }
 
 QGroupBox::title {
     subcontrol-origin: margin;
     subcontrol-position: top left;
-    padding: 0 8px;
-    color: #495057;
-    font-size: 13px;
-    top: 8px;
-    left: 12px;
+    left: 8px;
+    top: 0px;
+    padding: 0 4px;
     background-color: #ffffff;
 }
 
@@ -217,20 +214,20 @@ QRadioButton {
 }
 
 QRadioButton::indicator {
-    width: 16px;
-    height: 16px;
+    width: 8px;
+    height: 8px;
 }
 
 QRadioButton::indicator:unchecked {
     border: 2px solid #ced4da;
     background-color: white;
-    border-radius: 8px;
+    border-radius: 6px;
 }
 
 QRadioButton::indicator:checked {
     border: 2px solid #007bff;
     background-color: #007bff;
-    border-radius: 8px;
+    border-radius: 6px;
 }
 
 /* ========== 下拉框样式 ========== */
