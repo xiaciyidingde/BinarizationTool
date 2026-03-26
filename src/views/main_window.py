@@ -1079,6 +1079,7 @@ class MainWindow(QMainWindow):
         self.reset_action_btn.setEnabled(has_image and self._has_edits())
 
         # 工具
+        self.pan_button.setEnabled(has_image)
         self.brush_button.setEnabled(has_image)
         self.crop_button.setEnabled(has_image)
         self.selection_tool_button.setEnabled(has_image)
