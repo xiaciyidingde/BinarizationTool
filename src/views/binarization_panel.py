@@ -327,7 +327,18 @@ class BinarizationPanel(QWidget):
         """)
 
         def reset_edge_strength():
+            # 如果按钮已禁用（动画中），忽略点击
+            if not edge_strength_reset_btn.isEnabled():
+                return
+
+            # 禁用按钮防止重复点击
+            edge_strength_reset_btn.setEnabled(False)
+
             animation = create_rotation_animation(edge_strength_reset_btn, duration=300, angle=360)
+
+            # 动画结束后重新启用按钮
+            animation.on_finished(lambda: edge_strength_reset_btn.setEnabled(True))
+
             animation.start()
             self.edge_strength_slider.setValue(50)
 
@@ -390,7 +401,18 @@ class BinarizationPanel(QWidget):
         """)
 
         def reset_edge_threshold():
+            # 如果按钮已禁用（动画中），忽略点击
+            if not edge_threshold_reset_btn.isEnabled():
+                return
+
+            # 禁用按钮防止重复点击
+            edge_threshold_reset_btn.setEnabled(False)
+
             animation = create_rotation_animation(edge_threshold_reset_btn, duration=300, angle=360)
+
+            # 动画结束后重新启用按钮
+            animation.on_finished(lambda: edge_threshold_reset_btn.setEnabled(True))
+
             animation.start()
             self.edge_threshold_slider.setValue(150)
 
@@ -483,7 +505,18 @@ class BinarizationPanel(QWidget):
         """)
 
         def reset_threshold():
+            # 如果按钮已禁用（动画中），忽略点击
+            if not threshold_reset_btn.isEnabled():
+                return
+
+            # 禁用按钮防止重复点击
+            threshold_reset_btn.setEnabled(False)
+
             animation = create_rotation_animation(threshold_reset_btn, duration=300, angle=360)
+
+            # 动画结束后重新启用按钮
+            animation.on_finished(lambda: threshold_reset_btn.setEnabled(True))
+
             animation.start()
             self.threshold_slider.setValue(127)
 
@@ -677,8 +710,19 @@ class BinarizationPanel(QWidget):
 
         # 重置按钮点击事件（带动画）
         def reset_value():
+            # 如果按钮已禁用（动画中），忽略点击
+            if not reset_btn.isEnabled():
+                return
+
+            # 禁用按钮防止重复点击
+            reset_btn.setEnabled(False)
+
             # 播放旋转动画
             animation = create_rotation_animation(reset_btn, duration=300, angle=360)
+
+            # 动画结束后重新启用按钮
+            animation.on_finished(lambda: reset_btn.setEnabled(True))
+
             animation.start()
             # 重置滑块值
             slider.setValue(default_val)

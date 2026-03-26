@@ -60,8 +60,33 @@ animation = create_rotation_animation(
     enabled=True   # 启用动画
 )
 
+# 设置动画完成回调
+animation.on_finished(lambda: print("Animation completed"))
+
 # 播放动画
 animation.start()
+```
+
+**防止重复触发：**
+
+```python
+def reset_value():
+    # 检查按钮是否已禁用（动画中）
+    if not reset_btn.isEnabled():
+        return
+    
+    # 禁用按钮防止重复点击
+    reset_btn.setEnabled(False)
+    
+    # 创建动画
+    animation = create_rotation_animation(reset_btn, duration=300, angle=360)
+    
+    # 动画结束后重新启用按钮
+    animation.on_finished(lambda: reset_btn.setEnabled(True))
+    
+    animation.start()
+    # 执行重置操作
+    slider.setValue(default_value)
 ```
 
 **应用场景：**

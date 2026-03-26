@@ -615,6 +615,25 @@ class MainWindow(QMainWindow):
     def _do_load_file(self, file_path: str):
         """实际执行文件加载（延迟调用）"""
         try:
+            # 先检查图像尺寸，避免加载过大的图像
+            max_size = self.config_manager.get('performance', 'max_image_size', 20000)
+
+            # 使用 PIL 快速读取图像尺寸（不加载完整图像数据）
+            from PIL import Image
+            with Image.open(file_path) as img:
+                width, height = img.size
+
+            # 检查是否超出限制
+            if width > max_size or height > max_size:
+                self.canvas.set_processing(False)
+                QMessageBox.warning(
+                    self,
+                    self.tr.tr('dialog.warning'),
+                    self.tr.tr('message.image_too_large', width=width, height=height, max_size=max_size)
+                )
+                self.statusbar.showMessage(self.tr.tr('message.load_cancelled'))
+                return
+
             # 加载图片（不自动二值化）
             self.image_data = load_image(file_path, binarize=False)
 
@@ -730,22 +749,34 @@ class MainWindow(QMainWindow):
 
     def _generate_default_save_name(self) -> str:
         """
-        生成默认保存文件名（原名_时间戳）
+        根据配置生成默认保存文件名
 
         Returns:
             默认文件名路径
         """
+        # 获取文件名格式配置
+        filename_format = self.config_manager.get('file', 'filename_format', 'timestamp')
+
         if self.current_file_path:
             # 获取原文件信息
             dir_path = os.path.dirname(self.current_file_path)
             file_name = os.path.basename(self.current_file_path)
             name_without_ext, ext = os.path.splitext(file_name)
 
-            # 生成时间戳
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # 根据配置生成文件名
+            if filename_format == 'timestamp':
+                # 原名_时间戳
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                new_name = f"{name_without_ext}_{timestamp}{ext}"
+            elif filename_format == 'copy':
+                # 原名_副本
+                new_name = f"{name_without_ext}_副本{ext}"
+            else:  # custom
+                # 自定义前缀/后缀
+                prefix = self.config_manager.get('file', 'custom_prefix', '')
+                suffix = self.config_manager.get('file', 'custom_suffix', '')
+                new_name = f"{prefix}{name_without_ext}{suffix}{ext}"
 
-            # 组合新文件名
-            new_name = f"{name_without_ext}_{timestamp}{ext}"
             return os.path.join(dir_path, new_name)
         else:
             # 如果没有原文件路径，使用默认名称
@@ -755,7 +786,24 @@ class MainWindow(QMainWindow):
     def _save_to_file(self, file_path: str):
         """保存到文件"""
         try:
-            save_image(self.image_data, file_path)
+            # 获取保存格式配置
+            save_format_config = self.config_manager.get('file', 'default_save_format', 'follow_original')
+
+            # 确定实际保存格式
+            if save_format_config == 'follow_original':
+                # 跟随用户选择的文件扩展名
+                format_str = None
+            else:
+                # 使用配置的格式
+                format_map = {
+                    'png': 'PNG',
+                    'jpg': 'JPEG',
+                    'bmp': 'BMP',
+                    'webp': 'WEBP'
+                }
+                format_str = format_map.get(save_format_config)
+
+            save_image(self.image_data, file_path, format=format_str)
             self.current_file_path = file_path
             self.statusbar.showMessage(self.tr.tr('message.saved', path=file_path))
         except Exception as e:

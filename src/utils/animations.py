@@ -96,6 +96,7 @@ class RotationAnimation:
         self.rotatable = RotatableWidget(widget)
         self.animation = None
         self._enabled = True  # 动画开关，默认启用
+        self._on_finished_callback = None  # 完成回调
 
     def set_enabled(self, enabled: bool):
         """
@@ -115,11 +116,23 @@ class RotationAnimation:
         """
         return self._enabled
 
+    def on_finished(self, callback):
+        """
+        设置动画完成时的回调函数
+
+        Args:
+            callback: 回调函数
+        """
+        self._on_finished_callback = callback
+
     def start(self):
         """开始动画"""
         # 检查全局动画开关和局部动画开关
         if not self._enabled or not _animation_config.is_enabled():
             # 动画禁用时直接返回，不执行动画
+            # 但仍然调用完成回调
+            if self._on_finished_callback:
+                self._on_finished_callback()
             return
 
         # 创建旋转动画
@@ -132,6 +145,9 @@ class RotationAnimation:
         # 动画结束后恢复原始状态
         def on_finished():
             self.rotatable.set_rotation(0)
+            # 调用用户设置的回调
+            if self._on_finished_callback:
+                self._on_finished_callback()
 
         self.animation.finished.connect(on_finished)
         self.animation.start()
