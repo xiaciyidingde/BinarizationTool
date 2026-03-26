@@ -294,6 +294,11 @@ def compile_project():
         compile_cmd.insert(-1, "--include-data-dir=themes=themes")
         print("✅ 检测到 themes 目录，将包含在编译中")
 
+    # 包含 locales 目录（多语言翻译文件）
+    if (current_dir / "locales").exists():
+        compile_cmd.insert(-1, "--include-data-dir=locales=locales")
+        print("✅ 检测到 locales 目录，将包含在编译中")
+
     # 包含 Cython 编译的 .pyd/.so 文件
     system = platform.system()
     if system == "Windows":
