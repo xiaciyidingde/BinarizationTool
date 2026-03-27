@@ -1462,11 +1462,26 @@ class MainWindow(QMainWindow):
         theme = config.get('interface', 'theme', 'light')
         from ..utils.theme_manager import ThemeManager
         from PySide6.QtWidgets import QApplication
+        from PySide6.QtGui import QIcon, QPixmap
+        from ..utils.resources import APP_ICON_BYTES, APP_ICON_BYTES_DARK
+        
         theme_manager = ThemeManager()
         theme_manager.apply_theme(QApplication.instance(), theme)
         
         # 应用深色标题栏（主题切换后立即更新）
         self._apply_dark_titlebar()
+        
+        # 更新应用程序图标
+        if theme == 'system':
+            detected_theme = theme_manager._detect_system_theme()
+        else:
+            detected_theme = theme
+        
+        icon_bytes = APP_ICON_BYTES_DARK if detected_theme == 'dark' else APP_ICON_BYTES
+        pixmap = QPixmap()
+        pixmap.loadFromData(icon_bytes)
+        icon = QIcon(pixmap)
+        QApplication.instance().setWindowIcon(icon)
         
         # 动画开关
         animations_enabled = config.get('interface', 'animations_enabled', True)
@@ -1508,9 +1523,12 @@ class MainWindow(QMainWindow):
 
     def _show_about(self):
         """显示关于对话框"""
-        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QHBoxLayout
+        from PySide6.QtGui import QPixmap, QImage
+        from PySide6.QtCore import Qt
 
         from src.__version__ import __app_name__, __author__, __release_date__, __version__
+        from ..utils.resources import APP_ICON_BYTES, APP_ICON_BYTES_DARK
 
         dialog = QDialog(self)
         dialog.setWindowTitle(self.tr.tr('about.title', app_name=__app_name__))
@@ -1524,23 +1542,50 @@ class MainWindow(QMainWindow):
         layout.setSpacing(15)
         layout.setContentsMargins(30, 30, 30, 30)
 
+        # 顶部布局：应用名称 + 图标
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(15)
+        
+        # 左侧信息布局
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(5)
+        
         # 应用名称
         app_name_label = QLabel(__app_name__)
         app_name_label.setObjectName("aboutAppName")
         app_name_label.setStyleSheet("font-size: 24px; font-weight: bold;")
-        layout.addWidget(app_name_label)
+        info_layout.addWidget(app_name_label)
 
         # 版本号
         version_label = QLabel(self.tr.tr('about.version', version=__version__))
         version_label.setObjectName("aboutVersion")
-        version_label.setStyleSheet("font-size: 16px; margin-bottom: 10px;")
-        layout.addWidget(version_label)
+        version_label.setStyleSheet("font-size: 16px;")
+        info_layout.addWidget(version_label)
 
         # 发布日期
         date_label = QLabel(self.tr.tr('about.release_date', date=__release_date__))
         date_label.setObjectName("aboutDate")
         date_label.setStyleSheet("font-size: 14px;")
-        layout.addWidget(date_label)
+        info_layout.addWidget(date_label)
+        
+        info_layout.addStretch()
+        top_layout.addLayout(info_layout)
+        
+        # 应用图标（右侧）- 根据主题选择图标
+        theme = self.config_manager.get('interface', 'theme', 'light')
+        if theme == 'system':
+            from ..utils.theme_manager import ThemeManager
+            theme_manager = ThemeManager()
+            theme = theme_manager._detect_system_theme()
+        
+        icon_bytes = APP_ICON_BYTES_DARK if theme == 'dark' else APP_ICON_BYTES
+        icon_label = QLabel()
+        icon_pixmap = QPixmap.fromImage(QImage.fromData(icon_bytes))
+        icon_label.setPixmap(icon_pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        icon_label.setFixedSize(100, 100)
+        top_layout.addWidget(icon_label)
+        
+        layout.addLayout(top_layout)
 
         # 分隔线
         separator = QLabel()
