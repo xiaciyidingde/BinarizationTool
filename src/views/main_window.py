@@ -131,6 +131,10 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """窗口关闭事件 - 清理资源"""
+        # 清理 Canvas 的线程资源
+        if hasattr(self, 'canvas') and self.canvas is not None:
+            self.canvas.cleanup()
+        
         # 停止防抖定时器
         if self.binarization_debounce_timer.isActive():
             self.binarization_debounce_timer.stop()
