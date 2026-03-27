@@ -56,6 +56,9 @@ class ImageData:
 
         # 预处理结果缓存
         self.preprocessed_pixels: np.ndarray | None = None
+        
+        # 用户图层列表
+        self.user_layers: list = []  # list[UserLayer]
 
     def get_pixel(self, x: int, y: int) -> int:
         """
@@ -254,6 +257,9 @@ class ImageData:
         new_image.view_mode = self.view_mode
         if self.preprocessed_pixels is not None:
             new_image.preprocessed_pixels = self.preprocessed_pixels.copy()
+        # 复制用户图层
+        from .user_layer import UserLayer
+        new_image.user_layers = [layer.copy() for layer in self.user_layers]
         return new_image
 
     def get_current_pixels(self) -> np.ndarray:
@@ -337,3 +343,16 @@ class ImageData:
     def invalidate_preprocessed_cache(self):
         """使预处理缓存失效"""
         self.preprocessed_pixels = None
+    
+    def has_selection(self) -> bool:
+        """
+        检查是否有选区
+        
+        Returns:
+            True 如果有选区，否则 False
+        """
+        return self.selection_mask is not None and self.selection_mask.any()
+    
+    def clear_selection(self):
+        """清除选区"""
+        self.selection_mask = None

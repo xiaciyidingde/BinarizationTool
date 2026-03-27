@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from ..utils.translation_manager import get_translator
 from ..widgets.animated_tab_widget import AnimatedTabWidget
+from ..widgets.layers_panel import LayersPanel
 
 
 class PropertiesPanel(QWidget):
@@ -44,6 +45,12 @@ class PropertiesPanel(QWidget):
 
     def setup_ui(self):
         """设置 UI"""
+        # 主布局（垂直布局，包含上下两部分）
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(6)
+        
+        # ========== 上半部分：属性和工具 ==========
         # 创建滚动区域
         from PySide6.QtWidgets import QScrollArea
         scroll = QScrollArea()
@@ -81,14 +88,33 @@ class PropertiesPanel(QWidget):
 
         # 设置滚动区域
         scroll.setWidget(outer_container)
-
-        # 主布局
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll)
+        
+        # 添加到主布局
+        main_layout.addWidget(scroll, stretch=1)
+        
+        # ========== 下半部分：图层面板 ==========
+        # 创建图层面板容器（带背景和圆角）
+        layers_outer = QWidget()
+        layers_outer_layout = QVBoxLayout(layers_outer)
+        layers_outer_layout.setContentsMargins(6, 0, 6, 6)
+        
+        layers_container = QWidget()
+        layers_container.setObjectName("propertiesPanelContent")
+        layers_container_layout = QVBoxLayout(layers_container)
+        layers_container_layout.setContentsMargins(0, 0, 0, 0)
+        layers_container_layout.setSpacing(0)
+        
+        # 图层面板
+        self.layers_panel = LayersPanel()
+        layers_container_layout.addWidget(self.layers_panel)
+        
+        layers_outer_layout.addWidget(layers_container)
+        
+        # 添加到主布局
+        main_layout.addWidget(layers_outer, stretch=0)
 
         # 设置面板尺寸
-        self.setMinimumWidth(270)  # 从 250 增加到 270
+        self.setMinimumWidth(270)
         self.setMaximumWidth(270)
 
     def _create_properties_page(self) -> QWidget:

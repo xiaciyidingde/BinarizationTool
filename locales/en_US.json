@@ -272,5 +272,23 @@
     "fill_black": "Fill Black",
     "deselect": "Deselect",
     "invert": "Invert"
+  },
+  "layers_panel": {
+    "save_selection": "Save Selection as Layer",
+    "layers_list": "Layers List",
+    "layer_operations": "Layer Operations",
+    "merge": "Merge",
+    "delete": "Delete",
+    "root_layer_tooltip": "Root Layer: Base layer of the entire image, automatically updates when adjusting binarization parameters",
+    "layer_name_default": "Layer {number}",
+    "merged_layer": "Merged Layer",
+    "no_selection_warning": "Please select an area using the selection tool first",
+    "layer_saved": "Layer saved: {name}",
+    "layer_deleted": "Layer deleted: {name}",
+    "layers_merged": "Layers merged",
+    "cannot_delete_root": "Cannot delete root layer",
+    "need_two_layers": "At least two user layers are required to merge",
+    "switch_to_root_warning": "Adjusting binarization parameters only affects the root layer. Please switch to the root layer first",
+    "not_root_layer": "Current layer is not the root layer. Cannot adjust binarization parameters"
   }
 }

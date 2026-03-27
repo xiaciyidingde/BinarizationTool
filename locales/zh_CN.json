@@ -272,5 +272,23 @@
     "fill_black": "填充黑色",
     "deselect": "取消选择",
     "invert": "反选"
+  },
+  "layers_panel": {
+    "save_selection": "保存选区为图层",
+    "layers_list": "图层列表",
+    "layer_operations": "图层操作",
+    "merge": "合并",
+    "delete": "删除",
+    "root_layer_tooltip": "根图层：整张图片的基础层，调整二值化参数时会自动更新",
+    "layer_name_default": "图层 {number}",
+    "merged_layer": "合并图层",
+    "no_selection_warning": "请先使用选择工具选择区域",
+    "layer_saved": "已保存图层：{name}",
+    "layer_deleted": "已删除图层：{name}",
+    "layers_merged": "已合并图层",
+    "cannot_delete_root": "无法删除根图层",
+    "need_two_layers": "至少需要选择两个用户图层才能合并",
+    "switch_to_root_warning": "调整二值化参数只影响根图层，请先切换到根图层",
+    "not_root_layer": "当前不是根图层，无法调整二值化参数"
   }
 }
