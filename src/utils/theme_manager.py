@@ -24,6 +24,7 @@ class ThemeManager:
     # 可用主题
     AVAILABLE_THEMES = {
         "light": "light_theme.qss",
+        "dark": "dark_theme.qss",
     }
 
     def __init__(self):
@@ -98,11 +99,15 @@ class ThemeManager:
 
         Args:
             app: QApplication 实例
-            theme_name: 主题名称
+            theme_name: 主题名称（light, dark, 或 system）
 
         Returns:
             True 如果应用成功，否则 False
         """
+        # 如果是 system 主题，检测系统主题
+        if theme_name == "system":
+            theme_name = self._detect_system_theme()
+        
         stylesheet = self.load_theme(theme_name)
 
         if stylesheet is None:
@@ -111,6 +116,31 @@ class ThemeManager:
         app.setStyleSheet(stylesheet)
         self.current_theme = theme_name
         return True
+    
+    def _detect_system_theme(self) -> str:
+        """
+        检测系统主题
+        
+        Returns:
+            'dark' 或 'light'
+        """
+        import sys
+        
+        if sys.platform == 'win32':
+            try:
+                import winreg
+                # 读取 Windows 注册表中的主题设置
+                registry = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
+                key = winreg.OpenKey(registry, r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize')
+                value, _ = winreg.QueryValueEx(key, 'AppsUseLightTheme')
+                winreg.CloseKey(key)
+                # 0 = 深色, 1 = 浅色
+                return 'light' if value == 1 else 'dark'
+            except Exception:
+                return 'light'  # 默认浅色
+        else:
+            # 其他系统暂时返回浅色
+            return 'light'
 
     def get_current_theme(self) -> str:
         """

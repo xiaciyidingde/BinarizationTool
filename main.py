@@ -38,8 +38,12 @@ def main():
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(__app_name__)
     
     # 应用主题
+    from src.utils.config_manager import get_config_manager
+    config_manager = get_config_manager()
+    theme = config_manager.get('interface', 'theme', 'light')
+    
     theme_manager = ThemeManager()
-    theme_manager.apply_theme(app, "light")
+    theme_manager.apply_theme(app, theme)
     
     # 创建并显示主窗口
     window = MainWindow()

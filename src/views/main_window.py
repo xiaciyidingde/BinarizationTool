@@ -92,6 +92,9 @@ class MainWindow(QMainWindow):
         # 设置窗口
         self.setWindowTitle(self.tr.tr('app.title'))
         self.setGeometry(100, 100, 1550, 800)  # 宽度从 1450 增加到 1550
+        
+        # 应用深色标题栏（Windows 11）
+        self._apply_dark_titlebar()
 
         # 创建 UI
         self.setup_ui()
@@ -139,6 +142,80 @@ class MainWindow(QMainWindow):
 
         # 接受关闭事件
         event.accept()
+
+    def _apply_dark_titlebar(self):
+        """应用深色标题栏（Windows 11）"""
+        import sys
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+                from ctypes import wintypes
+                
+                # 获取当前主题
+                theme = self.config_manager.get('interface', 'theme', 'light')
+                
+                # 如果是跟随系统，检测系统主题
+                if theme == 'system':
+                    from ..utils.theme_manager import ThemeManager
+                    theme_manager = ThemeManager()
+                    theme = theme_manager._detect_system_theme()
+                
+                # Windows 11 标题栏颜色
+                hwnd = int(self.winId())
+                DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                
+                # 根据主题设置标题栏颜色：1 = 深色, 0 = 浅色
+                value = ctypes.c_int(1 if theme == 'dark' else 0)
+                
+                # 尝试调用 DwmSetWindowAttribute
+                try:
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        hwnd,
+                        DWMWA_USE_IMMERSIVE_DARK_MODE,
+                        ctypes.byref(value),
+                        ctypes.sizeof(value)
+                    )
+                except Exception:
+                    pass  # 如果失败（比如 Windows 10），静默忽略
+            except Exception:
+                pass  # 非 Windows 系统或其他错误，静默忽略
+
+    def _apply_dark_titlebar_to_dialog(self, dialog):
+        """为对话框应用标题栏颜色（Windows 11）"""
+        import sys
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+                
+                # 获取当前主题
+                theme = self.config_manager.get('interface', 'theme', 'light')
+                
+                # 如果是跟随系统，检测系统主题
+                if theme == 'system':
+                    from ..utils.theme_manager import ThemeManager
+                    theme_manager = ThemeManager()
+                    theme = theme_manager._detect_system_theme()
+                
+                # 确保对话框已经创建窗口句柄
+                dialog.show()
+                dialog.hide()
+                
+                hwnd = int(dialog.winId())
+                DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                # 根据主题设置标题栏颜色：1 = 深色, 0 = 浅色
+                value = ctypes.c_int(1 if theme == 'dark' else 0)
+                
+                try:
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        hwnd,
+                        DWMWA_USE_IMMERSIVE_DARK_MODE,
+                        ctypes.byref(value),
+                        ctypes.sizeof(value)
+                    )
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
     def setup_ui(self):
         """设置 UI 布局"""
@@ -399,7 +476,8 @@ class MainWindow(QMainWindow):
 
         # 当前工具显示
         self.current_tool_label = QLabel(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
-        self.current_tool_label.setStyleSheet("padding: 0 10px; color: #495057; font-size: 14px; font-weight: 500;")
+        self.current_tool_label.setObjectName("currentToolLabel")
+        self.current_tool_label.setStyleSheet("padding: 0 10px; font-size: 14px; font-weight: 500;")
         toolbar_layout.addWidget(self.current_tool_label)
 
         # 将容器添加到工具栏
@@ -1380,6 +1458,16 @@ class MainWindow(QMainWindow):
         config = self.config_manager
 
         # 0. 界面设置
+        # 主题设置
+        theme = config.get('interface', 'theme', 'light')
+        from ..utils.theme_manager import ThemeManager
+        from PySide6.QtWidgets import QApplication
+        theme_manager = ThemeManager()
+        theme_manager.apply_theme(QApplication.instance(), theme)
+        
+        # 应用深色标题栏（主题切换后立即更新）
+        self._apply_dark_titlebar()
+        
         # 动画开关
         animations_enabled = config.get('interface', 'animations_enabled', True)
         from ..utils.animations import set_global_animation_enabled
@@ -1428,6 +1516,9 @@ class MainWindow(QMainWindow):
         dialog.setWindowTitle(self.tr.tr('about.title', app_name=__app_name__))
         dialog.setMinimumWidth(450)
         dialog.setMinimumHeight(350)
+        
+        # 应用深色标题栏
+        self._apply_dark_titlebar_to_dialog(dialog)
 
         layout = QVBoxLayout(dialog)
         layout.setSpacing(15)
@@ -1435,43 +1526,51 @@ class MainWindow(QMainWindow):
 
         # 应用名称
         app_name_label = QLabel(__app_name__)
-        app_name_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #212529;")
+        app_name_label.setObjectName("aboutAppName")
+        app_name_label.setStyleSheet("font-size: 24px; font-weight: bold;")
         layout.addWidget(app_name_label)
 
         # 版本号
         version_label = QLabel(self.tr.tr('about.version', version=__version__))
-        version_label.setStyleSheet("font-size: 16px; color: #212529; margin-bottom: 10px;")
+        version_label.setObjectName("aboutVersion")
+        version_label.setStyleSheet("font-size: 16px; margin-bottom: 10px;")
         layout.addWidget(version_label)
 
         # 发布日期
         date_label = QLabel(self.tr.tr('about.release_date', date=__release_date__))
-        date_label.setStyleSheet("font-size: 14px; color: #212529;")
+        date_label.setObjectName("aboutDate")
+        date_label.setStyleSheet("font-size: 14px;")
         layout.addWidget(date_label)
 
         # 分隔线
         separator = QLabel()
-        separator.setStyleSheet("border-top: 1px solid #dee2e6; margin: 10px 0;")
+        separator.setObjectName("aboutSeparator")
+        separator.setStyleSheet("margin: 10px 0;")
         layout.addWidget(separator)
 
         # 描述
         desc_label = QLabel(self.tr.tr('about.description'))
-        desc_label.setStyleSheet("font-size: 14px; color: #212529; line-height: 1.6;")
+        desc_label.setObjectName("aboutDesc")
+        desc_label.setStyleSheet("font-size: 14px; line-height: 1.6;")
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
 
         # 作者
         author_label = QLabel(self.tr.tr('about.author', author=__author__))
-        author_label.setStyleSheet("font-size: 14px; color: #212529; margin-top: 10px;")
+        author_label.setObjectName("aboutAuthor")
+        author_label.setStyleSheet("font-size: 14px; margin-top: 10px;")
         layout.addWidget(author_label)
 
         # 版权
         copyright_label = QLabel(self.tr.tr('about.copyright'))
-        copyright_label.setStyleSheet("font-size: 12px; color: #212529; margin-top: 5px;")
+        copyright_label.setObjectName("aboutCopyright")
+        copyright_label.setStyleSheet("font-size: 12px; margin-top: 5px;")
         layout.addWidget(copyright_label)
 
         # 许可证
         license_label = QLabel(self.tr.tr('about.license'))
-        license_label.setStyleSheet("font-size: 12px; color: #212529;")
+        license_label.setObjectName("aboutLicense")
+        license_label.setStyleSheet("font-size: 12px;")
         layout.addWidget(license_label)
 
         # 添加弹性空间

@@ -41,9 +41,40 @@ class SettingsDialog(QDialog):
         self.setWindowTitle(self.tr.tr('settings.title'))
         self.setMinimumWidth(600)
         self.setMinimumHeight(500)
+        
+        # 应用深色标题栏
+        self._apply_dark_titlebar()
 
         self.setup_ui()
         self.load_settings()
+
+    def _apply_dark_titlebar(self):
+        """应用深色标题栏（Windows 11）"""
+        import sys
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+                
+                # 获取当前主题
+                theme = self.config_manager.get('interface', 'theme', 'light')
+                
+                # 只在深色主题下应用深色标题栏
+                if theme == 'dark':
+                    hwnd = int(self.winId())
+                    DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                    value = ctypes.c_int(1)
+                    
+                    try:
+                        ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                            hwnd,
+                            DWMWA_USE_IMMERSIVE_DARK_MODE,
+                            ctypes.byref(value),
+                            ctypes.sizeof(value)
+                        )
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
     def load_settings(self):
         """从配置文件加载设置"""
@@ -109,36 +140,8 @@ class SettingsDialog(QDialog):
 
         # 创建选项卡
         tab_widget = AnimatedTabWidget()
-        # 设置选项卡样式（参考属性面板）
-        tab_widget.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                background: #ffffff;
-                top: -1px;
-            }
-            QTabBar::tab {
-                background: #f8f9fa;
-                color: #6c757d;
-                padding: 8px 20px;
-                margin-right: 4px;
-                border: 1px solid #dee2e6;
-                border-bottom: none;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-                font-size: 13px;
-            }
-            QTabBar::tab:selected {
-                background: #ffffff;
-                color: #495057;
-                font-weight: bold;
-                border-bottom: 1px solid #ffffff;
-                margin-bottom: -1px;
-            }
-            QTabBar::tab:hover:!selected {
-                background: #e9ecef;
-            }
-        """)
+        tab_widget.setObjectName("settingsTabWidget")
+        # 移除内联样式，让主题文件控制
 
         # 1. 界面设置
         tab_widget.addTab(self.create_interface_tab(), self.tr.tr('settings.interface'))
@@ -156,7 +159,8 @@ class SettingsDialog(QDialog):
 
         # 按钮容器
         button_container = QWidget()
-        button_container.setStyleSheet("background: #f8f9fa; border-top: 1px solid #dee2e6;")
+        button_container.setObjectName("settingsButtonContainer")
+        # 移除内联样式，让主题文件控制
         button_layout = QHBoxLayout(button_container)
         button_layout.setContentsMargins(10, 10, 10, 10)
 
@@ -234,11 +238,6 @@ class SettingsDialog(QDialog):
         theme_layout.addWidget(self.theme_light)
         theme_layout.addWidget(self.theme_dark)
         theme_layout.addWidget(self.theme_system)
-
-        theme_note = QLabel(self.tr.tr('settings.theme_note'))
-        theme_note.setStyleSheet("color: #6c757d; font-size: 12px;")
-        theme_note.setWordWrap(True)
-        theme_layout.addWidget(theme_note)
 
         theme_group.setLayout(theme_layout)
         layout.addWidget(theme_group)
@@ -513,19 +512,8 @@ class SettingsDialog(QDialog):
 
     def _on_theme_changed(self, checked):
         """主题改变时的处理"""
-        if not checked:
-            return
-
-        sender = self.sender()
-        if sender == self.theme_dark or sender == self.theme_system:
-            # 提示功能未支持
-            QMessageBox.information(
-                self,
-                self.tr.tr('dialog.feature_developing'),
-                self.tr.tr('dialog.theme_not_supported')
-            )
-            # 恢复为浅色主题
-            self.theme_light.setChecked(True)
+        # 移除主题限制，允许用户选择任何主题
+        pass
 
     def accept_settings(self):
         """接受设置并保存到配置文件"""

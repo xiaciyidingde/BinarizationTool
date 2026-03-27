@@ -58,48 +58,14 @@ class PropertiesPanel(QWidget):
         # 内容容器（带背景和圆角）
         content = QWidget()
         content.setObjectName("propertiesPanelContent")
-        content.setStyleSheet("""
-            QWidget#propertiesPanelContent {
-                background-color: #ffffff;
-                border-radius: 8px;
-            }
-        """)
+        # 移除内联样式，让主题文件控制
         layout = QVBoxLayout(content)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
         # 创建选项卡
         self.tab_widget = AnimatedTabWidget()
-        # 设置选项卡样式
-        self.tab_widget.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                background: transparent;
-                top: -1px;
-            }
-            QTabBar::tab {
-                background: #f8f9fa;
-                color: #6c757d;
-                padding: 8px 20px;
-                margin-right: 4px;
-                border: 1px solid #dee2e6;
-                border-bottom: none;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-                font-size: 13px;
-            }
-            QTabBar::tab:selected {
-                background: #ffffff;
-                color: #495057;
-                font-weight: bold;
-                border-bottom: 1px solid #ffffff;
-                margin-bottom: -1px;
-            }
-            QTabBar::tab:hover:!selected {
-                background: #e9ecef;
-            }
-        """)
+        # 移除内联样式，让主题文件控制
         layout.addWidget(self.tab_widget)
 
         # 第一页：属性
@@ -145,7 +111,7 @@ class PropertiesPanel(QWidget):
 
         self.filename_label = QLabel(self.tr.tr('properties_panel.no_image'))
         self.filename_label.setWordWrap(False)  # 禁用自动换行
-        self.filename_label.setStyleSheet("color: #333;")
+        self.filename_label.setObjectName("propertyValue")
         self.filename_label.setMaximumWidth(180)  # 限制最大宽度（从 160 增加到 180）
         self.filename_label.setTextFormat(Qt.PlainText)
         self.filename_label.setTextInteractionFlags(Qt.TextSelectableByMouse)  # 允许选择复制
@@ -159,17 +125,17 @@ class PropertiesPanel(QWidget):
 
         # 图片尺寸
         self.size_label = QLabel("-")
-        self.size_label.setStyleSheet("color: #333;")
+        self.size_label.setObjectName("propertyValue")
         image_layout.addRow(self.tr.tr('properties_panel.size'), self.size_label)
 
         # 文件大小
         self.filesize_label = QLabel("-")
-        self.filesize_label.setStyleSheet("color: #333;")
+        self.filesize_label.setObjectName("propertyValue")
         image_layout.addRow(self.tr.tr('properties_panel.filesize'), self.filesize_label)
 
         # 缩放比例
         self.zoom_label = QLabel("-")
-        self.zoom_label.setStyleSheet("color: #333;")
+        self.zoom_label.setObjectName("propertyValue")
         image_layout.addRow(self.tr.tr('properties_panel.zoom'), self.zoom_label)
 
         image_group.setLayout(image_layout)
@@ -190,7 +156,7 @@ class PropertiesPanel(QWidget):
         # 提示信息（默认显示）
         self.tool_hint_label = QLabel(self.tr.tr('properties_panel.no_tool'))
         self.tool_hint_label.setAlignment(Qt.AlignCenter)
-        self.tool_hint_label.setStyleSheet("color: #999; padding: 20px;")
+        self.tool_hint_label.setObjectName("toolHint")
         layout.addWidget(self.tool_hint_label)
 
         # 画笔工具设置

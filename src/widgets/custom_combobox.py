@@ -14,6 +14,8 @@ class CustomComboBoxDelegate(QStyledItemDelegate):
 
     def paint(self, painter, option, index):
         """绘制项目"""
+        from PySide6.QtWidgets import QApplication
+        
         # 如果是分隔线，绘制一条线
         if index.data(Qt.AccessibleDescriptionRole) == "separator":
             painter.save()
@@ -23,25 +25,39 @@ class CustomComboBoxDelegate(QStyledItemDelegate):
             painter.restore()
             return
 
+        # 通过检查样式表判断是否为深色主题
+        app = QApplication.instance()
+        stylesheet = app.styleSheet() if app else ""
+        is_dark = "background-color: #2a2a2a" in stylesheet or "background-color: #1e1e1e" in stylesheet
+        
         # 绘制背景
         if option.state & QStyle.State_Selected:
-            # 选中时使用浅蓝色背景
-            painter.fillRect(option.rect, QColor("#e7f3ff"))
+            # 选中时使用蓝色背景
+            painter.fillRect(option.rect, QColor("#0078d4"))
         elif option.state & QStyle.State_MouseOver:
-            # 悬停时使用浅灰色背景
-            painter.fillRect(option.rect, QColor("#e9ecef"))
+            # 悬停时使用稍亮的背景
+            if is_dark:
+                painter.fillRect(option.rect, QColor("#3a3a3a"))
+            else:
+                painter.fillRect(option.rect, QColor("#e9ecef"))
         else:
-            # 默认白色背景
-            painter.fillRect(option.rect, QColor("#ffffff"))
+            # 默认背景
+            if is_dark:
+                painter.fillRect(option.rect, QColor("#2a2a2a"))
+            else:
+                painter.fillRect(option.rect, QColor("#ffffff"))
 
         # 绘制文本
         painter.save()
         if option.state & QStyle.State_Selected:
-            # 选中时使用蓝色字体
-            painter.setPen(QColor("#007bff"))
+            # 选中时使用白色文字
+            painter.setPen(QColor("#ffffff"))
         else:
-            # 默认黑色字体
-            painter.setPen(QColor("#212529"))
+            # 默认文字颜色
+            if is_dark:
+                painter.setPen(QColor("#e0e0e0"))
+            else:
+                painter.setPen(QColor("#212529"))
 
         text = index.data(Qt.DisplayRole)
         painter.drawText(option.rect.adjusted(8, 0, -8, 0), Qt.AlignLeft | Qt.AlignVCenter, text)
@@ -68,13 +84,8 @@ class CustomComboBox(QComboBox):
 
         # 设置下拉列表视图
         list_view = QListView()
-        list_view.setStyleSheet("""
-            QListView {
-                border: 1px solid #dee2e6;
-                background-color: #ffffff;
-                outline: none;
-            }
-        """)
+        list_view.setObjectName("customComboBoxView")
+        # 移除内联样式，让主题文件控制
 
         # 设置自定义代理
         delegate = CustomComboBoxDelegate(list_view)

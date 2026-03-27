@@ -72,15 +72,10 @@ class BinarizationPanel(QWidget):
         outer_layout.setContentsMargins(12, 6, 12, 6)  # 恢复左右边距12px
         outer_layout.setSpacing(8)
 
-        # === 视图模式切换器区域（独立白色背景） ===
+        # === 视图模式切换器区域（独立背景） ===
         view_mode_container = QWidget()
         view_mode_container.setObjectName("viewModeContainer")
-        view_mode_container.setStyleSheet("""
-            QWidget#viewModeContainer {
-                background-color: #ffffff;
-                border-radius: 8px;
-            }
-        """)
+        # 移除内联样式，让主题文件控制
         view_mode_layout = QVBoxLayout(view_mode_container)
         view_mode_layout.setContentsMargins(12, 8, 12, 8)  # 左右边距12px
         view_mode_layout.setSpacing(0)
@@ -93,33 +88,8 @@ class BinarizationPanel(QWidget):
         # === 标签页组件 ===
         # 创建标签页组件
         self.tab_widget = AnimatedTabWidget()
-        self.tab_widget.setStyleSheet("""
-            QTabWidget::pane {
-                border: none;
-                background-color: #ffffff;
-                border-top-left-radius: 0px;
-                border-top-right-radius: 8px;
-                border-bottom-left-radius: 8px;
-                border-bottom-right-radius: 8px;
-                margin-top: -1px;
-            }
-            QTabBar::tab {
-                background-color: #f8f9fa;
-                color: #495057;
-                padding: 8px 16px;
-                margin-right: 2px;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-            }
-            QTabBar::tab:selected {
-                background-color: #ffffff;
-                color: #007bff;
-                font-weight: bold;
-            }
-            QTabBar::tab:hover:!selected {
-                background-color: #e9ecef;
-            }
-        """)
+        self.tab_widget.setObjectName("binarizationPanelTabs")
+        # 移除内联样式，让主题文件控制
 
         # 创建预处理标签页
         preprocess_tab = self._create_preprocess_tab()
@@ -309,22 +279,10 @@ class BinarizationPanel(QWidget):
         from ..utils.animations import create_rotation_animation
         from ..utils.resources import REFRESH
         edge_strength_reset_btn = QPushButton()
+        edge_strength_reset_btn.setObjectName("resetButton")
         edge_strength_reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
         edge_strength_reset_btn.setFixedSize(24, 24)
-        edge_strength_reset_btn.setStyleSheet("""
-            QPushButton {
-                border: none;
-                background-color: transparent;
-                padding: 2px;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-                border-radius: 4px;
-            }
-            QPushButton:pressed {
-                background-color: #d0d0d0;
-            }
-        """)
+        # 移除内联样式，让主题文件控制
 
         def reset_edge_strength():
             # 如果按钮已禁用（动画中），忽略点击
@@ -383,22 +341,10 @@ class BinarizationPanel(QWidget):
         # 重置按钮
         from ..utils.resources import REFRESH
         edge_threshold_reset_btn = QPushButton()
+        edge_threshold_reset_btn.setObjectName("resetButton")
         edge_threshold_reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
         edge_threshold_reset_btn.setFixedSize(24, 24)
-        edge_threshold_reset_btn.setStyleSheet("""
-            QPushButton {
-                border: none;
-                background-color: transparent;
-                padding: 2px;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-                border-radius: 4px;
-            }
-            QPushButton:pressed {
-                background-color: #d0d0d0;
-            }
-        """)
+        # 移除内联样式，让主题文件控制
 
         def reset_edge_threshold():
             # 如果按钮已禁用（动画中），忽略点击
@@ -489,20 +435,7 @@ class BinarizationPanel(QWidget):
         threshold_reset_btn = QPushButton()
         threshold_reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
         threshold_reset_btn.setFixedSize(24, 24)
-        threshold_reset_btn.setStyleSheet("""
-            QPushButton {
-                border: none;
-                background-color: transparent;
-                padding: 2px;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-                border-radius: 4px;
-            }
-            QPushButton:pressed {
-                background-color: #d0d0d0;
-            }
-        """)
+        threshold_reset_btn.setObjectName("resetButton")
 
         def reset_threshold():
             # 如果按钮已禁用（动画中），忽略点击
@@ -693,20 +626,7 @@ class BinarizationPanel(QWidget):
         reset_btn = QPushButton()
         reset_btn.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(REFRESH))))
         reset_btn.setFixedSize(24, 24)
-        reset_btn.setStyleSheet("""
-            QPushButton {
-                border: none;
-                background-color: transparent;
-                padding: 2px;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-                border-radius: 4px;
-            }
-            QPushButton:pressed {
-                background-color: #d0d0d0;
-            }
-        """)
+        reset_btn.setObjectName("resetButton")
 
         # 重置按钮点击事件（带动画）
         def reset_value():
