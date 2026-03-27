@@ -93,7 +93,7 @@
   },
   "view_mode": {
     "original": "Original",
-    "preprocessed": "Preprocessed",
+    "preprocessed": "Processed",
     "binary": "Binary",
     "tab_hint": "Tip: Use Tab key to cycle through view modes"
   },
