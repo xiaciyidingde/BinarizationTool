@@ -342,6 +342,15 @@ class PropertiesPanel(QWidget):
         row1_layout.addWidget(self.invert_button)
         actions_layout.addLayout(row1_layout)
 
+        # 第二行按钮：填充选区空洞
+        row2_layout = QHBoxLayout()
+        row2_layout.setSpacing(8)
+        self.fill_selection_holes_button = QPushButton(self.tr.tr('properties_panel.fill_selection_holes'))
+        self.fill_selection_holes_button.setToolTip(self.tr.tr('properties_panel.fill_selection_holes_tooltip'))
+        row2_layout.addWidget(self.fill_selection_holes_button)
+        row2_layout.addStretch()  # 右侧留空
+        actions_layout.addLayout(row2_layout)
+
         actions_group.setLayout(actions_layout)
         container_layout.addWidget(actions_group)
 
@@ -424,8 +433,10 @@ class PropertiesPanel(QWidget):
         self.selection_settings.setVisible(True)
 
     def hide_all_tool_settings(self):
-        """隐藏所有工具设置，显示提示信息"""
-        self.tab_widget.setCurrentIndex(1)  # 切换到"工具"页
+        """隐藏所有工具设置，切换回属性页"""
+        # 切换回"属性"页
+        self.tab_widget.setCurrentIndex(0)
+        # 隐藏所有工具设置
         self.tool_hint_label.setText(self.tr.tr('properties_panel.no_settings'))
         self.tool_hint_label.setVisible(True)
         self.brush_settings.setVisible(False)

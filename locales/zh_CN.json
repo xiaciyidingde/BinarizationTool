@@ -81,7 +81,9 @@
     "selection_mode": "选择模式: {mode}",
     "selection_size": "选择范围: {size}",
     "selection_target_color": "选择目标颜色: {color}",
-    "selection_size_mismatch": "选区尺寸不匹配，已清除选区"
+    "selection_size_mismatch": "选区尺寸不匹配，已清除选区",
+    "selection_filled": "选区已填充",
+    "feature_unavailable": "此功能需要 OpenCV 或 SciPy 库"
   },
   "color": {
     "black": "黑色",
@@ -270,7 +272,9 @@
     "fill_white": "白色",
     "fill_black": "黑色",
     "deselect": "取消选择",
-    "invert": "反选"
+    "invert": "反选",
+    "fill_selection_holes": "填充选区",
+    "fill_selection_holes_tooltip": "填充选区内部的空洞，使选区变为实心"
   },
   "layers_panel": {
     "save_selection": "保存选区",

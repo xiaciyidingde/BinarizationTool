@@ -72,8 +72,8 @@ class LayersPanel(QWidget):
         
         # 图层列表控件
         self.layers_list = QListWidget()
-        self.layers_list.setMinimumHeight(150)
-        self.layers_list.setMaximumHeight(300)
+        self.layers_list.setMinimumHeight(50)
+        self.layers_list.setMaximumHeight(160)
         # 支持多选
         self.layers_list.setSelectionMode(QListWidget.ExtendedSelection)
         layers_layout.addWidget(self.layers_list)

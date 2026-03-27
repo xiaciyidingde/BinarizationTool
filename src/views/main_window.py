@@ -982,11 +982,19 @@ class MainWindow(QMainWindow):
         self.image_data.selection_mask = None
         # 更新分块缓存以清除选区
         self._safe_update_tile_cache(None)
+        
+        # 清除轮廓显示
+        self.canvas.selection_border_renderer.update_contours(
+            None,
+            dirty_rect=None,
+            view_scale=self.canvas.view_transform.scale
+        )
 
         # 保存到历史管理器
         self.history_manager.push_state(self.image_data)
 
         self._update_ui_state()  # 更新 UI 状态
+        self.canvas.update()  # 触发重绘
         self.statusbar.showMessage(self.tr.tr('message.deselected'))
 
     def _invert_selection(self):
@@ -1002,11 +1010,19 @@ class MainWindow(QMainWindow):
         self.image_data.selection_mask = self.canvas.selection_tool.selection_mask
         # 更新分块缓存以显示选区
         self._safe_update_tile_cache(self.image_data.selection_mask)
+        
+        # 更新轮廓显示
+        self.canvas.selection_border_renderer.update_contours(
+            self.image_data.selection_mask,
+            dirty_rect=None,
+            view_scale=self.canvas.view_transform.scale
+        )
 
         # 保存到历史管理器（重要！）
         self.history_manager.push_state(self.image_data)
 
         self._update_ui_state()  # 更新 UI 状态
+        self.canvas.update()  # 触发重绘
         self.statusbar.showMessage(self.tr.tr('message.inverted'))
 
     def _select_by_color(self, color: int):
@@ -1018,11 +1034,19 @@ class MainWindow(QMainWindow):
         self.image_data.selection_mask = self.canvas.selection_tool.selection_mask
         # 更新分块缓存以显示选区
         self._safe_update_tile_cache(self.image_data.selection_mask)
+        
+        # 更新轮廓显示
+        self.canvas.selection_border_renderer.update_contours(
+            self.image_data.selection_mask,
+            dirty_rect=None,
+            view_scale=self.canvas.view_transform.scale
+        )
 
         # 保存到历史管理器（重要！）
         self.history_manager.push_state(self.image_data)
 
         self._update_ui_state()  # 更新 UI 状态
+        self.canvas.update()  # 触发重绘
         color_name = self.tr.tr('color.black') if color == 0 else self.tr.tr('color.white')
         self.statusbar.showMessage(self.tr.tr('message.selected_color', color=color_name))
 
@@ -1735,6 +1759,111 @@ class MainWindow(QMainWindow):
         color_name = self.tr.tr('color.black') if color == 0 else self.tr.tr('color.white')
         self.statusbar.showMessage(self.tr.tr('message.filled', color=color_name))
 
+    def _fill_selection_holes(self):
+        """
+        填充选区内部的空洞
+        
+        使用形态学闭运算或洪水填充算法填充选区内的空洞，使选区变为实心。
+        """
+        if self.image_data is None:
+            return
+        
+        # 检查是否有选区
+        if not self.canvas.selection_tool.has_selection():
+            self.statusbar.showMessage(self.tr.tr('message.no_selection'))
+            return
+        
+        # 获取选区蒙版
+        selection_mask = self.canvas.selection_tool.selection_mask
+        
+        # 检查选区尺寸是否匹配
+        if selection_mask.shape != (self.image_data.height, self.image_data.width):
+            self.statusbar.showMessage(self.tr.tr('message.selection_size_mismatch'))
+            self.canvas.selection_tool.clear_selection()
+            self.image_data.selection_mask = None
+            self._safe_update_tile_cache(None)
+            return
+        
+        try:
+            import cv2
+            import numpy as np
+            
+            # 将布尔蒙版转换为 uint8
+            mask_uint8 = selection_mask.astype(np.uint8) * 255
+            
+            # 使用形态学闭运算填充小空洞
+            # 闭运算 = 先膨胀后腐蚀，可以填充小的空洞
+            kernel_size = max(3, int(self.canvas.selection_tool.size / 10))  # 根据笔刷大小动态调整
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+            closed = cv2.morphologyEx(mask_uint8, cv2.MORPH_CLOSE, kernel)
+            
+            # 使用洪水填充来填充更大的空洞
+            # 从边缘开始洪水填充背景（反向思路）
+            filled = closed.copy()
+            h, w = filled.shape
+            flood_mask = np.zeros((h + 2, w + 2), dtype=np.uint8)
+            
+            # 从四个角开始洪水填充背景
+            cv2.floodFill(filled, flood_mask, (0, 0), 255)
+            
+            # 反转得到填充后的选区（背景外的都是选区）
+            filled_inverted = cv2.bitwise_not(filled)
+            
+            # 与闭运算结果合并
+            final_mask = cv2.bitwise_or(closed, filled_inverted)
+            
+            # 转换回布尔蒙版
+            self.canvas.selection_tool.selection_mask = (final_mask > 0)
+            self.image_data.selection_mask = self.canvas.selection_tool.selection_mask
+            
+            # 更新轮廓显示
+            self.canvas._request_contour_update(
+                self.canvas.selection_tool.selection_mask, 
+                dirty_rect=None, 
+                immediate=True
+            )
+            
+            # 更新分块缓存
+            self._safe_update_tile_cache(self.canvas.selection_tool.selection_mask)
+            
+            # 更新显示
+            self.canvas.update()
+            
+            # 显示提示
+            self.statusbar.showMessage(self.tr.tr('message.selection_filled'))
+            
+        except ImportError:
+            # 如果没有 cv2，使用简单的 scipy 方法
+            try:
+                from scipy import ndimage
+                import numpy as np
+                
+                # 使用 binary_fill_holes 填充空洞
+                filled_mask = ndimage.binary_fill_holes(selection_mask)
+                
+                # 更新选区
+                self.canvas.selection_tool.selection_mask = filled_mask
+                self.image_data.selection_mask = filled_mask
+                
+                # 更新轮廓显示
+                self.canvas._request_contour_update(
+                    self.canvas.selection_tool.selection_mask, 
+                    dirty_rect=None, 
+                    immediate=True
+                )
+                
+                # 更新分块缓存
+                self._safe_update_tile_cache(self.canvas.selection_tool.selection_mask)
+                
+                # 更新显示
+                self.canvas.update()
+                
+                # 显示提示
+                self.statusbar.showMessage(self.tr.tr('message.selection_filled'))
+                
+            except ImportError:
+                self.statusbar.showMessage(self.tr.tr('message.feature_unavailable'))
+
     def _connect_tool_settings(self):
         """连接属性面板中的工具设置信号"""
         # 画笔工具设置
@@ -1765,6 +1894,10 @@ class MainWindow(QMainWindow):
         )
         self.properties_panel.deselect_button.clicked.connect(self._deselect)
         self.properties_panel.invert_button.clicked.connect(self._invert_selection)
+        # 填充选区空洞按钮
+        self.properties_panel.fill_selection_holes_button.clicked.connect(
+            self._fill_selection_holes
+        )
 
     def _on_selection_size_changed_panel(self, value: int):
         """属性面板：选择范围改变"""
@@ -1945,6 +2078,8 @@ class MainWindow(QMainWindow):
             self.canvas.set_tool(None)
             self.crop_button.setChecked(False)
             self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
+            # 隐藏工具设置
+            self.properties_panel.hide_all_tool_settings()
 
         # 画笔工具：仅在二值化模式且根图层可用
         brush_enabled = (mode == 'binary' and is_root_layer)
@@ -1953,6 +2088,8 @@ class MainWindow(QMainWindow):
             self.canvas.set_tool(None)
             self.brush_button.setChecked(False)
             self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
+            # 隐藏工具设置
+            self.properties_panel.hide_all_tool_settings()
 
         # 选择工具：仅在二值化模式且根图层可用
         selection_enabled = (mode == 'binary' and is_root_layer)
@@ -1961,6 +2098,8 @@ class MainWindow(QMainWindow):
             self.canvas.set_tool(None)
             self.selection_tool_button.setChecked(False)
             self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
+            # 隐藏工具设置
+            self.properties_panel.hide_all_tool_settings()
 
     def _get_mode_display_name(self, mode: str) -> str:
         """获取模式的显示名称"""

@@ -81,7 +81,9 @@
     "selection_mode": "Selection Mode: {mode}",
     "selection_size": "Selection Size: {size}",
     "selection_target_color": "Selection Target Color: {color}",
-    "selection_size_mismatch": "Selection size mismatch, selection cleared"
+    "selection_size_mismatch": "Selection size mismatch, selection cleared",
+    "selection_filled": "Selection filled",
+    "feature_unavailable": "This feature requires OpenCV or SciPy library"
   },
   "color": {
     "black": "black",
@@ -270,7 +272,9 @@
     "fill_white": "White",
     "fill_black": "Black",
     "deselect": "Deselect",
-    "invert": "Invert"
+    "invert": "Invert",
+    "fill_selection_holes": "Fill Selection",
+    "fill_selection_holes_tooltip": "Fill holes inside the selection to make it solid"
   },
   "layers_panel": {
     "save_selection": "Save Selection",

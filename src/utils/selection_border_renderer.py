@@ -1,13 +1,20 @@
 """
 选区边框渲染器
 
-实现静态虚线边框效果，支持增量轮廓更新
+实现静态虚线边框效果，支持增量轮廓更新和 Cython 加速
 """
 
 import cv2
 import numpy as np
 from PySide6.QtCore import Qt, QThread, Signal, QMutex, QMutexLocker, QWaitCondition
 from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
+
+# 尝试导入 Cython 加速模块
+try:
+    from ..cython_core import contour_extractor
+    HAS_CYTHON = True
+except ImportError:
+    HAS_CYTHON = False
 
 
 class ContourUpdateThread(QThread):
@@ -94,20 +101,28 @@ class ContourUpdateThread(QThread):
         
         # 扩展区域边界（确保能捕获到轮廓）
         margin = 2
-        x1 = max(0, x1 - margin)
-        y1 = max(0, y1 - margin)
-        x2 = min(w, x2 + margin)
-        y2 = min(h, y2 + margin)
         
-        # 提取子区域
-        sub_mask = mask[y1:y2, x1:x2]
+        # 使用 Cython 加速提取区域
+        if HAS_CYTHON:
+            mask_uint8 = mask.astype(np.uint8) * 255
+            sub_mask, ax1, ay1 = contour_extractor.extract_region_mask(
+                mask_uint8, x1, y1, x2, y2, margin
+            )
+        else:
+            # 纯 Python 降级实现
+            ax1 = max(0, x1 - margin)
+            ay1 = max(0, y1 - margin)
+            ax2 = min(w, x2 + margin)
+            ay2 = min(h, y2 + margin)
+            sub_mask = mask[ay1:ay2, ax1:ax2].astype(np.uint8) * 255
         
-        if not sub_mask.any():
+        if sub_mask.size == 0 or (HAS_CYTHON and contour_extractor.check_mask_empty(sub_mask)):
+            return []
+        elif not HAS_CYTHON and not sub_mask.any():
             return []
         
         # 在子区域中提取轮廓
-        mask_uint8 = sub_mask.astype(np.uint8) * 255
-        contours, _ = cv2.findContours(mask_uint8, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+        contours, _ = cv2.findContours(sub_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
         
         # 转换轮廓坐标（加上偏移）
         result = []
@@ -117,8 +132,8 @@ class ContourUpdateThread(QThread):
                 points = points.reshape(1, -1)
             if len(points) >= 3:
                 # 坐标偏移到全局
-                points[:, 0] += x1
-                points[:, 1] += y1
+                points[:, 0] += ax1
+                points[:, 1] += ay1
                 result.append(points)
         
         return result
@@ -139,47 +154,51 @@ class ContourUpdateThread(QThread):
         
         # 根据图片尺寸和视图缩放动态决定降采样倍数
         if image_size < 4000:
-            # 小图片 (<4000px)：不降采样
             downsample = 1
         elif image_size < 5000:
-            # 中小图片 (4000-5000px)：缩小时轻度降采样
             if view_scale >= 0.5:
-                downsample = 1  # 放大或中等缩放，保持质量
+                downsample = 1
             else:
-                downsample = 2  # 缩小显示，轻度降采样
+                downsample = 2
         elif image_size < 8000:
-            # 中等图片 (5000-8000px)
             if view_scale >= 1.0:
-                downsample = 1  # 放大显示，保持质量
+                downsample = 1
             elif view_scale >= 0.5:
                 downsample = 2
             else:
                 downsample = 3
         else:
-            # 大图片 (>8000px)
             if view_scale >= 1.0:
-                downsample = 2  # 放大显示，轻度降采样
+                downsample = 2
             elif view_scale >= 0.5:
                 downsample = 3
             elif view_scale >= 0.25:
                 downsample = 4
             else:
-                downsample = 5  # 缩小很多时，大幅降采样
+                downsample = 5
         
-        # 执行降采样
+        # 执行降采样（使用 Cython 加速）
         if downsample > 1:
-            small_mask = mask[::downsample, ::downsample]
-            mask_uint8 = small_mask.astype(np.uint8) * 255
-            contours, _ = cv2.findContours(mask_uint8, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+            mask_uint8 = mask.astype(np.uint8) * 255
             
-            # 放大轮廓坐标
+            if HAS_CYTHON:
+                small_mask = contour_extractor.downsample_mask(mask_uint8, downsample)
+            else:
+                small_mask = mask_uint8[::downsample, ::downsample]
+            
+            contours, _ = cv2.findContours(small_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE)
+            
+            # 放大轮廓坐标（使用 Cython 加速）
             result = []
             for contour in contours:
                 points = contour.squeeze()
                 if len(points.shape) == 1:
                     points = points.reshape(1, -1)
                 if len(points) >= 3:
-                    points = points * downsample
+                    if HAS_CYTHON:
+                        points = contour_extractor.scale_contour_points(points, downsample)
+                    else:
+                        points = points * downsample
                     result.append(points)
             return result
         else:
@@ -204,6 +223,9 @@ class SelectionBorderRenderer:
     
     提取选区外轮廓并绘制明显的虚线边框
     """
+    
+    # 暴露 Cython 可用性标志
+    HAS_CYTHON = HAS_CYTHON
     
     def __init__(self):
         """初始化渲染器"""

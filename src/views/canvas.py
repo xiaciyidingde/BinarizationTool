@@ -455,22 +455,26 @@ class Canvas(QWidget):
                         # 直接更新 tile_cache 的选区引用（避免复制整个图像）
                         self.tile_cache.selection_mask = self.current_tool.selection_mask
                         
-                        # 根据图片尺寸决定更新策略
+                        # 根据图片尺寸和 Cython 可用性决定更新策略
                         h, w = self.image_data.selection_mask.shape
                         image_size = max(h, w)
                         
+                        # 检查是否有 Cython 加速
+                        has_cython = hasattr(self.selection_border_renderer, 'HAS_CYTHON') and \
+                                    self.selection_border_renderer.HAS_CYTHON
+                        
                         if image_size < 3000:
-                            # 小图片：16ms 实时更新
-                            throttle_interval = 16
+                            # 小图片：实时更新
+                            throttle_interval = 10 if has_cython else 16
                         elif image_size < 5000:
-                            # 中小图片：40ms 更新
-                            throttle_interval = 40
+                            # 中小图片
+                            throttle_interval = 25 if has_cython else 40
                         elif image_size < 8000:
-                            # 中等图片：80ms 更新
-                            throttle_interval = 80
+                            # 中等图片
+                            throttle_interval = 50 if has_cython else 80
                         else:
-                            # 大图片：100ms 更新
-                            throttle_interval = 100
+                            # 大图片
+                            throttle_interval = 70 if has_cython else 100
                         
                         # 使用动态节流间隔
                         if not self.contour_update_timer.isActive():
