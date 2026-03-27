@@ -29,18 +29,16 @@ class SelectionStroke:
     在笔刷范围内只选择匹配目标颜色的像素。
     """
 
-    def __init__(self, size: float, target_color: int, selection_mode: str, cached_pixels: np.ndarray | None = None):
+    def __init__(self, size: float, selection_mode: str, cached_pixels: np.ndarray | None = None):
         """
         初始化选择笔画
 
         Args:
             size: 笔刷直径（像素单位）
-            target_color: 目标颜色（0=黑色, 255=白色）
             selection_mode: 选择模式（'add'=添加, 'subtract'=减去）
             cached_pixels: 缓存的像素数据（避免重复合成）
         """
         self.size = size
-        self.target_color = target_color
         self.selection_mode = selection_mode
         self.points: list[tuple[int, int]] = []
         self.cached_pixels = cached_pixels  # 缓存像素数据，避免重复调用 get_current_pixels()
@@ -133,14 +131,8 @@ class SelectionStroke:
         # 圆形掩码（带容差）
         circle_mask = dist <= (radius + tolerance)
 
-        # 提取区域数据
-        region_pixels = pixels[y_min:y_max+1, x_min:x_max+1]
-
-        # 颜色匹配掩码
-        color_mask = (region_pixels == self.target_color)
-
-        # 最终掩码：在圆内且颜色匹配
-        final_mask = circle_mask & color_mask
+        # 最终掩码：圆内所有像素（不再限制颜色）
+        final_mask = circle_mask
 
         # 根据模式更新选区
         if self.selection_mode == 'add':
@@ -173,7 +165,6 @@ class SelectionTool:
         # 选择工具参数
         self.size: float = 50.0  # 选择范围大小（像素）
         self.selection_mode: str = 'add'  # 'add'=添加到选区, 'subtract'=从选区减去
-        self.target_color: int = 0  # 目标颜色（0=黑色, 255=白色）
 
         # 光标显示
         self.crosshair_threshold: float = 30.0  # 当圆圈小于此值时显示十字
@@ -238,7 +229,7 @@ class SelectionTool:
         cached_pixels = image_data.get_current_pixels()
 
         # 创建新的选择笔画，传入缓存的像素数据
-        self.current_stroke = SelectionStroke(self.size, self.target_color, self.selection_mode, cached_pixels)
+        self.current_stroke = SelectionStroke(self.size, self.selection_mode, cached_pixels)
         self.current_stroke.add_point(x, y)
 
         # 初始化选区蒙版
@@ -350,13 +341,9 @@ class SelectionTool:
         # 获取像素数据
         pixels = image_data.get_current_pixels()
 
-        # 创建矩形区域的颜色匹配掩码
+        # 创建矩形区域选区（选择所有像素，不限颜色）
         rect_mask = np.zeros((image_data.height, image_data.width), dtype=bool)
-        rect_region = pixels[y_min:y_max, x_min:x_max]
-
-        # 只选择匹配目标颜色的像素
-        color_match = (rect_region == self.target_color)
-        rect_mask[y_min:y_max, x_min:x_max] = color_match
+        rect_mask[y_min:y_max, x_min:x_max] = True
 
         # 根据模式合并选区
         if self.selection_mode == 'add':
@@ -423,11 +410,11 @@ class SelectionTool:
         else:
             ring_color = QColor(255, 0, 0)  # 红色 - 删除
 
-        # 根据目标颜色选择中心点颜色
-        if self.target_color == 0:
-            center_color = QColor(0, 0, 0)  # 黑色 - 选择黑色块
+        # 根据模式选择中心点颜色（绿色=添加，红色=删除）
+        if self.selection_mode == 'add':
+            center_color = QColor(0, 255, 0)  # 绿色 - 添加模式
         else:
-            center_color = QColor(255, 255, 255)  # 白色 - 选择白色块
+            center_color = QColor(255, 0, 0)  # 红色 - 删除模式
 
         # 使用 CursorRenderer 渲染光标
         CursorRenderer.render_circle_cursor(

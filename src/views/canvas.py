@@ -26,6 +26,7 @@ from ..models.selection_tool import SelectionTool
 from ..models.tile_cache import TileCache
 from ..models.view_transform import ViewTransform
 from ..utils.config_manager import ConfigManager
+from ..utils.selection_border_renderer import SelectionBorderRenderer
 from ..utils.translation_manager import get_translator
 
 
@@ -88,6 +89,9 @@ class Canvas(QWidget):
         self.selection_update_timer.timeout.connect(self._do_selection_update)
         self.selection_throttle_interval = 16  # 16ms = 60fps
         self.pending_selection_dirty_rect = (0, 0, 0, 0)
+        
+        # 选区边框渲染器
+        self.selection_border_renderer = SelectionBorderRenderer()
 
         # 交互状态
         self.mouse_pos: QPoint | None = None
@@ -195,6 +199,10 @@ class Canvas(QWidget):
 
         # 渲染图片
         self._render_image(painter)
+        
+        # 渲染选区边框（静态虚线）
+        if self.image_data is not None and hasattr(self.image_data, 'selection_mask') and self.image_data.selection_mask is not None:
+            self.selection_border_renderer.render(painter, self.view_transform)
 
         # 渲染工具覆盖层
         if isinstance(self.current_tool, CropTool):
@@ -333,6 +341,8 @@ class Canvas(QWidget):
                         self.image_data.selection_mask = self.current_tool.selection_mask
                         # 直接更新 tile_cache 的选区引用（避免复制整个图像）
                         self.tile_cache.selection_mask = self.current_tool.selection_mask
+                        # 更新选区边框
+                        self.selection_border_renderer.update_contours(self.current_tool.selection_mask)
                         # 使脏区域失效
                         if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
                             self.tile_cache.invalidate_region(
@@ -535,6 +545,8 @@ class Canvas(QWidget):
                         self.image_data.selection_mask = self.current_tool.selection_mask
                         # 更新 tile_cache 的选区引用
                         self.tile_cache.selection_mask = self.current_tool.selection_mask
+                        # 更新选区边框
+                        self.selection_border_renderer.update_contours(self.current_tool.selection_mask)
                         # 使整个选区失效以触发重新渲染
                         if self.current_tool.selection_mask is not None and self.current_tool.selection_mask.any():
                             rows, cols = np.where(self.current_tool.selection_mask)
@@ -562,6 +574,8 @@ class Canvas(QWidget):
                         self.image_data.selection_mask = self.current_tool.selection_mask
                         # 确保 tile_cache 引用最新的选区
                         self.tile_cache.selection_mask = self.current_tool.selection_mask
+                        # 更新选区边框
+                        self.selection_border_renderer.update_contours(self.current_tool.selection_mask)
 
                         # 通知选区已修改（用于更新 UI 状态）
                         self.image_modified.emit()
@@ -607,6 +621,10 @@ class Canvas(QWidget):
             )
             # 重置脏区域
             self.pending_selection_dirty_rect = (0, 0, 0, 0)
+        
+        # 更新选区边框轮廓
+        if self.image_data is not None and hasattr(self.image_data, 'selection_mask'):
+            self.selection_border_renderer.update_contours(self.image_data.selection_mask)
 
     def wheelEvent(self, event: QWheelEvent):
         """滚轮事件 - 缩放"""

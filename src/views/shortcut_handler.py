@@ -52,12 +52,6 @@ class ShortcutHandler:
         self.tool_size_down.triggered.connect(self._handle_tool_size_down)
         self.main_window.addAction(self.tool_size_down)
 
-        # Ctrl+Shift+X: 切换选择目标颜色
-        self.wand_color_toggle = QAction(self.main_window)
-        self.wand_color_toggle.setShortcut("Ctrl+Shift+X")
-        self.wand_color_toggle.triggered.connect(self._toggle_wand_color)
-        self.main_window.addAction(self.wand_color_toggle)
-
         # Ctrl+1: 切换到原图模式
         self.view_mode_original = QAction(self.main_window)
         self.view_mode_original.setShortcut("Ctrl+1")
@@ -222,30 +216,6 @@ class ShortcutHandler:
         self.main_window.properties_panel.selection_size_spinbox.setValue(int(new_size))
 
         self.main_window.statusbar.showMessage(self.tr.tr('message.selection_size', size=int(new_size)))
-        self.canvas.update()  # 更新光标显示
-
-    def _toggle_wand_color(self):
-        """切换选择目标颜色"""
-        # 只在选择工具激活时有效
-        if not isinstance(self.canvas.current_tool, SelectionTool):
-            return
-
-        current_color = self.canvas.selection_tool.target_color
-        # 黑色(0) <-> 白色(255)
-        new_color = 255 if current_color == 0 else 0
-
-        self.canvas.selection_tool.target_color = new_color
-
-        # 更新属性面板
-        if new_color == 0:
-            self.main_window.properties_panel.selection_black_radio.setChecked(True)
-            self.main_window.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_white'))
-        else:
-            self.main_window.properties_panel.selection_white_radio.setChecked(True)
-            self.main_window.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_black'))
-
-        color_name = self.tr.tr('color.black') if new_color == 0 else self.tr.tr('color.white')
-        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_target_color', color=color_name))
         self.canvas.update()  # 更新光标显示
 
     # ========== 视图模式切换快捷键 ==========

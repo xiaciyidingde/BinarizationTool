@@ -309,34 +309,19 @@ class PropertiesPanel(QWidget):
         method_layout.addStretch()
         basic_layout.addLayout(method_layout)
 
-        # 颜色设置
-        color_layout = QHBoxLayout()
-        color_layout.setSpacing(12)
-        color_label = QLabel(self.tr.tr('properties_panel.target_color'))
-        color_label.setMinimumWidth(40)
-        color_layout.addWidget(color_label)
-
-        self.selection_color_group = QButtonGroup(self)
-        self.selection_black_radio = QRadioButton(self.tr.tr('properties_panel.color_black'))
-        self.selection_white_radio = QRadioButton(self.tr.tr('properties_panel.color_white'))
-        self.selection_color_group.addButton(self.selection_black_radio, 0)
-        self.selection_color_group.addButton(self.selection_white_radio, 255)
-        self.selection_black_radio.setChecked(True)
-
-        color_layout.addWidget(self.selection_black_radio)
-        color_layout.addWidget(self.selection_white_radio)
-        color_layout.addStretch()
-        basic_layout.addLayout(color_layout)
-
-        # 填充选区
+        # 填充选区（两个按钮：黑色和白色）
         fill_layout = QHBoxLayout()
-        fill_layout.setSpacing(12)
+        fill_layout.setSpacing(8)
         fill_label = QLabel(self.tr.tr('properties_panel.fill_selection'))
         fill_label.setMinimumWidth(40)
         fill_layout.addWidget(fill_label)
 
-        self.fill_button = QPushButton(self.tr.tr('properties_panel.fill_white'))
-        fill_layout.addWidget(self.fill_button)
+        self.fill_black_button = QPushButton(self.tr.tr('properties_panel.fill_black'))
+        self.fill_white_button = QPushButton(self.tr.tr('properties_panel.fill_white'))
+        self.fill_black_button.setFixedWidth(60)
+        self.fill_white_button.setFixedWidth(60)
+        fill_layout.addWidget(self.fill_black_button)
+        fill_layout.addWidget(self.fill_white_button)
         fill_layout.addStretch()
         basic_layout.addLayout(fill_layout)
 

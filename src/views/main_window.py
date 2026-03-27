@@ -539,40 +539,26 @@ class MainWindow(QMainWindow):
         if self.image_data is not None:
             self.image_data.clear_selection()
         
-        # 如果选中的是用户图层，显示该图层（包含底层）
+        # 如果选中的是用户图层，只显示该图层的选中区域
         if layer_id != "root" and self.image_data is not None:
             # 查找对应的图层
             for layer in self.image_data.user_layers:
                 if layer.id == layer_id:
-                    # 创建合成显示：根图层 + 编辑层 + 该图层
-                    # 未选中区域显示为白色
+                    # 创建灰色背景（128），表示未选中区域
                     composited = np.full(
                         (self.image_data.height, self.image_data.width),
-                        255,  # 白色背景
+                        128,  # 灰色背景
                         dtype=np.uint8
                     )
                     
-                    # 在图层的掩码区域，先应用根图层和编辑层
+                    # 只在选中区域显示图层内容
                     x, y, w, h = layer.bbox
+                    composited[y:y+h, x:x+w][layer.mask] = layer.pixels[layer.mask]
                     
-                    # 获取图层区域的根图层像素
-                    base_region = self.image_data.pixels[y:y+h, x:x+w].copy()
-                    
-                    # 应用编辑层到该区域
-                    if self.image_data.edit_mask is not None:
-                        edit_region = self.image_data.edit_mask[y:y+h, x:x+w]
-                        if edit_region.any():
-                            base_region[edit_region] = self.image_data.edit_values[y:y+h, x:x+w][edit_region]
-                    
-                    # 将基础层放到合成结果中（只在掩码区域）
-                    composited[y:y+h, x:x+w][layer.mask] = base_region[layer.mask]
-                    
-                    # 应用该图层的黑色像素
-                    black_mask = layer.mask & (layer.pixels == 0)
-                    composited[y:y+h, x:x+w][black_mask] = 0
-                    
-                    # 更新画布显示
+                    # 更新画布显示 - 强制清除缓存
+                    self.canvas.tile_cache.clear()
                     self.canvas.tile_cache.set_image(composited, None)
+                    
                     self.statusbar.showMessage(f"已切换到图层: {layer.name}")
                     break
         else:
@@ -815,14 +801,16 @@ class MainWindow(QMainWindow):
         """
         从选区提取图层数据
         
+        只保存选中的像素，未选中的区域不存储（通过mask控制）
+        
         Returns:
             包含 pixels, mask, bbox 的字典
         """
         # 获取选区掩码
         selection_mask = self.image_data.selection_mask
         
-        # 获取当前显示的二值化像素
-        binary_pixels = self.image_data.pixels.copy()
+        # 获取当前合成后的像素（包括根图层+编辑层+所有用户图层）
+        composited_pixels = self._composite_layers()
         
         # 计算边界框
         y_indices, x_indices = np.where(selection_mask)
@@ -833,16 +821,17 @@ class MainWindow(QMainWindow):
         y_min, y_max = y_indices.min(), y_indices.max()
         bbox = (int(x_min), int(y_min), int(x_max - x_min + 1), int(y_max - y_min + 1))
         
-        # 裁剪到边界框（节省内存）
+        # 裁剪到边界框
         layer_mask = selection_mask[y_min:y_max+1, x_min:x_max+1].copy()
         
-        # 创建白色背景，只复制选中的像素
+        # 只复制选中区域的像素，未选中区域填充白色（255，表示透明）
+        # 合成时白色像素不会覆盖底层
         layer_pixels = np.full((y_max - y_min + 1, x_max - x_min + 1), 255, dtype=np.uint8)
-        layer_pixels[layer_mask] = binary_pixels[y_min:y_max+1, x_min:x_max+1][layer_mask]
+        layer_pixels[layer_mask] = composited_pixels[y_min:y_max+1, x_min:x_max+1][layer_mask]
         
         return {
             'pixels': layer_pixels,
-            'mask': layer_mask,
+            'mask': layer_mask,  # mask标记哪些像素是有效的
             'bbox': bbox
         }
     
@@ -872,16 +861,9 @@ class MainWindow(QMainWindow):
             layer_pixels = layer.pixels
             layer_mask = layer.mask
             
-            # 只覆盖掩码为 True 的黑色像素 (0)
-            # 白色像素 (255) 保持透明，不覆盖底层
-            black_mask = layer_mask & (layer_pixels == 0)
-            
-            # 将黑色像素覆盖到合成结果上
-            composited[y:y+h, x:x+w][black_mask] = 0
-            
-            # 可选：如果需要白色像素也覆盖（完全不透明）
-            # white_mask = layer_mask & (layer_pixels == 255)
-            # composited[y:y+h, x:x+w][white_mask] = 255
+            # 只覆盖mask为True的像素（选中的区域）
+            # 未选中的区域（mask为False）保持透明，不覆盖底层
+            composited[y:y+h, x:x+w][layer_mask] = layer_pixels[layer_mask]
         
         return composited
 
@@ -1749,18 +1731,6 @@ class MainWindow(QMainWindow):
         color_name = self.tr.tr('color.black') if color == 0 else self.tr.tr('color.white')
         self.statusbar.showMessage(self.tr.tr('message.filled', color=color_name))
 
-    def _fill_selection_opposite_color(self):
-        """
-        填充选区为相反颜色
-
-        如果目标颜色是黑色（选择黑色区域），则填充白色
-        如果目标颜色是白色（选择白色区域），则填充黑色
-        """
-        target_color = self.canvas.selection_tool.target_color
-        # 填充相反的颜色
-        fill_color = 255 if target_color == 0 else 0
-        self._fill_selection(fill_color)
-
     def _connect_tool_settings(self):
         """连接属性面板中的工具设置信号"""
         # 画笔工具设置
@@ -1782,11 +1752,12 @@ class MainWindow(QMainWindow):
         self.properties_panel.selection_method_group.buttonClicked.connect(
             self._on_selection_method_changed_panel
         )
-        self.properties_panel.selection_color_group.buttonClicked.connect(
-            self._on_selection_color_changed_panel
+        # 填充按钮
+        self.properties_panel.fill_black_button.clicked.connect(
+            lambda: self._fill_selection(0)
         )
-        self.properties_panel.fill_button.clicked.connect(
-            self._fill_selection_opposite_color
+        self.properties_panel.fill_white_button.clicked.connect(
+            lambda: self._fill_selection(255)
         )
         self.properties_panel.deselect_button.clicked.connect(self._deselect)
         self.properties_panel.invert_button.clicked.connect(self._invert_selection)
@@ -1801,17 +1772,6 @@ class MainWindow(QMainWindow):
         button_id = self.properties_panel.selection_mode_group.checkedId()
         mode = 'add' if button_id == 0 else 'subtract'
         self.canvas.selection_tool.selection_mode = mode
-        self.canvas.update()
-
-    def _on_selection_color_changed_panel(self):
-        """属性面板：选择目标颜色改变"""
-        button_id = self.properties_panel.selection_color_group.checkedId()
-        self.canvas.selection_tool.target_color = button_id
-        # 更新填充按钮文本
-        if button_id == 0:
-            self.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_white'))
-        else:
-            self.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_black'))
         self.canvas.update()
 
     def _on_selection_method_changed_panel(self):
