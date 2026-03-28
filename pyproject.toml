@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "BinarizationTool"
-version = "1.5.6.0"
+version = "1.5.7.0"
 description = "二值化图片编辑器"
 authors = [{name = "夏次一定de"}]
 requires-python = ">=3.12"

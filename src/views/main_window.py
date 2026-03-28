@@ -560,6 +560,10 @@ class MainWindow(QMainWindow):
                     if layer.binarization_params:
                         self.binarization_panel.load_params(layer.binarization_params)
                     
+                    # 更新属性面板图层信息
+                    selected_pixels = int(np.sum(layer.mask))
+                    self.properties_panel.set_layer_info(layer.name, selected_pixels)
+                    
                     self.statusbar.showMessage(f"已切换到图层: {layer.name}")
                     break
         else:
@@ -572,6 +576,15 @@ class MainWindow(QMainWindow):
             # 加载根图层的参数（恢复到最后有效的根图层参数）
             if hasattr(self, 'last_valid_params') and self.last_valid_params:
                 self.binarization_panel.load_params(self.last_valid_params)
+            
+            # 更新属性面板图层信息（根图层显示整图尺寸）
+            if self.image_data:
+                self.properties_panel.set_layer_info(
+                    self.tr.tr('properties_panel.root_layer')
+                )
+                # 恢复显示整图尺寸
+                size_text = f"{self.image_data.width} x {self.image_data.height} {self.tr.tr('properties_panel.pixels')}"
+                self.properties_panel.size_label.setText(size_text)
             
             self.statusbar.showMessage("已切换到根图层")
         

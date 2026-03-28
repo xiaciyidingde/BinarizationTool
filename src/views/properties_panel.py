@@ -90,7 +90,7 @@ class PropertiesPanel(QWidget):
         scroll.setWidget(outer_container)
         
         # 添加到主布局
-        main_layout.addWidget(scroll, stretch=1)
+        main_layout.addWidget(scroll, stretch=38)
         
         # ========== 下半部分：图层面板 ==========
         # 创建图层面板容器（带背景和圆角）
@@ -100,8 +100,9 @@ class PropertiesPanel(QWidget):
         
         layers_container = QWidget()
         layers_container.setObjectName("propertiesPanelContent")
+        # 移除最大高度限制，让比例自动调整
         layers_container_layout = QVBoxLayout(layers_container)
-        layers_container_layout.setContentsMargins(0, 0, 0, 0)
+        layers_container_layout.setContentsMargins(8, 8, 8, 8)  # 添加内边距让框线居中
         layers_container_layout.setSpacing(0)
         
         # 图层面板
@@ -111,7 +112,7 @@ class PropertiesPanel(QWidget):
         layers_outer_layout.addWidget(layers_container)
         
         # 添加到主布局
-        main_layout.addWidget(layers_outer, stretch=0)
+        main_layout.addWidget(layers_outer, stretch=34)
 
         # 设置面板尺寸
         self.setMinimumWidth(270)
@@ -148,6 +149,11 @@ class PropertiesPanel(QWidget):
         filename_container_layout.addWidget(self.filename_label)
 
         image_layout.addRow(self.tr.tr('properties_panel.filename'), filename_container)
+
+        # 图层信息
+        self.layer_label = QLabel("-")
+        self.layer_label.setObjectName("propertyValue")
+        image_layout.addRow(self.tr.tr('properties_panel.layer'), self.layer_label)
 
         # 图片尺寸
         self.size_label = QLabel("-")
@@ -387,8 +393,11 @@ class PropertiesPanel(QWidget):
             self.filename_label.setText(self.tr.tr('properties_panel.unsaved'))
             self.filename_label.setToolTip("")
 
+        # 图层信息（默认显示根图层）
+        self.layer_label.setText(self.tr.tr('properties_panel.root_layer'))
+
         # 图片尺寸
-        size_text = f"{image_data.width} x {image_data.height} 像素"
+        size_text = f"{image_data.width} x {image_data.height} {self.tr.tr('properties_panel.pixels')}"
         self.size_label.setText(size_text)
 
         # 文件大小
@@ -400,6 +409,22 @@ class PropertiesPanel(QWidget):
             self.filesize_label.setText("-")
 
         # 缩放比例保持当前值
+
+    def set_layer_info(self, layer_name: str, selected_pixels: int | None = None):
+        """
+        更新图层信息
+
+        Args:
+            layer_name: 图层名称
+            selected_pixels: 选中的像素数量（仅用户图层）
+        """
+        if selected_pixels is not None:
+            # 用户图层：显示图层名和选中像素数
+            self.layer_label.setText(layer_name)
+            self.size_label.setText(f"{selected_pixels} {self.tr.tr('properties_panel.pixels')}")
+        else:
+            # 根图层：只显示图层名
+            self.layer_label.setText(layer_name)
 
     def set_zoom_level(self, zoom: float):
         """
@@ -414,6 +439,7 @@ class PropertiesPanel(QWidget):
     def clear_info(self):
         """清除信息（未加载图片时）"""
         self.filename_label.setText(self.tr.tr('properties_panel.no_image'))
+        self.layer_label.setText("-")
         self.size_label.setText("-")
         self.filesize_label.setText("-")
         self.zoom_label.setText("-")

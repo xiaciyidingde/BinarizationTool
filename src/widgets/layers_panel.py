@@ -50,18 +50,25 @@ class LayersPanel(QWidget):
     def setup_ui(self):
         """设置 UI"""
         # 主布局
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
         # 设置固定宽度
         self.setFixedWidth(220)
+        
+        # 创建一个容器 QGroupBox 包裹所有内容
+        container = QGroupBox()
+        container.setObjectName("layersPanelContainer")
+        container_layout = QVBoxLayout()
+        container_layout.setContentsMargins(8, 8, 8, 8)
+        container_layout.setSpacing(8)
         
         # 保存选区按钮
         self.save_selection_button = QPushButton(self.tr.tr('layers_panel.save_selection'))
         self.save_selection_button.setMinimumHeight(32)
         self.save_selection_button.setFixedWidth(204)  # 220 - 16 (左右边距)
-        layout.addWidget(self.save_selection_button)
+        container_layout.addWidget(self.save_selection_button)
         
         # 图层列表分组
         layers_group = QGroupBox(self.tr.tr('layers_panel.layers_list'))
@@ -73,13 +80,13 @@ class LayersPanel(QWidget):
         # 图层列表控件
         self.layers_list = QListWidget()
         self.layers_list.setMinimumHeight(50)
-        self.layers_list.setMaximumHeight(160)
+        self.layers_list.setMaximumHeight(200)
         # 支持多选
         self.layers_list.setSelectionMode(QListWidget.ExtendedSelection)
         layers_layout.addWidget(self.layers_list)
         
         layers_group.setLayout(layers_layout)
-        layout.addWidget(layers_group)
+        container_layout.addWidget(layers_group)
         
         # 图层操作按钮
         actions_group = QGroupBox(self.tr.tr('layers_panel.layer_operations'))
@@ -103,7 +110,11 @@ class LayersPanel(QWidget):
         actions_layout.addLayout(row1_layout)
         
         actions_group.setLayout(actions_layout)
-        layout.addWidget(actions_group)
+        container_layout.addWidget(actions_group)
+        
+        # 设置容器布局
+        container.setLayout(container_layout)
+        main_layout.addWidget(container)
         
         # 不添加弹性空间，让布局紧凑
         
