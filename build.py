@@ -125,7 +125,26 @@ def compile_cython_modules():
             print("⚠️  未找到 setup.py，跳过 Cython 编译")
             return True
         
-        # 编译 Cython 模块
+        # 确保目标目录存在（修复 src/src 路径问题）
+        cython_output_dir = current_dir / "src" / "cython_core"
+        cython_output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 先清理旧的编译文件
+        for old_file in cython_output_dir.glob("*.pyd"):
+            try:
+                old_file.unlink()
+                print(f"清理旧文件: {old_file.name}")
+            except Exception:
+                pass
+        
+        for old_file in cython_output_dir.glob("*.so"):
+            try:
+                old_file.unlink()
+                print(f"清理旧文件: {old_file.name}")
+            except Exception:
+                pass
+        
+        # 编译 Cython 模块 - 显示完整输出以便调试
         result = subprocess.run(
             [sys.executable, "setup.py", "build_ext", "--inplace"],
             cwd=current_dir,
@@ -134,11 +153,25 @@ def compile_cython_modules():
         )
         
         if result.returncode == 0:
-            print("✅ Cython 模块编译成功")
+            # 检查文件是否真的生成了
+            pyd_files = list(cython_output_dir.glob("*.pyd"))
+            so_files = list(cython_output_dir.glob("*.so"))
+            
+            if pyd_files or so_files:
+                print(f"✅ Cython 模块编译成功，生成 {len(pyd_files) + len(so_files)} 个文件")
+                for f in pyd_files + so_files:
+                    print(f"   - {f.name}")
+            else:
+                print("⚠️  编译命令成功但未找到输出文件")
             return True
         else:
             print("⚠️  Cython 模块编译失败，将使用纯 Python 降级版本")
-            print(f"错误信息: {result.stderr}")
+            if result.stderr:
+                # 只显示关键错误信息，忽略警告
+                error_lines = [line for line in result.stderr.split('\n') 
+                              if 'error:' in line.lower() and 'warning' not in line.lower()]
+                if error_lines:
+                    print(f"错误信息: {error_lines[0]}")
             return True  # 继续编译，使用降级版本
             
     except Exception as e:
