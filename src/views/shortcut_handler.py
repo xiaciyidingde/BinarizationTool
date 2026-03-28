@@ -40,6 +40,12 @@ class ShortcutHandler:
         self.tool_toggle_action.triggered.connect(self._handle_tool_toggle)
         self.main_window.addAction(self.tool_toggle_action)
 
+        # Ctrl+Shift+X: 切换选择工具方式（涂抹/框选）
+        self.selection_method_toggle = QAction(self.main_window)
+        self.selection_method_toggle.setShortcut("Ctrl+Shift+X")
+        self.selection_method_toggle.triggered.connect(self._toggle_selection_method)
+        self.main_window.addAction(self.selection_method_toggle)
+
         # Ctrl+Up: 增大工具尺寸
         self.tool_size_up = QAction(self.main_window)
         self.tool_size_up.setShortcut("Ctrl+Up")
@@ -159,6 +165,25 @@ class ShortcutHandler:
         self.canvas.update()  # 更新光标显示
 
     # ========== 选择工具快捷键 ==========
+
+    def _toggle_selection_method(self):
+        """切换选择工具方式（涂抹/框选）"""
+        if not isinstance(self.canvas.current_tool, SelectionTool):
+            return
+
+        current_mode = self.canvas.selection_tool.rect_select_mode
+        new_mode = not current_mode
+        self.canvas.selection_tool.rect_select_mode = new_mode
+
+        # 更新属性面板
+        if new_mode:
+            self.main_window.properties_panel.rect_method_radio.setChecked(True)
+        else:
+            self.main_window.properties_panel.drag_method_radio.setChecked(True)
+
+        method_name = self.tr.tr('selection.rect_select') if new_mode else self.tr.tr('selection.drag_select')
+        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_method', method=method_name))
+        self.canvas.update()  # 更新光标显示
 
     def _toggle_selection_tool_mode(self):
         """切换选择工具模式"""

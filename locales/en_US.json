@@ -79,11 +79,16 @@
     "brush_color": "Brush Color: {color}",
     "brush_size": "Brush Size: {size}",
     "selection_mode": "Selection Mode: {mode}",
+    "selection_method": "Selection Method: {method}",
     "selection_size": "Selection Size: {size}",
     "selection_target_color": "Selection Target Color: {color}",
     "selection_size_mismatch": "Selection size mismatch, selection cleared",
     "selection_filled": "Selection filled",
     "feature_unavailable": "This feature requires OpenCV or SciPy library"
+  },
+  "selection": {
+    "drag_select": "Paint",
+    "rect_select": "Rectangle"
   },
   "color": {
     "black": "black",
@@ -285,6 +290,7 @@
     "merge": "Merge",
     "delete": "Delete",
     "root_layer_tooltip": "Root Layer: Base layer of the entire image, automatically updates when adjusting binarization parameters",
+    "out_of_bounds_tooltip": "Layer is out of current image bounds, cannot be merged, can only be deleted",
     "layer_name_default": "Layer {number}",
     "merged_layer": "Merged Layer",
     "no_selection_warning": "Please select an area using the selection tool first",

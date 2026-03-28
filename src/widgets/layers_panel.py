@@ -153,7 +153,7 @@ class LayersPanel(QWidget):
                 selected_ids.append(layer_id)
         return selected_ids
     
-    def add_layer(self, layer_id: str, name: str, is_root: bool = False):
+    def add_layer(self, layer_id: str, name: str, is_root: bool = False, is_out_of_bounds: bool = False):
         """
         添加图层到列表
         
@@ -161,6 +161,7 @@ class LayersPanel(QWidget):
             layer_id: 图层 ID
             name: 图层名称
             is_root: 是否是根图层
+            is_out_of_bounds: 是否超出图像范围（仅用户图层）
         """
         item = QListWidgetItem(name)
         item.setData(Qt.UserRole, layer_id)
@@ -173,6 +174,9 @@ class LayersPanel(QWidget):
             item.setForeground(QColor(128, 128, 128))
             # 添加工具提示
             item.setToolTip(self.tr.tr('layers_panel.root_layer_tooltip'))
+        elif is_out_of_bounds:
+            # 超出范围的图层：像素工具提示
+            item.setToolTip(self.tr.tr('layers_panel.out_of_bounds_tooltip'))
         
         self.layers_list.addItem(item)
     

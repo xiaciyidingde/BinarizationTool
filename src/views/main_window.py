@@ -528,6 +528,12 @@ class MainWindow(QMainWindow):
         self.properties_panel.layers_panel.layer_selected.connect(self._on_layer_selected)
         self.properties_panel.layers_panel.save_selection_clicked.connect(self._on_save_selection_as_layer)
         self.properties_panel.layers_panel.layer_deleted.connect(self._on_layer_deleted)
+        
+        # 选区边框渲染完成信号 - 连接一次，避免重复连接
+        if hasattr(self.canvas, 'selection_border_renderer'):
+            self.canvas.selection_border_renderer.update_thread.contours_ready.connect(
+                self.canvas.update
+            )
         self.properties_panel.layers_panel.merge_layers_clicked.connect(self._on_merge_layers)
     
     def _on_layer_selected(self, layer_id: str):
@@ -539,30 +545,14 @@ class MainWindow(QMainWindow):
         """
         self.active_layer_id = layer_id
         
-        # 清除当前选区
-        if self.image_data is not None:
-            self.image_data.clear_selection()
+        # 选区只在根图层显示，切换到用户图层时隐藏（但保留数据）
+        # 这样切换回根图层时选区会重新显示
         
-        # 如果选中的是用户图层，只显示该图层的选中区域
+        # 如果选中的是用户图层
         if layer_id != "root" and self.image_data is not None:
             # 查找对应的图层
             for layer in self.image_data.user_layers:
                 if layer.id == layer_id:
-                    # 创建灰色背景（128），表示未选中区域
-                    composited = np.full(
-                        (self.image_data.height, self.image_data.width),
-                        128,  # 灰色背景
-                        dtype=np.uint8
-                    )
-                    
-                    # 只在选中区域显示图层内容
-                    x, y, w, h = layer.bbox
-                    composited[y:y+h, x:x+w][layer.mask] = layer.pixels[layer.mask]
-                    
-                    # 更新画布显示 - 强制清除缓存
-                    self.canvas.tile_cache.clear()
-                    self.canvas.tile_cache.set_image(composited, None)
-                    
                     # 更新二值化面板显示当前图层
                     self.binarization_panel.set_current_layer(layer.name)
                     
@@ -573,14 +563,7 @@ class MainWindow(QMainWindow):
                     self.statusbar.showMessage(f"已切换到图层: {layer.name}")
                     break
         else:
-            # 根图层，合成显示根图层 + 编辑层 + 所有用户图层
-            if self.image_data is not None:
-                composited_pixels = self._composite_layers()
-                self.canvas.tile_cache.set_image(
-                    composited_pixels,
-                    self.image_data.selection_mask
-                )
-            
+            # 根图层
             # 更新二值化面板显示根图层
             self.binarization_panel.set_current_layer(
                 self.tr.tr('binarization_panel.root_layer')
@@ -591,6 +574,24 @@ class MainWindow(QMainWindow):
                 self.binarization_panel.load_params(self.last_valid_params)
             
             self.statusbar.showMessage("已切换到根图层")
+        
+        # 根据当前视图模式更新显示
+        self._safe_update_tile_cache(self.image_data.selection_mask if self.image_data else None)
+        
+        # 控制选区边框的显示：只在根图层显示
+        if self.canvas and hasattr(self.canvas, 'selection_border_renderer'):
+            if layer_id == "root" and self.image_data and self.image_data.selection_mask is not None:
+                # 根图层：更新选区边框（信号已在初始化时连接）
+                self.canvas.selection_border_renderer.update_contours(
+                    self.image_data.selection_mask,
+                    dirty_rect=None,
+                    view_scale=self.canvas.view_transform.scale
+                )
+            else:
+                # 用户图层：清除选区边框显示
+                self.canvas.selection_border_renderer.contour_lock.lock()
+                self.canvas.selection_border_renderer.contours = []
+                self.canvas.selection_border_renderer.contour_lock.unlock()
         
         # 更新工具状态（非根图层禁用编辑工具）
         self._update_tool_states()
@@ -732,10 +733,19 @@ class MainWindow(QMainWindow):
             return
         
         try:
-            # 查找要合并的图层
+            # 查找要合并的图层，并检查是否在范围内
             layers_to_merge = []
+            image_shape = (self.image_data.height, self.image_data.width)
             for layer in self.image_data.user_layers:
                 if layer.id in user_layer_ids:
+                    # 检查图层是否在范围内
+                    if not layer.is_in_bounds(image_shape):
+                        QMessageBox.warning(
+                            self,
+                            self.tr.tr('dialog.warning'),
+                            f"图层 '{layer.name}' 超出图像范围，无法合并"
+                        )
+                        return
                     layers_to_merge.append(layer)
             
             if len(layers_to_merge) < 2:
@@ -849,8 +859,12 @@ class MainWindow(QMainWindow):
         # 获取选区掩码
         selection_mask = self.image_data.selection_mask
         
-        # 获取当前合成后的像素（包括根图层+编辑层+所有用户图层）
-        composited_pixels = self._composite_layers()
+        # 获取根图层的像素（不包括用户图层，只包括根图层+编辑层）
+        root_pixels = self.image_data.pixels.copy()
+        
+        # 应用编辑层
+        if self.image_data.edit_mask is not None and self.image_data.edit_mask.any():
+            root_pixels[self.image_data.edit_mask] = self.image_data.edit_values[self.image_data.edit_mask]
         
         # 计算边界框
         y_indices, x_indices = np.where(selection_mask)
@@ -867,7 +881,7 @@ class MainWindow(QMainWindow):
         # 只复制选中区域的像素，未选中区域填充白色（255，表示透明）
         # 合成时白色像素不会覆盖底层
         layer_pixels = np.full((y_max - y_min + 1, x_max - x_min + 1), 255, dtype=np.uint8)
-        layer_pixels[layer_mask] = composited_pixels[y_min:y_max+1, x_min:x_max+1][layer_mask]
+        layer_pixels[layer_mask] = root_pixels[y_min:y_max+1, x_min:x_max+1][layer_mask]
         
         # 提取原图对应区域（用于重新二值化）
         original_region = self.image_data.original_pixels[y_min:y_max+1, x_min:x_max+1].copy()
@@ -900,13 +914,32 @@ class MainWindow(QMainWindow):
             # 获取图层的边界框
             x, y, w, h = layer.bbox
             
-            # 获取图层的像素和掩码
-            layer_pixels = layer.pixels
-            layer_mask = layer.mask
+            # 检查图层是否在当前图像范围内
+            img_h, img_w = composited.shape[:2]
+            if x >= img_w or y >= img_h or x + w <= 0 or y + h <= 0:
+                # 图层完全在图像外，跳过
+                continue
+            
+            # 计算有效的重叠区域
+            x_start = max(0, x)
+            y_start = max(0, y)
+            x_end = min(img_w, x + w)
+            y_end = min(img_h, y + h)
+            
+            # 计算在图层坐标系中的偏移
+            layer_x_offset = x_start - x
+            layer_y_offset = y_start - y
+            layer_w = x_end - x_start
+            layer_h = y_end - y_start
+            
+            # 获取图层的像素和掩码的有效部分
+            layer_pixels = layer.pixels[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+            layer_mask = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
             
             # 只覆盖mask为True的像素（选中的区域）
             # 未选中的区域（mask为False）保持透明，不覆盖底层
-            composited[y:y+h, x:x+w][layer_mask] = layer_pixels[layer_mask]
+            region = composited[y_start:y_end, x_start:x_end]
+            region[layer_mask] = layer_pixels[layer_mask]
         
         # 最后应用编辑层（画笔痕迹），确保画笔在最上层
         if self.image_data.edit_mask is not None and self.image_data.edit_mask.any():
@@ -1211,11 +1244,12 @@ class MainWindow(QMainWindow):
             self._initialize_layers_panel(file_path)
             
             # 初始化参数保存（用于非根图层时恢复）
+            method_params = self.binarization_panel.get_method_params()
             self.last_valid_params = {
-                'preprocess_params': self.binarization_panel.get_preprocess_params().copy(),
+                'preprocess': self.binarization_panel.get_preprocess_params().copy(),  # 注意：键名是 preprocess
                 'method': self.binarization_panel.get_method(),
                 'threshold': self.binarization_panel.get_threshold(),
-                'method_params': self.binarization_panel.get_method_params().copy()
+                **method_params  # 展开方法参数
             }
 
             # 隐藏处理中状态
@@ -1395,6 +1429,9 @@ class MainWindow(QMainWindow):
             if self.canvas.selection_tool:
                 self.canvas.selection_tool.selection_mask = self.image_data.selection_mask
 
+            # 更新图层面板
+            self._sync_layers_panel()
+
             self.statusbar.showMessage(self.tr.tr('message.undone'))
             self._update_ui_state()
             # 更新属性面板（撤销可能恢复裁剪前的尺寸）
@@ -1413,10 +1450,59 @@ class MainWindow(QMainWindow):
             if self.canvas.selection_tool:
                 self.canvas.selection_tool.selection_mask = self.image_data.selection_mask
 
+            # 更新图层面板
+            self._sync_layers_panel()
+
             self.statusbar.showMessage(self.tr.tr('message.redone'))
             self._update_ui_state()
             # 更新属性面板（重做可能改变尺寸）
             self.properties_panel.set_image_info(self.image_data, self.current_file_path)
+    
+    def _sync_layers_panel(self):
+        """同步图层面板与image_data的用户图层"""
+        if self.image_data is None:
+            return
+        
+        # 清空图层面板
+        self.properties_panel.layers_panel.clear_layers()
+        
+        # 重新添加根图层
+        if self.current_file_path:
+            import os
+            filename = os.path.basename(self.current_file_path)
+            root_layer_name = f"🖼️ {filename}"
+        else:
+            root_layer_name = "🖼️ Root"
+        
+        self.properties_panel.layers_panel.add_layer(
+            layer_id="root",
+            name=root_layer_name,
+            is_root=True
+        )
+        
+        # 重新添加所有用户图层，检查是否超出范围
+        image_shape = (self.image_data.height, self.image_data.width)
+        for layer in self.image_data.user_layers:
+            is_out_of_bounds = not layer.is_in_bounds(image_shape)
+            self.properties_panel.layers_panel.add_layer(
+                layer.id, 
+                layer.name,
+                is_out_of_bounds=is_out_of_bounds
+            )
+        
+        # 确保当前激活的图层仍然有效
+        layer_exists = self.active_layer_id == "root" or any(
+            layer.id == self.active_layer_id for layer in self.image_data.user_layers
+        )
+        
+        if layer_exists:
+            # 激活的图层仍然存在，保持选中（即使超出范围也允许选中以便删除）
+            self.properties_panel.layers_panel.set_active_layer(self.active_layer_id)
+        else:
+            # 激活的图层不存在，切换到根图层
+            self.active_layer_id = "root"
+            self.properties_panel.layers_panel.set_active_layer("root")
+            self._on_layer_selected("root")
 
     def _reset_to_initial(self):
         """重置到初始状态"""
@@ -1477,11 +1563,12 @@ class MainWindow(QMainWindow):
             return
         
         # 根图层：保存当前参数作为有效参数
+        method_params = self.binarization_panel.get_method_params()
         self.last_valid_params = {
-            'preprocess_params': preprocess_params.copy(),
+            'preprocess': preprocess_params.copy(),  # 注意：键名是 preprocess，不是 preprocess_params
             'method': method,
             'threshold': threshold,
-            'method_params': self.binarization_panel.get_method_params().copy()
+            **method_params  # 展开方法参数
         }
 
         mode = self.image_data.view_mode
@@ -1577,21 +1664,8 @@ class MainWindow(QMainWindow):
                 **method_params
             }
             
-            # 5. 更新显示
-            # 重新生成图层显示（灰色背景 + 图层内容）
-            composited = np.full(
-                (self.image_data.height, self.image_data.width),
-                128,  # 灰色背景
-                dtype=np.uint8
-            )
-            
-            x, y, w, h = current_layer.bbox
-            composited[y:y+h, x:x+w][current_layer.mask] = current_layer.pixels[current_layer.mask]
-            
-            # 更新画布显示
-            self.canvas.tile_cache.clear()
-            self.canvas.tile_cache.set_image(composited, None)
-            self.canvas.update()
+            # 5. 更新显示（根据当前视图模式）
+            self._safe_update_tile_cache(self.image_data.selection_mask)
             
             # 隐藏处理中状态
             self.canvas.set_processing(False)
@@ -1822,6 +1896,9 @@ class MainWindow(QMainWindow):
 
             # 更新属性面板（裁剪后尺寸会变化）
             self.properties_panel.set_image_info(self.image_data, self.current_file_path)
+            
+            # 同步图层面板（裁剪后检查图层边界）
+            self._sync_layers_panel()
             
             # 更新显示（确保根图层显示合成效果）
             self._safe_update_tile_cache()
@@ -2163,41 +2240,174 @@ class MainWindow(QMainWindow):
         """
         if self.image_data is None:
             return
+        
+        # 选区只在根图层显示
+        if self.active_layer_id != "root":
+            selection_mask = None
 
         # 根据当前激活的图层决定显示内容
         if self.active_layer_id == "root":
-            # 根图层：合成显示所有层
-            pixels = self._composite_layers()
+            # 根图层：根据视图模式显示不同内容
+            if self.image_data.view_mode == 'original':
+                # 原图模式：显示原图
+                pixels = self.image_data.original_pixels
+            elif self.image_data.view_mode == 'preprocessed':
+                # 预处理模式：显示预处理结果
+                if self.image_data.preprocessed_pixels is not None:
+                    pixels = self.image_data.preprocessed_pixels
+                else:
+                    pixels = self.image_data.original_pixels
+            else:  # 'binary'
+                # 二值化模式：合成显示所有层
+                pixels = self._composite_layers()
         else:
-            # 用户图层：显示根图层 + 编辑层 + 该图层（未选中区域为白色）
+            # 用户图层：根据视图模式显示不同内容
             pixels = None
             for layer in self.image_data.user_layers:
                 if layer.id == self.active_layer_id:
-                    # 创建白色背景
-                    pixels = np.full(
-                        (self.image_data.height, self.image_data.width),
-                        255,  # 白色背景
-                        dtype=np.uint8
-                    )
+                    # 检查图层是否在图像范围内
+                    image_shape = (self.image_data.height, self.image_data.width)
+                    if not layer.is_in_bounds(image_shape):
+                        # 图层超出范围，显示灰色背景
+                        pixels = np.full(
+                            (self.image_data.height, self.image_data.width),
+                            128,
+                            dtype=np.uint8
+                        )
+                        break
                     
-                    # 在图层的掩码区域，先应用根图层和编辑层
-                    x, y, w, h = layer.bbox
+                    if self.image_data.view_mode == 'original':
+                        # 原图模式：显示原图对应区域，未选择区域为灰色
+                        if layer.original_region is not None:
+                            # 创建灰色背景（128表示未选择区域）
+                            pixels = np.full(
+                                (self.image_data.height, self.image_data.width),
+                                128,  # 灰色背景
+                                dtype=np.uint8
+                            )
+                            
+                            # 计算有效的重叠区域
+                            x, y, w, h = layer.bbox
+                            img_h, img_w = image_shape
+                            
+                            x_start = max(0, x)
+                            y_start = max(0, y)
+                            x_end = min(img_w, x + w)
+                            y_end = min(img_h, y + h)
+                            
+                            # 计算在图层坐标系中的偏移
+                            layer_x_offset = x_start - x
+                            layer_y_offset = y_start - y
+                            layer_w = x_end - x_start
+                            layer_h = y_end - y_start
+                            
+                            # 将原图区域转换为灰度图
+                            if len(layer.original_region.shape) == 3:
+                                from ..utils.binarization_engine import BinarizationEngine
+                                original_gray = BinarizationEngine.convert_to_grayscale(layer.original_region)
+                            else:
+                                original_gray = layer.original_region
+                            
+                            # 获取有效部分
+                            original_gray_region = original_gray[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            
+                            # 在图层的掩码区域显示原图
+                            region = pixels[y_start:y_end, x_start:x_end]
+                            region[layer_mask_region] = original_gray_region[layer_mask_region]
+                        else:
+                            # 没有原图区域，显示灰色
+                            pixels = np.full(
+                                (self.image_data.height, self.image_data.width),
+                                128,
+                                dtype=np.uint8
+                            )
                     
-                    # 获取图层区域的根图层像素
-                    base_region = self.image_data.pixels[y:y+h, x:x+w].copy()
+                    elif self.image_data.view_mode == 'preprocessed':
+                        # 预处理模式：对原图区域应用预处理，未选择区域为灰色
+                        if layer.original_region is not None and layer.binarization_params is not None:
+                            # 创建灰色背景
+                            pixels = np.full(
+                                (self.image_data.height, self.image_data.width),
+                                128,  # 灰色背景
+                                dtype=np.uint8
+                            )
+                            
+                            # 对原图区域应用预处理
+                            from ..utils.binarization_engine import BinarizationEngine
+                            preprocess_params = layer.binarization_params.get('preprocess', {})
+                            # 使用 **kwargs 解包参数字典
+                            preprocessed_region = BinarizationEngine.apply_preprocess(
+                                layer.original_region,
+                                **preprocess_params
+                            )
+                            
+                            # 转换为灰度图（如果是彩色）
+                            if len(preprocessed_region.shape) == 3:
+                                preprocessed_region = BinarizationEngine.convert_to_grayscale(preprocessed_region)
+                            
+                            # 计算有效的重叠区域
+                            x, y, w, h = layer.bbox
+                            img_h, img_w = image_shape
+                            
+                            x_start = max(0, x)
+                            y_start = max(0, y)
+                            x_end = min(img_w, x + w)
+                            y_end = min(img_h, y + h)
+                            
+                            # 计算在图层坐标系中的偏移
+                            layer_x_offset = x_start - x
+                            layer_y_offset = y_start - y
+                            layer_w = x_end - x_start
+                            layer_h = y_end - y_start
+                            
+                            # 获取有效部分
+                            preprocessed_region_part = preprocessed_region[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            
+                            # 在图层的掩码区域显示预处理结果
+                            region = pixels[y_start:y_end, x_start:x_end]
+                            region[layer_mask_region] = preprocessed_region_part[layer_mask_region]
+                        else:
+                            # 没有原图区域或参数，显示灰色
+                            pixels = np.full(
+                                (self.image_data.height, self.image_data.width),
+                                128,
+                                dtype=np.uint8
+                            )
                     
-                    # 应用编辑层到该区域
-                    if self.image_data.edit_mask is not None:
-                        edit_region = self.image_data.edit_mask[y:y+h, x:x+w]
-                        if edit_region.any():
-                            base_region[edit_region] = self.image_data.edit_values[y:y+h, x:x+w][edit_region]
+                    else:  # 'binary'
+                        # 二值化模式：显示该图层的二值化结果（未选中区域为灰色）
+                        # 创建灰色背景（表示透明/未选中区域）
+                        pixels = np.full(
+                            (self.image_data.height, self.image_data.width),
+                            128,  # 灰色背景
+                            dtype=np.uint8
+                        )
+                        
+                        # 计算有效的重叠区域
+                        x, y, w, h = layer.bbox
+                        img_h, img_w = image_shape
+                        
+                        x_start = max(0, x)
+                        y_start = max(0, y)
+                        x_end = min(img_w, x + w)
+                        y_end = min(img_h, y + h)
+                        
+                        # 计算在图层坐标系中的偏移
+                        layer_x_offset = x_start - x
+                        layer_y_offset = y_start - y
+                        layer_w = x_end - x_start
+                        layer_h = y_end - y_start
+                        
+                        # 获取有效部分
+                        layer_pixels_region = layer.pixels[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                        layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                        
+                        # 直接显示图层的像素（完全覆盖该区域）
+                        region = pixels[y_start:y_end, x_start:x_end]
+                        region[layer_mask_region] = layer_pixels_region[layer_mask_region]
                     
-                    # 将基础层放到合成结果中（只在掩码区域）
-                    pixels[y:y+h, x:x+w][layer.mask] = base_region[layer.mask]
-                    
-                    # 应用该图层的黑色像素
-                    black_mask = layer.mask & (layer.pixels == 0)
-                    pixels[y:y+h, x:x+w][black_mask] = 0
                     break
             
             # 如果找不到图层，回退到根图层

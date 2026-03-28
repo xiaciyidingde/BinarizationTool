@@ -58,6 +58,24 @@ class UserLayer:
         """获取边界框"""
         return self.bbox
     
+    def is_in_bounds(self, image_shape: tuple[int, int]) -> bool:
+        """
+        检查图层是否在图像范围内
+        
+        Args:
+            image_shape: 图像尺寸 (height, width)
+            
+        Returns:
+            如果图层至少部分在图像范围内返回 True，否则返回 False
+        """
+        img_h, img_w = image_shape
+        x, y, w, h = self.bbox
+        
+        # 检查是否有重叠
+        if x >= img_w or y >= img_h or x + w <= 0 or y + h <= 0:
+            return False
+        return True
+    
     def get_full_mask(self, image_shape: tuple[int, int]) -> np.ndarray:
         """
         获取完整图像尺寸的掩码

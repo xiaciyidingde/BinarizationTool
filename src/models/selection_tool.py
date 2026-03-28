@@ -394,7 +394,6 @@ class SelectionTool:
 
         绘制圆形外圈显示选择范围。
         外圈颜色表示模式：绿色=添加，红色=删除
-        中心圆点表示目标颜色：黑点=选择黑色，白点=选择白色
 
         Args:
             painter: Qt QPainter 对象
@@ -410,17 +409,11 @@ class SelectionTool:
         else:
             ring_color = QColor(255, 0, 0)  # 红色 - 删除
 
-        # 根据模式选择中心点颜色（绿色=添加，红色=删除）
-        if self.selection_mode == 'add':
-            center_color = QColor(0, 255, 0)  # 绿色 - 添加模式
-        else:
-            center_color = QColor(255, 0, 0)  # 红色 - 删除模式
-
-        # 使用 CursorRenderer 渲染光标
+        # 使用 CursorRenderer 渲染光标（不显示中心点）
         CursorRenderer.render_circle_cursor(
             painter, view_x, view_y, view_size,
             ring_color=ring_color,
-            center_color=center_color,
+            center_color=None,  # 不显示中心点
             show_crosshair=True,
             crosshair_threshold=self.crosshair_threshold
         )
