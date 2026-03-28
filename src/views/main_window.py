@@ -883,15 +883,14 @@ class MainWindow(QMainWindow):
         """
         合成根图层、编辑层和所有用户图层
         
+        合成顺序：根图层 → 用户图层 → 编辑层（画笔痕迹）
+        这样画笔痕迹会显示在最上层，覆盖所有用户图层
+        
         Returns:
             合成后的像素数据
         """
         # 从根图层开始（当前二值化结果）
         composited = self.image_data.pixels.copy()
-        
-        # 应用编辑层（画笔痕迹）
-        if self.image_data.edit_mask is not None and self.image_data.edit_mask.any():
-            composited[self.image_data.edit_mask] = self.image_data.edit_values[self.image_data.edit_mask]
         
         # 按顺序叠加所有用户图层
         for layer in self.image_data.user_layers:
@@ -908,6 +907,10 @@ class MainWindow(QMainWindow):
             # 只覆盖mask为True的像素（选中的区域）
             # 未选中的区域（mask为False）保持透明，不覆盖底层
             composited[y:y+h, x:x+w][layer_mask] = layer_pixels[layer_mask]
+        
+        # 最后应用编辑层（画笔痕迹），确保画笔在最上层
+        if self.image_data.edit_mask is not None and self.image_data.edit_mask.any():
+            composited[self.image_data.edit_mask] = self.image_data.edit_values[self.image_data.edit_mask]
         
         return composited
 
@@ -961,6 +964,10 @@ class MainWindow(QMainWindow):
         if self.image_data is None:
             self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
             return
+        
+        # 检查画笔工具是否可用（仅在二值化模式且根图层可用）
+        if not self.brush_button.isEnabled():
+            return
 
         self.canvas.set_tool(self.canvas.brush_tool)
         self.pan_button.setChecked(False)
@@ -980,6 +987,10 @@ class MainWindow(QMainWindow):
         """选择裁剪工具"""
         if self.image_data is None:
             return
+        
+        # 检查裁剪工具是否可用（仅在根图层可用）
+        if not self.crop_button.isEnabled():
+            return
 
         self.canvas.set_tool(self.canvas.crop_tool)
         self.pan_button.setChecked(False)
@@ -996,6 +1007,10 @@ class MainWindow(QMainWindow):
         """选择选择工具"""
         if self.image_data is None:
             self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
+            return
+        
+        # 检查选择工具是否可用（仅在二值化模式且根图层可用）
+        if not self.selection_tool_button.isEnabled():
             return
 
         self.canvas.set_tool(self.canvas.selection_tool)
@@ -1338,7 +1353,30 @@ class MainWindow(QMainWindow):
                 }
                 format_str = format_map.get(save_format_config)
 
-            save_image(self.image_data, file_path, format=format_str)
+            # 如果在二值化模式且有用户图层，保存合成后的结果
+            if self.image_data.view_mode == 'binary' and len(self.image_data.user_layers) > 0:
+                # 获取完整的合成结果（包括所有用户图层）
+                composited_pixels = self._composite_layers()
+                
+                # 直接保存合成后的像素
+                from pathlib import Path
+                from PIL import Image
+                
+                path = Path(file_path)
+                
+                # 推断格式
+                if format_str is None:
+                    format_str = path.suffix.upper().lstrip('.')
+                    if format_str == 'JPG':
+                        format_str = 'JPEG'
+                
+                # 转换为 PIL Image 并保存
+                img = Image.fromarray(composited_pixels, mode='L')
+                img.save(file_path, format=format_str)
+            else:
+                # 正常保存
+                save_image(self.image_data, file_path, format=format_str)
+            
             self.current_file_path = file_path
             self.statusbar.showMessage(self.tr.tr('message.saved', path=file_path))
         except Exception as e:
