@@ -586,8 +586,9 @@ class MainWindow(QMainWindow):
                 self.tr.tr('binarization_panel.root_layer')
             )
             
-            # 加载根图层的参数（当前参数）
-            # 根图层使用全局参数，不需要特别加载
+            # 加载根图层的参数（恢复到最后有效的根图层参数）
+            if hasattr(self, 'last_valid_params') and self.last_valid_params:
+                self.binarization_panel.load_params(self.last_valid_params)
             
             self.statusbar.showMessage("已切换到根图层")
         
@@ -786,13 +787,26 @@ class MainWindow(QMainWindow):
                 # 更新掩码
                 merged_mask[rel_y:rel_y+h, rel_x:rel_x+w] |= layer.mask
             
-            # 创建新图层
+            # 找到最底层的图层（列表中第一个）作为参数来源
+            bottom_layer = layers_to_merge[0]
+            
+            # 提取合并区域的原图像素（如果原图可用）
+            merged_original_region = None
+            if self.image_data.original_pixels is not None:
+                merged_original_region = self.image_data.original_pixels[
+                    min_y:max_y,
+                    min_x:max_x
+                ].copy()
+            
+            # 创建新图层，继承底层图层的二值化参数
             from src.models.user_layer import UserLayer
             merged_layer = UserLayer(
                 name=merged_layer_name,
                 pixels=merged_pixels,
                 mask=merged_mask,
-                bbox=merged_bbox
+                bbox=merged_bbox,
+                binarization_params=bottom_layer.binarization_params,
+                original_region=merged_original_region
             )
             
             # 删除原图层
@@ -1420,21 +1434,11 @@ class MainWindow(QMainWindow):
         
         # 检查当前激活的图层
         if self.active_layer_id != "root":
-            # 不是根图层，显示提示信息并恢复参数
-            self.statusbar.showMessage(self.tr.tr('layers_panel.not_root_layer'))
-            QMessageBox.information(
-                self,
-                self.tr.tr('dialog.info'),
-                self.tr.tr('layers_panel.switch_to_root_warning')
-            )
-            
-            # 恢复上一次的有效参数
-            if self.last_valid_params is not None:
-                self._restore_parameters(self.last_valid_params)
-            
+            # 用户图层：只对该图层重新二值化
+            self._rebinarize_user_layer(preprocess_params, method, threshold)
             return
         
-        # 保存当前参数作为有效参数
+        # 根图层：保存当前参数作为有效参数
         self.last_valid_params = {
             'preprocess_params': preprocess_params.copy(),
             'method': method,
@@ -1480,6 +1484,89 @@ class MainWindow(QMainWindow):
             # 显示处理中状态
             self.canvas.set_processing(True)
             self.statusbar.showMessage(self.tr.tr('app.processing'))
+
+    def _rebinarize_user_layer(self, preprocess_params: dict, method: int, threshold: int):
+        """
+        重新二值化用户图层
+        
+        Args:
+            preprocess_params: 预处理参数
+            method: 二值化方法
+            threshold: 阈值
+        """
+        if self.image_data is None or self.active_layer_id == "root":
+            return
+        
+        # 查找当前图层
+        current_layer = None
+        for layer in self.image_data.user_layers:
+            if layer.id == self.active_layer_id:
+                current_layer = layer
+                break
+        
+        if current_layer is None or current_layer.original_region is None:
+            self.statusbar.showMessage("图层没有原图数据，无法重新二值化")
+            return
+        
+        try:
+            # 显示处理中状态
+            self.canvas.set_processing(True)
+            self.statusbar.showMessage(self.tr.tr('app.processing'))
+            
+            # 1. 对原图区域进行预处理
+            preprocessed_region = BinarizationEngine.apply_preprocess(
+                current_layer.original_region.copy(),
+                **preprocess_params
+            )
+            
+            # 2. 对预处理后的区域进行二值化
+            method_params = self.binarization_panel.get_method_params()
+            binarized_region = BinarizationEngine.apply_threshold(
+                preprocessed_region,
+                method,
+                threshold,
+                **method_params
+            )
+            
+            # 3. 更新图层的像素数据（只更新mask为True的部分）
+            current_layer.pixels[current_layer.mask] = binarized_region[current_layer.mask]
+            
+            # 4. 更新图层的二值化参数
+            current_layer.binarization_params = {
+                'preprocess': preprocess_params.copy(),
+                'method': method,
+                'threshold': threshold,
+                **method_params
+            }
+            
+            # 5. 更新显示
+            # 重新生成图层显示（灰色背景 + 图层内容）
+            composited = np.full(
+                (self.image_data.height, self.image_data.width),
+                128,  # 灰色背景
+                dtype=np.uint8
+            )
+            
+            x, y, w, h = current_layer.bbox
+            composited[y:y+h, x:x+w][current_layer.mask] = current_layer.pixels[current_layer.mask]
+            
+            # 更新画布显示
+            self.canvas.tile_cache.clear()
+            self.canvas.tile_cache.set_image(composited, None)
+            self.canvas.update()
+            
+            # 隐藏处理中状态
+            self.canvas.set_processing(False)
+            self.statusbar.showMessage(f"图层 {current_layer.name} 已重新二值化")
+            
+        except Exception as e:
+            self.canvas.set_processing(False)
+            self.statusbar.showMessage(f"重新二值化失败: {str(e)}")
+            QMessageBox.critical(
+                self,
+                self.tr.tr('dialog.error'),
+                f"重新二值化失败：{str(e)}"
+            )
     
     def _restore_parameters(self, params: dict):
         """
@@ -1697,6 +1784,9 @@ class MainWindow(QMainWindow):
 
             # 更新属性面板（裁剪后尺寸会变化）
             self.properties_panel.set_image_info(self.image_data, self.current_file_path)
+            
+            # 更新显示（确保根图层显示合成效果）
+            self._safe_update_tile_cache()
 
     def _update_ui_state(self):
         """更新 UI 状态"""

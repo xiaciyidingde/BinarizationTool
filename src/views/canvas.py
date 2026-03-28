@@ -334,7 +334,11 @@ class Canvas(QWidget):
 
                 if isinstance(self.current_tool, BrushTool):
                     # 开始画笔笔画
-                    self.image_data.start_temp_layer()
+                    # 使用当前显示的像素作为临时层的基础（包含所有图层的合成）
+                    if self.tile_cache.pixels is not None:
+                        self.image_data.start_temp_layer(self.tile_cache.pixels)
+                    else:
+                        self.image_data.start_temp_layer()
                     stroke = self.current_tool.start_stroke(pixel_x, pixel_y)
                     dirty_rect = stroke.rasterize(self.image_data)
                     self.rasterized_point_count = len(stroke.points)

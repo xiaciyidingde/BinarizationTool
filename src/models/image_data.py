@@ -130,16 +130,22 @@ class ImageData:
         """
         return 0 <= x < self.width and 0 <= y < self.height
 
-    def start_temp_layer(self):
+    def start_temp_layer(self, initial_pixels: np.ndarray | None = None):
         """
         开始绘制：创建临时图层和临时编辑掩码
 
         临时图层基于当前显示的合成结果，用于在绘制过程中提供实时预览。
         临时编辑掩码用于记录本次笔画中实际被编辑的像素。
         这遵循 Photoshop 的行为模式。
+        
+        Args:
+            initial_pixels: 初始像素数据（可选）。如果提供，使用该数据；否则使用当前合成结果。
         """
-        # 基于当前合成结果创建临时层
-        self.temp_layer = self._get_composite_pixels().copy()
+        # 基于当前合成结果或提供的像素创建临时层
+        if initial_pixels is not None:
+            self.temp_layer = initial_pixels.copy()
+        else:
+            self.temp_layer = self._get_composite_pixels().copy()
 
         # 创建临时编辑掩码
         self.temp_edit_mask = np.zeros((self.height, self.width), dtype=bool)
