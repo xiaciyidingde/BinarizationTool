@@ -1,5 +1,17 @@
 ﻿# 更新日志
 
+## [v1.5.3.1] - 2026-03-27
+
+### 界面更新
+- 二值化面板添加"当前图层"显示区域
+
+### 数据结构扩展
+- UserLayer 类添加 `binarization_params` 字段保存二值化参数
+- UserLayer 类添加 `original_region` 字段保存原图对应区域
+- BinarizationPanel 添加 `get_all_params()` 和 `load_params()` 方法
+
+---
+
 ## [v1.5.3.0] - 2026-03-27
 
 ### 新增功能

@@ -22,7 +22,9 @@ class UserLayer:
         name: str,
         pixels: np.ndarray,
         mask: np.ndarray,
-        bbox: tuple[int, int, int, int]
+        bbox: tuple[int, int, int, int],
+        binarization_params: dict | None = None,
+        original_region: np.ndarray | None = None
     ):
         """
         初始化用户图层
@@ -32,12 +34,20 @@ class UserLayer:
             pixels: 二值化像素数据（裁剪到边界框）
             mask: 布尔掩码（裁剪到边界框）
             bbox: 边界框 (x, y, width, height)
+            binarization_params: 二值化参数（可选）
+            original_region: 原图对应区域（可选，用于重新二值化）
         """
         self.id = str(uuid.uuid4())
         self.name = name
         self.pixels = pixels.copy()  # 深拷贝
         self.mask = mask.copy()
         self.bbox = bbox
+        
+        # 二值化参数（保存创建时的参数）
+        self.binarization_params = binarization_params.copy() if binarization_params else None
+        
+        # 原图对应区域（用于重新二值化）
+        self.original_region = original_region.copy() if original_region is not None else None
         
         # 状态
         self.visible = True
@@ -89,7 +99,9 @@ class UserLayer:
             name=f"{self.name}",
             pixels=self.pixels,
             mask=self.mask,
-            bbox=self.bbox
+            bbox=self.bbox,
+            binarization_params=self.binarization_params,
+            original_region=self.original_region
         )
         layer.visible = self.visible
         layer.locked = self.locked

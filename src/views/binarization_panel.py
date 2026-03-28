@@ -85,6 +85,21 @@ class BinarizationPanel(QWidget):
 
         outer_layout.addWidget(view_mode_container)
 
+        # === 当前图层显示区域（独立背景） ===
+        layer_info_outer = QWidget()
+        layer_info_outer.setObjectName("currentLayerContainer")
+        layer_info_outer_layout = QVBoxLayout(layer_info_outer)
+        layer_info_outer_layout.setContentsMargins(12, 8, 12, 8)
+        layer_info_outer_layout.setSpacing(0)
+        
+        # 当前图层标签
+        self.current_layer_label = QLabel(self.tr.tr('binarization_panel.current_layer', layer=self.tr.tr('binarization_panel.root_layer')))
+        self.current_layer_label.setObjectName("currentLayerLabel")
+        self.current_layer_label.setAlignment(Qt.AlignCenter)  # 居中对齐
+        layer_info_outer_layout.addWidget(self.current_layer_label)
+        
+        outer_layout.addWidget(layer_info_outer)
+
         # === 标签页组件 ===
         # 创建标签页组件
         self.tab_widget = AnimatedTabWidget()
@@ -1027,6 +1042,110 @@ class BinarizationPanel(QWidget):
         self.red_channel_slider.setEnabled(enabled)
         self.green_channel_slider.setEnabled(enabled)
         self.blue_channel_slider.setEnabled(enabled)
+
+    def set_current_layer(self, layer_name: str):
+        """
+        设置当前图层显示
+        
+        Args:
+            layer_name: 图层名称
+        """
+        self.current_layer_label.setText(
+            self.tr.tr('binarization_panel.current_layer', layer=layer_name)
+        )
+    
+    def get_all_params(self) -> dict:
+        """
+        获取所有参数（预处理 + 二值化）
+        
+        Returns:
+            包含所有参数的字典
+        """
+        return {
+            'preprocess': self.get_preprocess_params(),
+            'method': self.get_method(),
+            'threshold': self.get_threshold(),
+            'block_size': self.block_size_slider.value() if hasattr(self, 'block_size_slider') else 11,
+            'window_size': self.window_size_slider.value() if hasattr(self, 'window_size_slider') else 15,
+            'k_param': self.k_param_slider.value() * 0.01 if hasattr(self, 'k_param_slider') else 0.2,
+            'r_param': self.r_param_slider.value() if hasattr(self, 'r_param_slider') else 128,
+            'contrast_threshold': self.contrast_threshold_slider.value() if hasattr(self, 'contrast_threshold_slider') else 15,
+            'dither_strength': self.dither_strength_slider.value() * 0.01 if hasattr(self, 'dither_strength_slider') else 1.0,
+            'matrix_size': self.matrix_size_slider.value() if hasattr(self, 'matrix_size_slider') else 8,
+        }
+    
+    def load_params(self, params: dict):
+        """
+        加载参数到控件
+        
+        Args:
+            params: 参数字典
+        """
+        # 阻止信号，避免触发参数变化
+        self.blockSignals(True)
+        
+        try:
+            # 加载预处理参数
+            if 'preprocess' in params:
+                preprocess = params['preprocess']
+                if 'exposure' in preprocess:
+                    self.exposure_slider.setValue(preprocess['exposure'])
+                if 'contrast' in preprocess:
+                    self.contrast_slider.setValue(preprocess['contrast'])
+                if 'sharpen' in preprocess:
+                    self.sharpen_slider.setValue(preprocess['sharpen'])
+                if 'gamma' in preprocess:
+                    self.gamma_slider.setValue(int(preprocess['gamma'] * 100))
+                if 'smooth' in preprocess:
+                    self.smooth_slider.setValue(preprocess['smooth'])
+                if 'red_channel' in preprocess:
+                    self.red_channel_slider.setValue(preprocess['red_channel'])
+                if 'green_channel' in preprocess:
+                    self.green_channel_slider.setValue(preprocess['green_channel'])
+                if 'blue_channel' in preprocess:
+                    self.blue_channel_slider.setValue(preprocess['blue_channel'])
+                if 'edge_mode' in preprocess:
+                    for i in range(self.edge_mode_combo.count()):
+                        if self.edge_mode_combo.itemData(i) == preprocess['edge_mode']:
+                            self.edge_mode_combo.setCurrentIndex(i)
+                            break
+                if 'edge_strength' in preprocess:
+                    self.edge_strength_slider.setValue(preprocess['edge_strength'])
+                if 'edge_threshold' in preprocess:
+                    self.edge_threshold_slider.setValue(preprocess['edge_threshold'])
+                if 'denoise_method' in preprocess:
+                    for i in range(self.denoise_method_combo.count()):
+                        if self.denoise_method_combo.itemData(i) == preprocess['denoise_method']:
+                            self.denoise_method_combo.setCurrentIndex(i)
+                            break
+                if 'denoise' in preprocess:
+                    self.denoise_slider.setValue(preprocess['denoise'])
+            
+            # 加载二值化参数
+            if 'method' in params:
+                self.set_method(params['method'])
+            if 'threshold' in params:
+                self.set_threshold(params['threshold'])
+            
+            # 加载其他二值化参数（如果存在）
+            if 'block_size' in params and hasattr(self, 'block_size_slider'):
+                self.block_size_slider.setValue(params['block_size'])
+            if 'window_size' in params and hasattr(self, 'window_size_slider'):
+                self.window_size_slider.setValue(params['window_size'])
+            if 'k_param' in params and hasattr(self, 'k_param_slider'):
+                self.k_param_slider.setValue(int(params['k_param'] * 100))
+            if 'r_param' in params and hasattr(self, 'r_param_slider'):
+                self.r_param_slider.setValue(params['r_param'])
+            if 'contrast_threshold' in params and hasattr(self, 'contrast_threshold_slider'):
+                self.contrast_threshold_slider.setValue(params['contrast_threshold'])
+            if 'dither_strength' in params and hasattr(self, 'dither_strength_slider'):
+                self.dither_strength_slider.setValue(int(params['dither_strength'] * 100))
+            if 'matrix_size' in params and hasattr(self, 'matrix_size_slider'):
+                self.matrix_size_slider.setValue(params['matrix_size'])
+                
+        finally:
+            # 恢复信号
+            self.blockSignals(False)
 
     def retranslate_ui(self):
         """重新翻译 UI 文本（用于语言切换）"""

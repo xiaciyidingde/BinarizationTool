@@ -193,6 +193,8 @@
   },
   "binarization_panel": {
     "title": "Binarization Settings",
+    "current_layer": "Current Layer: {layer}",
+    "root_layer": "Root Layer",
     "preprocess": "Preprocessing",
     "rgb_channels": "RGB Channels",
     "red_channel": "Red: {value}",

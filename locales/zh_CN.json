@@ -193,6 +193,8 @@
   },
   "binarization_panel": {
     "title": "二值化设置",
+    "current_layer": "当前图层: {layer}",
+    "root_layer": "根图层",
     "preprocess": "预处理",
     "rgb_channels": "RGB 通道",
     "red_channel": "红色：{value}",

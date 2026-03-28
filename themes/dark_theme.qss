@@ -470,6 +470,19 @@ QWidget#viewModeContainer {
     border-radius: 8px;
 }
 
+/* ========== 当前图层容器（深色主题） ========== */
+QWidget#currentLayerContainer {
+    background-color: #2a2a2a;
+    border-radius: 8px;
+}
+
+QLabel#currentLayerLabel {
+    font-weight: bold;
+    font-size: 12px;
+    color: #e0e0e0;
+    background-color: transparent;
+}
+
 /* ========== 二值化面板选项卡样式（深色主题） ========== */
 QTabWidget#binarizationPanelTabs::pane {
     border: 1px solid #404040;

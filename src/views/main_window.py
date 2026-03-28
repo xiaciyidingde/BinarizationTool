@@ -563,6 +563,13 @@ class MainWindow(QMainWindow):
                     self.canvas.tile_cache.clear()
                     self.canvas.tile_cache.set_image(composited, None)
                     
+                    # 更新二值化面板显示当前图层
+                    self.binarization_panel.set_current_layer(layer.name)
+                    
+                    # 加载该图层的二值化参数
+                    if layer.binarization_params:
+                        self.binarization_panel.load_params(layer.binarization_params)
+                    
                     self.statusbar.showMessage(f"已切换到图层: {layer.name}")
                     break
         else:
@@ -573,6 +580,15 @@ class MainWindow(QMainWindow):
                     composited_pixels,
                     self.image_data.selection_mask
                 )
+            
+            # 更新二值化面板显示根图层
+            self.binarization_panel.set_current_layer(
+                self.tr.tr('binarization_panel.root_layer')
+            )
+            
+            # 加载根图层的参数（当前参数）
+            # 根图层使用全局参数，不需要特别加载
+            
             self.statusbar.showMessage("已切换到根图层")
         
         # 更新工具状态（非根图层禁用编辑工具）
@@ -599,6 +615,9 @@ class MainWindow(QMainWindow):
             # 提取选区数据
             layer_data = self._extract_layer_from_selection()
             
+            # 获取当前二值化参数
+            current_params = self.binarization_panel.get_all_params()
+            
             # 创建图层对象
             from src.models.user_layer import UserLayer
             layer_count = len(self.image_data.user_layers) + 1
@@ -608,7 +627,9 @@ class MainWindow(QMainWindow):
                 name=layer_name,
                 pixels=layer_data['pixels'],
                 mask=layer_data['mask'],
-                bbox=layer_data['bbox']
+                bbox=layer_data['bbox'],
+                binarization_params=current_params,  # 保存二值化参数
+                original_region=layer_data['original_region']  # 保存原图区域
             )
             
             # 添加到图层列表
@@ -806,9 +827,10 @@ class MainWindow(QMainWindow):
         从选区提取图层数据
         
         只保存选中的像素，未选中的区域不存储（通过mask控制）
+        同时保存原图对应区域，用于重新二值化
         
         Returns:
-            包含 pixels, mask, bbox 的字典
+            包含 pixels, mask, bbox, original_region 的字典
         """
         # 获取选区掩码
         selection_mask = self.image_data.selection_mask
@@ -833,10 +855,14 @@ class MainWindow(QMainWindow):
         layer_pixels = np.full((y_max - y_min + 1, x_max - x_min + 1), 255, dtype=np.uint8)
         layer_pixels[layer_mask] = composited_pixels[y_min:y_max+1, x_min:x_max+1][layer_mask]
         
+        # 提取原图对应区域（用于重新二值化）
+        original_region = self.image_data.original_pixels[y_min:y_max+1, x_min:x_max+1].copy()
+        
         return {
             'pixels': layer_pixels,
             'mask': layer_mask,  # mask标记哪些像素是有效的
-            'bbox': bbox
+            'bbox': bbox,
+            'original_region': original_region  # 原图区域
         }
     
     def _composite_layers(self) -> np.ndarray:
