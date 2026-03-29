@@ -5,6 +5,7 @@
 """
 
 from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QIcon, QPixmap
 from PySide6.QtWidgets import (
     QGroupBox,
     QHBoxLayout,
@@ -18,6 +19,123 @@ from PySide6.QtWidgets import (
 )
 
 from ..utils.translation_manager import get_translator
+from ..utils.resources import SHOW, HIDE, DELETE
+
+
+class LayerItemWidget(QWidget):
+    """自定义图层项 Widget"""
+    
+    visibility_toggled = Signal(str, bool)  # layer_id, visible
+    delete_clicked = Signal(str)  # layer_id
+    
+    def __init__(self, layer_id: str, name: str, visible: bool = True, is_root: bool = False, parent=None):
+        """
+        初始化图层项
+        
+        Args:
+            layer_id: 图层 ID
+            name: 图层名称
+            visible: 是否可见
+            is_root: 是否是根图层
+            parent: 父组件
+        """
+        super().__init__(parent)
+        
+        self.layer_id = layer_id
+        self.is_root = is_root
+        self.visible = visible
+        
+        # 水平布局
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 2, 4, 2)
+        layout.setSpacing(4)
+        
+        # 可见性按钮
+        self.visibility_button = QPushButton()
+        self.visibility_button.setFixedSize(20, 20)
+        self.visibility_button.setFlat(True)
+        self.visibility_button.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+            }
+            QPushButton:hover {
+                background: rgba(128, 128, 128, 0.2);
+                border-radius: 3px;
+            }
+        """)
+        self.visibility_button.setToolTip("显示/隐藏图层")
+        self.visibility_button.clicked.connect(self._on_visibility_clicked)
+        
+        # 根图层的可见性按钮禁用
+        if is_root:
+            self.visibility_button.setEnabled(False)
+        
+        layout.addWidget(self.visibility_button)
+        
+        # 图层名称
+        self.name_label = QLabel(name)
+        self.name_label.setStyleSheet("padding: 2px;")
+        layout.addWidget(self.name_label, 1)  # 拉伸因子为1
+        
+        # 删除按钮（仅用户图层显示）
+        if not is_root:
+            self.delete_button = QPushButton()
+            self.delete_button.setFixedSize(20, 20)
+            self.delete_button.setFlat(True)
+            self.delete_button.setStyleSheet("""
+                QPushButton {
+                    background: transparent;
+                    border: none;
+                }
+                QPushButton:hover {
+                    background: rgba(255, 0, 0, 0.2);
+                    border-radius: 3px;
+                }
+            """)
+            delete_pixmap = QPixmap()
+            delete_pixmap.loadFromData(DELETE)
+            self.delete_button.setIcon(QIcon(delete_pixmap))
+            self.delete_button.setToolTip("删除图层")
+            self.delete_button.clicked.connect(self._on_delete_clicked)
+            layout.addWidget(self.delete_button)
+        
+        # 更新可见性样式
+        self._update_visibility_style()
+    
+    def _on_visibility_clicked(self):
+        """可见性按钮被点击"""
+        self.visible = not self.visible
+        self._update_visibility_style()
+        self.visibility_toggled.emit(self.layer_id, self.visible)
+    
+    def _on_delete_clicked(self):
+        """删除按钮被点击"""
+        self.delete_clicked.emit(self.layer_id)
+    
+    def _update_visibility_style(self):
+        """更新可见性样式"""
+        if self.visible:
+            # 可见：显示 SHOW 图标
+            pixmap = QPixmap()
+            pixmap.loadFromData(SHOW)
+            self.visibility_button.setIcon(QIcon(pixmap))
+            self.name_label.setStyleSheet("padding: 2px; color: palette(text);")
+        else:
+            # 隐藏：显示 HIDE 图标，图层名称变灰
+            pixmap = QPixmap()
+            pixmap.loadFromData(HIDE)
+            self.visibility_button.setIcon(QIcon(pixmap))
+            self.name_label.setStyleSheet("padding: 2px; color: #999999;")
+    
+    def set_visible(self, visible: bool):
+        """设置可见性"""
+        self.visible = visible
+        self._update_visibility_style()
+    
+    def set_name(self, name: str):
+        """设置图层名称"""
+        self.name_label.setText(name)
 
 
 class LayersPanel(QWidget):
@@ -164,7 +282,7 @@ class LayersPanel(QWidget):
                 selected_ids.append(layer_id)
         return selected_ids
     
-    def add_layer(self, layer_id: str, name: str, is_root: bool = False, is_out_of_bounds: bool = False):
+    def add_layer(self, layer_id: str, name: str, is_root: bool = False, is_out_of_bounds: bool = False, visible: bool = True):
         """
         添加图层到列表
         
@@ -173,23 +291,38 @@ class LayersPanel(QWidget):
             name: 图层名称
             is_root: 是否是根图层
             is_out_of_bounds: 是否超出图像范围（仅用户图层）
+            visible: 是否可见
         """
-        item = QListWidgetItem(name)
+        item = QListWidgetItem()
         item.setData(Qt.UserRole, layer_id)
         
-        # 根图层使用特殊样式
-        if is_root:
-            # 根图层可以选择（允许用户切换回根图层）
-            # 设置灰色文字以区分
-            from PySide6.QtGui import QColor
-            item.setForeground(QColor(128, 128, 128))
-            # 添加工具提示
-            item.setToolTip(self.tr.tr('layers_panel.root_layer_tooltip'))
-        elif is_out_of_bounds:
-            # 超出范围的图层：像素工具提示
-            item.setToolTip(self.tr.tr('layers_panel.out_of_bounds_tooltip'))
+        # 创建自定义 widget
+        widget = LayerItemWidget(layer_id, name, visible, is_root)
         
+        # 连接信号
+        widget.visibility_toggled.connect(self._on_layer_visibility_toggled)
+        widget.delete_clicked.connect(self._on_layer_delete_clicked)
+        
+        # 设置工具提示
+        if is_root:
+            widget.setToolTip(self.tr.tr('layers_panel.root_layer_tooltip'))
+        elif is_out_of_bounds:
+            widget.setToolTip(self.tr.tr('layers_panel.out_of_bounds_tooltip'))
+        
+        # 添加到列表
         self.layers_list.addItem(item)
+        self.layers_list.setItemWidget(item, widget)
+        
+        # 设置项的高度
+        item.setSizeHint(widget.sizeHint())
+    
+    def _on_layer_visibility_toggled(self, layer_id: str, visible: bool):
+        """图层可见性被切换"""
+        self.layer_visibility_changed.emit(layer_id, visible)
+    
+    def _on_layer_delete_clicked(self, layer_id: str):
+        """图层删除按钮被点击"""
+        self.layer_deleted.emit(layer_id)
     
     def remove_layer(self, layer_id: str):
         """
@@ -244,7 +377,25 @@ class LayersPanel(QWidget):
         for i in range(self.layers_list.count()):
             item = self.layers_list.item(i)
             if item.data(Qt.UserRole) == layer_id:
-                item.setText(name)
+                widget = self.layers_list.itemWidget(item)
+                if widget:
+                    widget.set_name(name)
+                break
+    
+    def update_layer_visibility(self, layer_id: str, visible: bool):
+        """
+        更新图层可见性
+        
+        Args:
+            layer_id: 图层 ID
+            visible: 是否可见
+        """
+        for i in range(self.layers_list.count()):
+            item = self.layers_list.item(i)
+            if item.data(Qt.UserRole) == layer_id:
+                widget = self.layers_list.itemWidget(item)
+                if widget:
+                    widget.set_visible(visible)
                 break
     
     def set_save_button_enabled(self, enabled: bool):

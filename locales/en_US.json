@@ -303,6 +303,9 @@
     "cannot_delete_root": "Cannot delete root layer",
     "need_two_layers": "At least two user layers are required to merge",
     "switch_to_root_warning": "Adjusting binarization parameters only affects the root layer. Please switch to the root layer first",
-    "not_root_layer": "Current layer is not the root layer. Cannot adjust binarization parameters"
+    "not_root_layer": "Current layer is not the root layer. Cannot adjust binarization parameters",
+    "layer_visible": "Layer is now visible",
+    "layer_hidden": "Layer is now hidden",
+    "confirm_delete": "Are you sure you want to delete layer \"{name}\"?\nThis action cannot be undone."
   }
 }

@@ -528,6 +528,7 @@ class MainWindow(QMainWindow):
         self.properties_panel.layers_panel.layer_selected.connect(self._on_layer_selected)
         self.properties_panel.layers_panel.save_selection_clicked.connect(self._on_save_selection_as_layer)
         self.properties_panel.layers_panel.layer_deleted.connect(self._on_layer_deleted)
+        self.properties_panel.layers_panel.layer_visibility_changed.connect(self._on_layer_visibility_changed)
         
         # 选区边框渲染完成信号 - 连接一次，避免重复连接
         if hasattr(self.canvas, 'selection_border_renderer'):
@@ -695,16 +696,33 @@ class MainWindow(QMainWindow):
             )
             return
         
-        # 查找并删除图层
+        # 查找图层
         layer_to_delete = None
-        for i, layer in enumerate(self.image_data.user_layers):
+        for layer in self.image_data.user_layers:
             if layer.id == layer_id:
                 layer_to_delete = layer
-                del self.image_data.user_layers[i]
                 break
         
         if layer_to_delete is None:
             return
+        
+        # 确认删除
+        reply = QMessageBox.question(
+            self,
+            self.tr.tr('dialog.confirm'),
+            self.tr.tr('layers_panel.confirm_delete', name=layer_to_delete.name),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply != QMessageBox.Yes:
+            return
+        
+        # 删除图层
+        for i, layer in enumerate(self.image_data.user_layers):
+            if layer.id == layer_id:
+                del self.image_data.user_layers[i]
+                break
         
         # 从UI中移除
         self.properties_panel.layers_panel.remove_layer(layer_id)
@@ -724,6 +742,35 @@ class MainWindow(QMainWindow):
         
         # 显示成功消息
         self.statusbar.showMessage(self.tr.tr('layers_panel.layer_deleted', name=layer_to_delete.name))
+    
+    def _on_layer_visibility_changed(self, layer_id: str, visible: bool):
+        """
+        图层可见性改变
+        
+        Args:
+            layer_id: 图层 ID
+            visible: 是否可见
+        """
+        if self.image_data is None:
+            return
+        
+        # 根图层始终可见，不处理
+        if layer_id == "root":
+            return
+        
+        # 查找并更新图层可见性
+        for layer in self.image_data.user_layers:
+            if layer.id == layer_id:
+                layer.visible = visible
+                break
+        
+        # 如果当前在根图层，需要重新合成显示
+        if self.active_layer_id == "root":
+            self._safe_update_tile_cache(self.image_data.selection_mask)
+        
+        # 显示状态消息
+        status = self.tr.tr('layers_panel.layer_visible') if visible else self.tr.tr('layers_panel.layer_hidden')
+        self.statusbar.showMessage(status)
     
     def _on_merge_layers(self, layer_ids: list):
         """
@@ -921,6 +968,7 @@ class MainWindow(QMainWindow):
         
         # 按顺序叠加所有用户图层
         for layer in self.image_data.user_layers:
+            # 跳过不可见的图层
             if not layer.visible:
                 continue
             
@@ -1490,7 +1538,8 @@ class MainWindow(QMainWindow):
         self.properties_panel.layers_panel.add_layer(
             layer_id="root",
             name=root_layer_name,
-            is_root=True
+            is_root=True,
+            visible=True
         )
         
         # 重新添加所有用户图层，检查是否超出范围
@@ -1500,7 +1549,8 @@ class MainWindow(QMainWindow):
             self.properties_panel.layers_panel.add_layer(
                 layer.id, 
                 layer.name,
-                is_out_of_bounds=is_out_of_bounds
+                is_out_of_bounds=is_out_of_bounds,
+                visible=layer.visible
             )
         
         # 确保当前激活的图层仍然有效

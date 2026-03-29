@@ -303,6 +303,9 @@
     "cannot_delete_root": "无法删除根图层",
     "need_two_layers": "至少需要选择两个用户图层才能合并",
     "switch_to_root_warning": "调整二值化参数只影响根图层，请先切换到根图层",
-    "not_root_layer": "当前不是根图层，无法调整二值化参数"
+    "not_root_layer": "当前不是根图层，无法调整二值化参数",
+    "layer_visible": "图层已显示",
+    "layer_hidden": "图层已隐藏",
+    "confirm_delete": "确定要删除图层\"{name}\"吗？\n此操作无法撤销。"
   }
 }
