@@ -193,12 +193,12 @@
   },
   "about": {
     "title": "关于 {app_name}",
-    "version": "版本 {version}",
+    "version": "版本：{version}",
+    "author": "作者：{author}",
     "release_date": "发布日期：{date}",
     "description": "基于 PySide6 的二值化图片编辑应用程序\n提供类似 Photoshop 的编辑功能",
-    "author": "作者：{author}",
     "copyright": "© 2026 夏次一定de. All rights reserved.",
-    "license": "许可证：MIT License"
+    "license": "许可证：CC BY-NC-SA 4.0（非商业使用）"
   },
   "binarization_panel": {
     "title": "二值化设置",

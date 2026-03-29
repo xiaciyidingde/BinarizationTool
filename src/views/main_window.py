@@ -2819,8 +2819,14 @@ class MainWindow(QMainWindow):
         # 版本号
         version_label = QLabel(self.tr.tr('about.version', version=__version__))
         version_label.setObjectName("aboutVersion")
-        version_label.setStyleSheet("font-size: 16px;")
+        version_label.setStyleSheet("font-size: 14px;")
         info_layout.addWidget(version_label)
+
+        # 作者
+        author_label = QLabel(self.tr.tr('about.author', author=__author__))
+        author_label.setObjectName("aboutAuthor")
+        author_label.setStyleSheet("font-size: 14px;")
+        info_layout.addWidget(author_label)
 
         # 发布日期
         date_label = QLabel(self.tr.tr('about.release_date', date=__release_date__))
@@ -2860,16 +2866,10 @@ class MainWindow(QMainWindow):
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
 
-        # 作者
-        author_label = QLabel(self.tr.tr('about.author', author=__author__))
-        author_label.setObjectName("aboutAuthor")
-        author_label.setStyleSheet("font-size: 14px; margin-top: 10px;")
-        layout.addWidget(author_label)
-
         # 版权
         copyright_label = QLabel(self.tr.tr('about.copyright'))
         copyright_label.setObjectName("aboutCopyright")
-        copyright_label.setStyleSheet("font-size: 12px; margin-top: 5px;")
+        copyright_label.setStyleSheet("font-size: 12px; margin-top: 10px;")
         layout.addWidget(copyright_label)
 
         # 许可证

@@ -193,12 +193,12 @@
   },
   "about": {
     "title": "About {app_name}",
-    "version": "Version {version}",
+    "version": "Version: {version}",
+    "author": "Author: {author}",
     "release_date": "Release Date: {date}",
     "description": "Binary image editing application based on PySide6\nProvides Photoshop-like editing features",
-    "author": "Author: {author}",
     "copyright": "© 2026 夏次一定de. All rights reserved.",
-    "license": "License: MIT License"
+    "license": "License: CC BY-NC-SA 4.0 (Non-Commercial)"
   },
   "binarization_panel": {
     "title": "Binarization Settings",
