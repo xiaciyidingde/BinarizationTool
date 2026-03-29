@@ -306,6 +306,9 @@
     "not_root_layer": "当前不是根图层，无法调整二值化参数",
     "layer_visible": "图层已显示",
     "layer_hidden": "图层已隐藏",
+    "layer_order_changed": "图层顺序已更新",
+    "layer_renamed": "图层已重命名为：{name}",
+    "duplicate_name_error": "图层名称\"{name}\"已存在，请使用其他名称",
     "confirm_delete": "确定要删除图层\"{name}\"吗？\n此操作无法撤销。"
   }
 }

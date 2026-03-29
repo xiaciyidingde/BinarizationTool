@@ -306,6 +306,9 @@
     "not_root_layer": "Current layer is not the root layer. Cannot adjust binarization parameters",
     "layer_visible": "Layer is now visible",
     "layer_hidden": "Layer is now hidden",
+    "layer_order_changed": "Layer order updated",
+    "layer_renamed": "Layer renamed to: {name}",
+    "duplicate_name_error": "Layer name \"{name}\" already exists. Please use a different name",
     "confirm_delete": "Are you sure you want to delete layer \"{name}\"?\nThis action cannot be undone."
   }
 }

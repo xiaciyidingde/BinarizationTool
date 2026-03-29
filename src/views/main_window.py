@@ -529,6 +529,8 @@ class MainWindow(QMainWindow):
         self.properties_panel.layers_panel.save_selection_clicked.connect(self._on_save_selection_as_layer)
         self.properties_panel.layers_panel.layer_deleted.connect(self._on_layer_deleted)
         self.properties_panel.layers_panel.layer_visibility_changed.connect(self._on_layer_visibility_changed)
+        self.properties_panel.layers_panel.layer_order_changed.connect(self._on_layer_order_changed)
+        self.properties_panel.layers_panel.layer_name_changed.connect(self._on_layer_name_changed)
         
         # 选区边框渲染完成信号 - 连接一次，避免重复连接
         if hasattr(self.canvas, 'selection_border_renderer'):
@@ -771,6 +773,81 @@ class MainWindow(QMainWindow):
         # 显示状态消息
         status = self.tr.tr('layers_panel.layer_visible') if visible else self.tr.tr('layers_panel.layer_hidden')
         self.statusbar.showMessage(status)
+    
+    def _on_layer_order_changed(self, layer_ids: list):
+        """
+        图层顺序改变
+        
+        Args:
+            layer_ids: 新的图层 ID 顺序（从上到下，不包括根图层）
+        """
+        if self.image_data is None:
+            return
+        
+        # 过滤掉根图层 ID
+        user_layer_ids = [lid for lid in layer_ids if lid != "root"]
+        
+        # 根据新顺序重新排列 user_layers
+        new_layers = []
+        for layer_id in user_layer_ids:
+            for layer in self.image_data.user_layers:
+                if layer.id == layer_id:
+                    new_layers.append(layer)
+                    break
+        
+        # 更新图层列表
+        self.image_data.user_layers = new_layers
+        
+        # 如果当前在根图层，需要重新合成显示
+        if self.active_layer_id == "root":
+            self._safe_update_tile_cache(self.image_data.selection_mask)
+        
+        # 显示状态消息
+        self.statusbar.showMessage(self.tr.tr('layers_panel.layer_order_changed'))
+    
+    def _on_layer_name_changed(self, layer_id: str, new_name: str):
+        """
+        图层名称改变
+        
+        Args:
+            layer_id: 图层 ID
+            new_name: 新名称
+        """
+        if self.image_data is None:
+            return
+        
+        # 根图层不可重命名
+        if layer_id == "root":
+            return
+        
+        # 检查名称是否与其他图层重复
+        for layer in self.image_data.user_layers:
+            if layer.id != layer_id and layer.name == new_name:
+                # 名称重复，恢复原名称
+                original_name = None
+                for l in self.image_data.user_layers:
+                    if l.id == layer_id:
+                        original_name = l.name
+                        break
+                
+                if original_name:
+                    # 恢复图层面板中的名称
+                    self.properties_panel.layers_panel.update_layer_name(layer_id, original_name)
+                    # 显示错误消息
+                    self.statusbar.showMessage(self.tr.tr('layers_panel.duplicate_name_error', name=new_name), 3000)
+                return
+        
+        # 查找并更新图层名称
+        for layer in self.image_data.user_layers:
+            if layer.id == layer_id:
+                layer.name = new_name
+                break
+        
+        # 更新图层面板显示
+        self.properties_panel.layers_panel.update_layer_name(layer_id, new_name)
+        
+        # 显示状态消息
+        self.statusbar.showMessage(self.tr.tr('layers_panel.layer_renamed', name=new_name))
     
     def _on_merge_layers(self, layer_ids: list):
         """
