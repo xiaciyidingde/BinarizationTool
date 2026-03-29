@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 
 from ..utils.translation_manager import get_translator
 from ..widgets.animated_tab_widget import AnimatedTabWidget
+from ..widgets.layers_panel import LayersPanel
 
 
 class PropertiesPanel(QWidget):
@@ -44,6 +45,12 @@ class PropertiesPanel(QWidget):
 
     def setup_ui(self):
         """设置 UI"""
+        # 主布局（垂直布局，包含上下两部分）
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(6)
+        
+        # ========== 上半部分：属性和工具 ==========
         # 创建滚动区域
         from PySide6.QtWidgets import QScrollArea
         scroll = QScrollArea()
@@ -58,48 +65,14 @@ class PropertiesPanel(QWidget):
         # 内容容器（带背景和圆角）
         content = QWidget()
         content.setObjectName("propertiesPanelContent")
-        content.setStyleSheet("""
-            QWidget#propertiesPanelContent {
-                background-color: #ffffff;
-                border-radius: 8px;
-            }
-        """)
+        # 移除内联样式，让主题文件控制
         layout = QVBoxLayout(content)
         layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(8)
 
         # 创建选项卡
         self.tab_widget = AnimatedTabWidget()
-        # 设置选项卡样式
-        self.tab_widget.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #dee2e6;
-                border-radius: 4px;
-                background: transparent;
-                top: -1px;
-            }
-            QTabBar::tab {
-                background: #f8f9fa;
-                color: #6c757d;
-                padding: 8px 20px;
-                margin-right: 4px;
-                border: 1px solid #dee2e6;
-                border-bottom: none;
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-                font-size: 13px;
-            }
-            QTabBar::tab:selected {
-                background: #ffffff;
-                color: #495057;
-                font-weight: bold;
-                border-bottom: 1px solid #ffffff;
-                margin-bottom: -1px;
-            }
-            QTabBar::tab:hover:!selected {
-                background: #e9ecef;
-            }
-        """)
+        # 移除内联样式，让主题文件控制
         layout.addWidget(self.tab_widget)
 
         # 第一页：属性
@@ -115,14 +88,34 @@ class PropertiesPanel(QWidget):
 
         # 设置滚动区域
         scroll.setWidget(outer_container)
-
-        # 主布局
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll)
+        
+        # 添加到主布局
+        main_layout.addWidget(scroll, stretch=38)
+        
+        # ========== 下半部分：图层面板 ==========
+        # 创建图层面板容器（带背景和圆角）
+        layers_outer = QWidget()
+        layers_outer_layout = QVBoxLayout(layers_outer)
+        layers_outer_layout.setContentsMargins(6, 0, 6, 6)
+        
+        layers_container = QWidget()
+        layers_container.setObjectName("propertiesPanelContent")
+        # 移除最大高度限制，让比例自动调整
+        layers_container_layout = QVBoxLayout(layers_container)
+        layers_container_layout.setContentsMargins(8, 8, 8, 8)  # 添加内边距让框线居中
+        layers_container_layout.setSpacing(0)
+        
+        # 图层面板
+        self.layers_panel = LayersPanel()
+        layers_container_layout.addWidget(self.layers_panel)
+        
+        layers_outer_layout.addWidget(layers_container)
+        
+        # 添加到主布局
+        main_layout.addWidget(layers_outer, stretch=34)
 
         # 设置面板尺寸
-        self.setMinimumWidth(270)  # 从 250 增加到 270
+        self.setMinimumWidth(270)
         self.setMaximumWidth(270)
 
     def _create_properties_page(self) -> QWidget:
@@ -145,7 +138,7 @@ class PropertiesPanel(QWidget):
 
         self.filename_label = QLabel(self.tr.tr('properties_panel.no_image'))
         self.filename_label.setWordWrap(False)  # 禁用自动换行
-        self.filename_label.setStyleSheet("color: #333;")
+        self.filename_label.setObjectName("propertyValue")
         self.filename_label.setMaximumWidth(180)  # 限制最大宽度（从 160 增加到 180）
         self.filename_label.setTextFormat(Qt.PlainText)
         self.filename_label.setTextInteractionFlags(Qt.TextSelectableByMouse)  # 允许选择复制
@@ -157,19 +150,24 @@ class PropertiesPanel(QWidget):
 
         image_layout.addRow(self.tr.tr('properties_panel.filename'), filename_container)
 
+        # 图层信息
+        self.layer_label = QLabel("-")
+        self.layer_label.setObjectName("propertyValue")
+        image_layout.addRow(self.tr.tr('properties_panel.layer'), self.layer_label)
+
         # 图片尺寸
         self.size_label = QLabel("-")
-        self.size_label.setStyleSheet("color: #333;")
+        self.size_label.setObjectName("propertyValue")
         image_layout.addRow(self.tr.tr('properties_panel.size'), self.size_label)
 
         # 文件大小
         self.filesize_label = QLabel("-")
-        self.filesize_label.setStyleSheet("color: #333;")
+        self.filesize_label.setObjectName("propertyValue")
         image_layout.addRow(self.tr.tr('properties_panel.filesize'), self.filesize_label)
 
         # 缩放比例
         self.zoom_label = QLabel("-")
-        self.zoom_label.setStyleSheet("color: #333;")
+        self.zoom_label.setObjectName("propertyValue")
         image_layout.addRow(self.tr.tr('properties_panel.zoom'), self.zoom_label)
 
         image_group.setLayout(image_layout)
@@ -190,7 +188,7 @@ class PropertiesPanel(QWidget):
         # 提示信息（默认显示）
         self.tool_hint_label = QLabel(self.tr.tr('properties_panel.no_tool'))
         self.tool_hint_label.setAlignment(Qt.AlignCenter)
-        self.tool_hint_label.setStyleSheet("color: #999; padding: 20px;")
+        self.tool_hint_label.setObjectName("toolHint")
         layout.addWidget(self.tool_hint_label)
 
         # 画笔工具设置
@@ -317,34 +315,19 @@ class PropertiesPanel(QWidget):
         method_layout.addStretch()
         basic_layout.addLayout(method_layout)
 
-        # 颜色设置
-        color_layout = QHBoxLayout()
-        color_layout.setSpacing(12)
-        color_label = QLabel(self.tr.tr('properties_panel.target_color'))
-        color_label.setMinimumWidth(40)
-        color_layout.addWidget(color_label)
-
-        self.selection_color_group = QButtonGroup(self)
-        self.selection_black_radio = QRadioButton(self.tr.tr('properties_panel.color_black'))
-        self.selection_white_radio = QRadioButton(self.tr.tr('properties_panel.color_white'))
-        self.selection_color_group.addButton(self.selection_black_radio, 0)
-        self.selection_color_group.addButton(self.selection_white_radio, 255)
-        self.selection_black_radio.setChecked(True)
-
-        color_layout.addWidget(self.selection_black_radio)
-        color_layout.addWidget(self.selection_white_radio)
-        color_layout.addStretch()
-        basic_layout.addLayout(color_layout)
-
-        # 填充选区
+        # 填充选区（两个按钮：黑色和白色）
         fill_layout = QHBoxLayout()
-        fill_layout.setSpacing(12)
+        fill_layout.setSpacing(8)
         fill_label = QLabel(self.tr.tr('properties_panel.fill_selection'))
         fill_label.setMinimumWidth(40)
         fill_layout.addWidget(fill_label)
 
-        self.fill_button = QPushButton(self.tr.tr('properties_panel.fill_white'))
-        fill_layout.addWidget(self.fill_button)
+        self.fill_black_button = QPushButton(self.tr.tr('properties_panel.fill_black'))
+        self.fill_white_button = QPushButton(self.tr.tr('properties_panel.fill_white'))
+        self.fill_black_button.setFixedWidth(60)
+        self.fill_white_button.setFixedWidth(60)
+        fill_layout.addWidget(self.fill_black_button)
+        fill_layout.addWidget(self.fill_white_button)
         fill_layout.addStretch()
         basic_layout.addLayout(fill_layout)
 
@@ -364,6 +347,15 @@ class PropertiesPanel(QWidget):
         row1_layout.addWidget(self.deselect_button)
         row1_layout.addWidget(self.invert_button)
         actions_layout.addLayout(row1_layout)
+
+        # 第二行按钮：填充选区空洞
+        row2_layout = QHBoxLayout()
+        row2_layout.setSpacing(8)
+        self.fill_selection_holes_button = QPushButton(self.tr.tr('properties_panel.fill_selection_holes'))
+        self.fill_selection_holes_button.setToolTip(self.tr.tr('properties_panel.fill_selection_holes_tooltip'))
+        row2_layout.addWidget(self.fill_selection_holes_button)
+        row2_layout.addStretch()  # 右侧留空
+        actions_layout.addLayout(row2_layout)
 
         actions_group.setLayout(actions_layout)
         container_layout.addWidget(actions_group)
@@ -401,8 +393,11 @@ class PropertiesPanel(QWidget):
             self.filename_label.setText(self.tr.tr('properties_panel.unsaved'))
             self.filename_label.setToolTip("")
 
+        # 图层信息（默认显示根图层）
+        self.layer_label.setText(self.tr.tr('properties_panel.root_layer'))
+
         # 图片尺寸
-        size_text = f"{image_data.width} x {image_data.height} 像素"
+        size_text = f"{image_data.width} x {image_data.height} {self.tr.tr('properties_panel.pixels')}"
         self.size_label.setText(size_text)
 
         # 文件大小
@@ -414,6 +409,22 @@ class PropertiesPanel(QWidget):
             self.filesize_label.setText("-")
 
         # 缩放比例保持当前值
+
+    def set_layer_info(self, layer_name: str, selected_pixels: int | None = None):
+        """
+        更新图层信息
+
+        Args:
+            layer_name: 图层名称
+            selected_pixels: 选中的像素数量（仅用户图层）
+        """
+        if selected_pixels is not None:
+            # 用户图层：显示图层名和选中像素数
+            self.layer_label.setText(layer_name)
+            self.size_label.setText(f"{selected_pixels} {self.tr.tr('properties_panel.pixels')}")
+        else:
+            # 根图层：只显示图层名
+            self.layer_label.setText(layer_name)
 
     def set_zoom_level(self, zoom: float):
         """
@@ -428,6 +439,7 @@ class PropertiesPanel(QWidget):
     def clear_info(self):
         """清除信息（未加载图片时）"""
         self.filename_label.setText(self.tr.tr('properties_panel.no_image'))
+        self.layer_label.setText("-")
         self.size_label.setText("-")
         self.filesize_label.setText("-")
         self.zoom_label.setText("-")
@@ -447,8 +459,10 @@ class PropertiesPanel(QWidget):
         self.selection_settings.setVisible(True)
 
     def hide_all_tool_settings(self):
-        """隐藏所有工具设置，显示提示信息"""
-        self.tab_widget.setCurrentIndex(1)  # 切换到"工具"页
+        """隐藏所有工具设置，切换回属性页"""
+        # 切换回"属性"页
+        self.tab_widget.setCurrentIndex(0)
+        # 隐藏所有工具设置
         self.tool_hint_label.setText(self.tr.tr('properties_panel.no_settings'))
         self.tool_hint_label.setVisible(True)
         self.brush_settings.setVisible(False)

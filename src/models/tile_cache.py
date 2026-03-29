@@ -259,100 +259,33 @@ class TileCache:
         # 判断是灰度图还是彩色图
         is_color = len(tile_data.shape) == 3
 
-        # 如果有选区，叠加红色覆盖层
-        if self.selection_mask is not None:
-            # 提取选区块
-            selection_tile = self.selection_mask[pixel_y:pixel_y+tile_height, pixel_x:pixel_x+tile_width]
+        # 不再在tile中渲染选区，改为在Canvas中绘制边框
+        if is_color:
+            # 彩色图
+            if not tile_data.flags['C_CONTIGUOUS']:
+                tile_data = np.ascontiguousarray(tile_data)
 
-            # 检查这个瓦片是否有选区（优化：跳过空选区）
-            if selection_tile.any():
-                # 转换为 RGB 以支持红色覆盖
-                if is_color:
-                    # 已经是彩色图，直接复制
-                    tile_rgb = tile_data.copy()
-                else:
-                    # 灰度图转 RGB（优化：使用更快的方法）
-                    tile_rgb = np.empty((tile_height, tile_width, 3), dtype=np.uint8)
-                    tile_rgb[:, :, 0] = tile_data
-                    tile_rgb[:, :, 1] = tile_data
-                    tile_rgb[:, :, 2] = tile_data
-
-                # 将选中的像素设置为红色 (255, 0, 0)
-                tile_rgb[selection_tile] = [255, 0, 0]
-
-                # 确保数据是 C-contiguous
-                if not tile_rgb.flags['C_CONTIGUOUS']:
-                    tile_rgb = np.ascontiguousarray(tile_rgb)
-
-                # 转换为 QImage (RGB)
-                bytes_per_line = tile_width * 3
-                qimage = QImage(
-                    tile_rgb.data,
-                    tile_width,
-                    tile_height,
-                    bytes_per_line,
-                    QImage.Format_RGB888
-                ).copy()
-            else:
-                # 这个瓦片没有选区，使用原始渲染路径（更快）
-                if is_color:
-                    # 彩色图
-                    if not tile_data.flags['C_CONTIGUOUS']:
-                        tile_data = np.ascontiguousarray(tile_data)
-
-                    bytes_per_line = tile_width * 3
-                    qimage = QImage(
-                        tile_data.data,
-                        tile_width,
-                        tile_height,
-                        bytes_per_line,
-                        QImage.Format_RGB888
-                    ).copy()
-                else:
-                    # 灰度图
-                    if not tile_data.flags['C_CONTIGUOUS']:
-                        tile_data = np.ascontiguousarray(tile_data)
-
-                    bytes_per_line = tile_width
-                    qimage = QImage(
-                        tile_data.data,
-                        tile_width,
-                        tile_height,
-                        bytes_per_line,
-                        QImage.Format_Grayscale8
-                    ).copy()
+            bytes_per_line = tile_width * 3
+            qimage = QImage(
+                tile_data.data,
+                tile_width,
+                tile_height,
+                bytes_per_line,
+                QImage.Format_RGB888
+            ).copy()
         else:
-            # 没有选区
-            if is_color:
-                # 彩色图
-                # 确保数据是 C-contiguous
-                if not tile_data.flags['C_CONTIGUOUS']:
-                    tile_data = np.ascontiguousarray(tile_data)
+            # 灰度图
+            if not tile_data.flags['C_CONTIGUOUS']:
+                tile_data = np.ascontiguousarray(tile_data)
 
-                # 转换为 QImage (RGB)
-                bytes_per_line = tile_width * 3
-                qimage = QImage(
-                    tile_data.data,
-                    tile_width,
-                    tile_height,
-                    bytes_per_line,
-                    QImage.Format_RGB888
-                ).copy()
-            else:
-                # 灰度图
-                # 确保数据是 C-contiguous
-                if not tile_data.flags['C_CONTIGUOUS']:
-                    tile_data = np.ascontiguousarray(tile_data)
-
-                # 转换为 QImage
-                bytes_per_line = tile_width
-                qimage = QImage(
-                    tile_data.data,
-                    tile_width,
-                    tile_height,
-                    bytes_per_line,
-                    QImage.Format_Grayscale8
-                ).copy()
+            bytes_per_line = tile_width
+            qimage = QImage(
+                tile_data.data,
+                tile_width,
+                tile_height,
+                bytes_per_line,
+                QImage.Format_Grayscale8
+            ).copy()
 
         # 缩放到视图大小 - 使用 round 而不是 int 以减少累积误差
         scaled_width = round(tile_width * self.current_scale)

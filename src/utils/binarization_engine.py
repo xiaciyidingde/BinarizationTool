@@ -550,7 +550,9 @@ class BinarizationEngine:
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
             mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
-            std = np.sqrt(mean_square - mean**2)
+            # 使用 np.maximum 确保方差非负，避免浮点数精度问题
+            variance = np.maximum(mean_square - mean**2, 0)
+            std = np.sqrt(variance)
 
             # Sauvola参数（可自定义）
             k = kwargs.get('sauvola_k', 0.2)
@@ -569,7 +571,9 @@ class BinarizationEngine:
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
             mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
-            std = np.sqrt(mean_square - mean**2)
+            # 使用 np.maximum 确保方差非负，避免浮点数精度问题
+            variance = np.maximum(mean_square - mean**2, 0)
+            std = np.sqrt(variance)
 
             # Wolf参数（可自定义）
             k = kwargs.get('wolf_k', 0.5)
@@ -589,7 +593,9 @@ class BinarizationEngine:
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
             mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
-            std = np.sqrt(mean_square - mean**2)
+            # 使用 np.maximum 确保方差非负，避免浮点数精度问题
+            variance = np.maximum(mean_square - mean**2, 0)
+            std = np.sqrt(variance)
 
             # Nick参数（可自定义）
             k = kwargs.get('nick_k', -0.1)

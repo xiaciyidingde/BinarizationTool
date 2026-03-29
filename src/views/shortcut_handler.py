@@ -40,6 +40,12 @@ class ShortcutHandler:
         self.tool_toggle_action.triggered.connect(self._handle_tool_toggle)
         self.main_window.addAction(self.tool_toggle_action)
 
+        # Ctrl+Shift+X: 切换选择工具方式（涂抹/框选）
+        self.selection_method_toggle = QAction(self.main_window)
+        self.selection_method_toggle.setShortcut("Ctrl+Shift+X")
+        self.selection_method_toggle.triggered.connect(self._toggle_selection_method)
+        self.main_window.addAction(self.selection_method_toggle)
+
         # Ctrl+Up: 增大工具尺寸
         self.tool_size_up = QAction(self.main_window)
         self.tool_size_up.setShortcut("Ctrl+Up")
@@ -51,12 +57,6 @@ class ShortcutHandler:
         self.tool_size_down.setShortcut("Ctrl+Down")
         self.tool_size_down.triggered.connect(self._handle_tool_size_down)
         self.main_window.addAction(self.tool_size_down)
-
-        # Ctrl+Shift+X: 切换选择目标颜色
-        self.wand_color_toggle = QAction(self.main_window)
-        self.wand_color_toggle.setShortcut("Ctrl+Shift+X")
-        self.wand_color_toggle.triggered.connect(self._toggle_wand_color)
-        self.main_window.addAction(self.wand_color_toggle)
 
         # Ctrl+1: 切换到原图模式
         self.view_mode_original = QAction(self.main_window)
@@ -166,6 +166,25 @@ class ShortcutHandler:
 
     # ========== 选择工具快捷键 ==========
 
+    def _toggle_selection_method(self):
+        """切换选择工具方式（涂抹/框选）"""
+        if not isinstance(self.canvas.current_tool, SelectionTool):
+            return
+
+        current_mode = self.canvas.selection_tool.rect_select_mode
+        new_mode = not current_mode
+        self.canvas.selection_tool.rect_select_mode = new_mode
+
+        # 更新属性面板
+        if new_mode:
+            self.main_window.properties_panel.rect_method_radio.setChecked(True)
+        else:
+            self.main_window.properties_panel.drag_method_radio.setChecked(True)
+
+        method_name = self.tr.tr('selection.rect_select') if new_mode else self.tr.tr('selection.drag_select')
+        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_method', method=method_name))
+        self.canvas.update()  # 更新光标显示
+
     def _toggle_selection_tool_mode(self):
         """切换选择工具模式"""
         current_mode = self.canvas.selection_tool.selection_mode
@@ -222,30 +241,6 @@ class ShortcutHandler:
         self.main_window.properties_panel.selection_size_spinbox.setValue(int(new_size))
 
         self.main_window.statusbar.showMessage(self.tr.tr('message.selection_size', size=int(new_size)))
-        self.canvas.update()  # 更新光标显示
-
-    def _toggle_wand_color(self):
-        """切换选择目标颜色"""
-        # 只在选择工具激活时有效
-        if not isinstance(self.canvas.current_tool, SelectionTool):
-            return
-
-        current_color = self.canvas.selection_tool.target_color
-        # 黑色(0) <-> 白色(255)
-        new_color = 255 if current_color == 0 else 0
-
-        self.canvas.selection_tool.target_color = new_color
-
-        # 更新属性面板
-        if new_color == 0:
-            self.main_window.properties_panel.selection_black_radio.setChecked(True)
-            self.main_window.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_white'))
-        else:
-            self.main_window.properties_panel.selection_white_radio.setChecked(True)
-            self.main_window.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_black'))
-
-        color_name = self.tr.tr('color.black') if new_color == 0 else self.tr.tr('color.white')
-        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_target_color', color=color_name))
         self.canvas.update()  # 更新光标显示
 
     # ========== 视图模式切换快捷键 ==========

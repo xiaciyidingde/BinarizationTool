@@ -5,6 +5,7 @@
 """
 
 from .animated_tab_widget import AnimatedTabWidget
+from .layers_panel import LayersPanel
 from .toggle_switch import ToggleSwitch
 
-__all__ = ['ToggleSwitch', 'AnimatedTabWidget']
+__all__ = ['ToggleSwitch', 'AnimatedTabWidget', 'LayersPanel']

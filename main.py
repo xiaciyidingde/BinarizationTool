@@ -12,7 +12,7 @@ from PySide6.QtGui import QIcon, QPixmap
 from src.views.main_window import MainWindow
 from src.__version__ import __version__, __app_name__
 from src.utils.theme_manager import ThemeManager
-from src.utils.resources import APP_ICON_BYTES
+from src.utils.resources import APP_ICON_BYTES, APP_ICON_BYTES_DARK
 
 
 def main():
@@ -25,21 +25,25 @@ def main():
     app.setOrganizationName("ImageEditor")
     app.setApplicationVersion(__version__)
     
-    # 设置应用程序图标
+    # 应用主题
+    from src.utils.config_manager import get_config_manager
+    config_manager = get_config_manager()
+    theme = config_manager.get('interface', 'theme', 'light')
+    
+    theme_manager = ThemeManager()
+    theme_manager.apply_theme(app, theme)
+    
+    # 根据主题设置应用程序图标
+    if theme == 'system':
+        detected_theme = theme_manager._detect_system_theme()
+    else:
+        detected_theme = theme
+    
+    icon_bytes = APP_ICON_BYTES_DARK if detected_theme == 'dark' else APP_ICON_BYTES
     pixmap = QPixmap()
-    pixmap.loadFromData(APP_ICON_BYTES)
+    pixmap.loadFromData(icon_bytes)
     icon = QIcon(pixmap)
     app.setWindowIcon(icon)
-    
-    # Windows 特定：设置任务栏图标
-    if sys.platform == 'win32':
-        import ctypes
-        # 设置应用程序 ID，使任务栏图标正确显示
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(__app_name__)
-    
-    # 应用主题
-    theme_manager = ThemeManager()
-    theme_manager.apply_theme(app, "light")
     
     # 创建并显示主窗口
     window = MainWindow()

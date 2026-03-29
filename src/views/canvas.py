@@ -26,6 +26,7 @@ from ..models.selection_tool import SelectionTool
 from ..models.tile_cache import TileCache
 from ..models.view_transform import ViewTransform
 from ..utils.config_manager import ConfigManager
+from ..utils.selection_border_renderer import SelectionBorderRenderer
 from ..utils.translation_manager import get_translator
 
 
@@ -86,8 +87,24 @@ class Canvas(QWidget):
         self.selection_update_timer = QTimer()
         self.selection_update_timer.setSingleShot(True)
         self.selection_update_timer.timeout.connect(self._do_selection_update)
-        self.selection_throttle_interval = 16  # 16ms = 60fps
+        self.selection_throttle_interval = 16  # 16ms = 60fps，局部更新很快
         self.pending_selection_dirty_rect = (0, 0, 0, 0)
+        
+        # 轮廓更新节流定时器（优化大图轮廓更新性能）
+        self.contour_update_timer = QTimer()
+        self.contour_update_timer.setSingleShot(True)
+        self.contour_update_timer.timeout.connect(self._do_contour_update)
+        self.contour_throttle_interval = 16  # 16ms，增量更新很快
+        self.pending_contour_mask = None
+        
+        # 全量轮廓更新定时器（定期清理增量累积）
+        self.full_contour_timer = QTimer()
+        self.full_contour_timer.setSingleShot(True)
+        self.full_contour_timer.timeout.connect(self._do_full_contour_update)
+        self.full_contour_interval = 100  # 100ms 做一次全量更新（降采样后很快）
+        
+        # 选区边框渲染器
+        self.selection_border_renderer = SelectionBorderRenderer()
 
         # 交互状态
         self.mouse_pos: QPoint | None = None
@@ -105,6 +122,12 @@ class Canvas(QWidget):
         self.setMouseTracking(True)  # 启用鼠标跟踪
         self.setFocusPolicy(Qt.StrongFocus)  # 接收键盘事件
         self.setAcceptDrops(True)  # 启用拖放功能
+
+    def cleanup(self):
+        """清理资源（在窗口关闭前调用）"""
+        # 清理选区边框渲染器的线程
+        if hasattr(self, 'selection_border_renderer'):
+            self.selection_border_renderer.cleanup()
 
     def set_image(self, image_data: ImageData):
         """
@@ -195,6 +218,10 @@ class Canvas(QWidget):
 
         # 渲染图片
         self._render_image(painter)
+        
+        # 渲染选区边框（静态虚线）
+        if self.image_data is not None and hasattr(self.image_data, 'selection_mask') and self.image_data.selection_mask is not None:
+            self.selection_border_renderer.render(painter, self.view_transform)
 
         # 渲染工具覆盖层
         if isinstance(self.current_tool, CropTool):
@@ -307,7 +334,11 @@ class Canvas(QWidget):
 
                 if isinstance(self.current_tool, BrushTool):
                     # 开始画笔笔画
-                    self.image_data.start_temp_layer()
+                    # 使用当前显示的像素作为临时层的基础（包含所有图层的合成）
+                    if self.tile_cache.pixels is not None:
+                        self.image_data.start_temp_layer(self.tile_cache.pixels)
+                    else:
+                        self.image_data.start_temp_layer()
                     stroke = self.current_tool.start_stroke(pixel_x, pixel_y)
                     dirty_rect = stroke.rasterize(self.image_data)
                     self.rasterized_point_count = len(stroke.points)
@@ -333,6 +364,8 @@ class Canvas(QWidget):
                         self.image_data.selection_mask = self.current_tool.selection_mask
                         # 直接更新 tile_cache 的选区引用（避免复制整个图像）
                         self.tile_cache.selection_mask = self.current_tool.selection_mask
+                        # 请求更新选区边框（节流）
+                        self._request_contour_update(self.current_tool.selection_mask)
                         # 使脏区域失效
                         if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
                             self.tile_cache.invalidate_region(
@@ -425,6 +458,36 @@ class Canvas(QWidget):
                         self.image_data.selection_mask = self.current_tool.selection_mask
                         # 直接更新 tile_cache 的选区引用（避免复制整个图像）
                         self.tile_cache.selection_mask = self.current_tool.selection_mask
+                        
+                        # 根据图片尺寸和 Cython 可用性决定更新策略
+                        h, w = self.image_data.selection_mask.shape
+                        image_size = max(h, w)
+                        
+                        # 检查是否有 Cython 加速
+                        has_cython = hasattr(self.selection_border_renderer, 'HAS_CYTHON') and \
+                                    self.selection_border_renderer.HAS_CYTHON
+                        
+                        if image_size < 3000:
+                            # 小图片：实时更新
+                            throttle_interval = 10 if has_cython else 16
+                        elif image_size < 5000:
+                            # 中小图片
+                            throttle_interval = 25 if has_cython else 40
+                        elif image_size < 8000:
+                            # 中等图片
+                            throttle_interval = 50 if has_cython else 80
+                        else:
+                            # 大图片
+                            throttle_interval = 70 if has_cython else 100
+                        
+                        # 使用动态节流间隔
+                        if not self.contour_update_timer.isActive():
+                            self.selection_border_renderer.update_contours(
+                                self.current_tool.selection_mask, 
+                                dirty_rect=None,
+                                view_scale=self.view_transform.scale
+                            )
+                            self.contour_update_timer.start(throttle_interval)
 
                         # 累积脏区域用于批量失效
                         if self.pending_selection_dirty_rect[2] > self.pending_selection_dirty_rect[0]:
@@ -439,8 +502,22 @@ class Canvas(QWidget):
                         else:
                             self.pending_selection_dirty_rect = dirty_rect
 
-                        # 立即触发重绘（保持流畅），但延迟失效瓦片（减少计算）
-                        self.update()
+                        # 计算脏区域在视图中的位置（用于局部更新）
+                        x1_view = int(dirty_rect[0] * self.view_transform.scale + self.view_transform.offset_x)
+                        y1_view = int(dirty_rect[1] * self.view_transform.scale + self.view_transform.offset_y)
+                        x2_view = int(dirty_rect[2] * self.view_transform.scale + self.view_transform.offset_x)
+                        y2_view = int(dirty_rect[3] * self.view_transform.scale + self.view_transform.offset_y)
+                        
+                        # 扩展一点边界（考虑笔刷大小和抗锯齿）
+                        margin = int(self.current_tool.size * self.view_transform.scale) + 10
+                        x1_view = max(0, x1_view - margin)
+                        y1_view = max(0, y1_view - margin)
+                        x2_view = min(self.width(), x2_view + margin)
+                        y2_view = min(self.height(), y2_view + margin)
+                        
+                        # 只更新脏区域（局部重绘）
+                        from PySide6.QtCore import QRect
+                        self.update(QRect(x1_view, y1_view, x2_view - x1_view, y2_view - y1_view))
 
                         # 使用节流来批量失效瓦片
                         if not self.selection_update_timer.isActive():
@@ -535,6 +612,8 @@ class Canvas(QWidget):
                         self.image_data.selection_mask = self.current_tool.selection_mask
                         # 更新 tile_cache 的选区引用
                         self.tile_cache.selection_mask = self.current_tool.selection_mask
+                        # 鼠标释放时全量更新轮廓（清理累积的增量轮廓）
+                        self._request_contour_update(self.current_tool.selection_mask, dirty_rect=None, immediate=True)
                         # 使整个选区失效以触发重新渲染
                         if self.current_tool.selection_mask is not None and self.current_tool.selection_mask.any():
                             rows, cols = np.where(self.current_tool.selection_mask)
@@ -562,6 +641,8 @@ class Canvas(QWidget):
                         self.image_data.selection_mask = self.current_tool.selection_mask
                         # 确保 tile_cache 引用最新的选区
                         self.tile_cache.selection_mask = self.current_tool.selection_mask
+                        # 鼠标释放时全量更新轮廓（清理累积的增量轮廓）
+                        self._request_contour_update(self.current_tool.selection_mask, dirty_rect=None, immediate=True)
 
                         # 通知选区已修改（用于更新 UI 状态）
                         self.image_modified.emit()
@@ -607,6 +688,55 @@ class Canvas(QWidget):
             )
             # 重置脏区域
             self.pending_selection_dirty_rect = (0, 0, 0, 0)
+            # 触发重绘
+            self.update()
+    
+    def _do_contour_update(self):
+        """节流定时器回调：增量更新轮廓"""
+        if self.pending_contour_mask is not None:
+            mask, dirty_rect = self.pending_contour_mask
+            self.selection_border_renderer.update_contours(
+                mask, dirty_rect, self.view_transform.scale
+            )
+            self.pending_contour_mask = None
+    
+    def _do_full_contour_update(self):
+        """定时器回调：全量更新轮廓（清理增量累积）"""
+        if self.image_data is not None and hasattr(self.image_data, 'selection_mask'):
+            # 传递当前缩放比例
+            self.selection_border_renderer.update_contours(
+                self.image_data.selection_mask, 
+                dirty_rect=None,
+                view_scale=self.view_transform.scale
+            )
+    
+    def _request_contour_update(self, mask, dirty_rect=None, immediate=False):
+        """
+        请求轮廓更新（节流，支持增量更新）
+        
+        Args:
+            mask: 选区蒙版
+            dirty_rect: 变化区域 (x1, y1, x2, y2)，None 表示全量更新
+            immediate: 是否立即更新（跳过节流）
+        """
+        view_scale = self.view_transform.scale
+        
+        if immediate:
+            if self.contour_update_timer.isActive():
+                self.contour_update_timer.stop()
+            if self.full_contour_timer.isActive():
+                self.full_contour_timer.stop()
+            self.pending_contour_mask = None
+            self.selection_border_renderer.update_contours(mask, dirty_rect, view_scale)
+        else:
+            self.pending_contour_mask = (mask, dirty_rect)
+            if not self.contour_update_timer.isActive():
+                self.contour_update_timer.start(self.contour_throttle_interval)
+            
+            # 启动全量更新定时器（定期清理）
+            if dirty_rect is not None:  # 只在增量更新时启动
+                if not self.full_contour_timer.isActive():
+                    self.full_contour_timer.start(self.full_contour_interval)
 
     def wheelEvent(self, event: QWheelEvent):
         """滚轮事件 - 缩放"""

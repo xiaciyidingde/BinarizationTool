@@ -33,7 +33,7 @@ class ConfigManager:
             "default_brush_size": 20,
             "default_selection_size": 50,
             "undo_history_limit": 50,
-            "canvas_background": "white"  # white, gray, black
+            "canvas_background": "gray"  # white, gray, black
         },
         "performance": {
             "tile_cache_size": 1000,

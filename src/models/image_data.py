@@ -56,6 +56,9 @@ class ImageData:
 
         # 预处理结果缓存
         self.preprocessed_pixels: np.ndarray | None = None
+        
+        # 用户图层列表
+        self.user_layers: list = []  # list[UserLayer]
 
     def get_pixel(self, x: int, y: int) -> int:
         """
@@ -127,16 +130,22 @@ class ImageData:
         """
         return 0 <= x < self.width and 0 <= y < self.height
 
-    def start_temp_layer(self):
+    def start_temp_layer(self, initial_pixels: np.ndarray | None = None):
         """
         开始绘制：创建临时图层和临时编辑掩码
 
         临时图层基于当前显示的合成结果，用于在绘制过程中提供实时预览。
         临时编辑掩码用于记录本次笔画中实际被编辑的像素。
         这遵循 Photoshop 的行为模式。
+        
+        Args:
+            initial_pixels: 初始像素数据（可选）。如果提供，使用该数据；否则使用当前合成结果。
         """
-        # 基于当前合成结果创建临时层
-        self.temp_layer = self._get_composite_pixels().copy()
+        # 基于当前合成结果或提供的像素创建临时层
+        if initial_pixels is not None:
+            self.temp_layer = initial_pixels.copy()
+        else:
+            self.temp_layer = self._get_composite_pixels().copy()
 
         # 创建临时编辑掩码
         self.temp_edit_mask = np.zeros((self.height, self.width), dtype=bool)
@@ -254,6 +263,9 @@ class ImageData:
         new_image.view_mode = self.view_mode
         if self.preprocessed_pixels is not None:
             new_image.preprocessed_pixels = self.preprocessed_pixels.copy()
+        # 复制用户图层
+        from .user_layer import UserLayer
+        new_image.user_layers = [layer.copy() for layer in self.user_layers]
         return new_image
 
     def get_current_pixels(self) -> np.ndarray:
@@ -337,3 +349,16 @@ class ImageData:
     def invalidate_preprocessed_cache(self):
         """使预处理缓存失效"""
         self.preprocessed_pixels = None
+    
+    def has_selection(self) -> bool:
+        """
+        检查是否有选区
+        
+        Returns:
+            True 如果有选区，否则 False
+        """
+        return self.selection_mask is not None and self.selection_mask.any()
+    
+    def clear_selection(self):
+        """清除选区"""
+        self.selection_mask = None

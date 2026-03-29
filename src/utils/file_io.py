@@ -88,7 +88,7 @@ def save_image(image_data: ImageData, file_path: str, format: str | None = None)
     Args:
         image_data: ImageData 对象
         file_path: 保存路径
-        format: 图片格式 ("PNG", "JPEG", "BMP")，如果为 None 则从文件扩展名推断
+        format: 图片格式 ("PNG", "JPEG", "BMP", "WEBP")，如果为 None 则从文件扩展名推断
 
     Raises:
         ValueError: 不支持的文件格式
@@ -103,7 +103,7 @@ def save_image(image_data: ImageData, file_path: str, format: str | None = None)
             format = 'JPEG'
 
     # 检查格式
-    supported_formats = {'PNG', 'JPEG', 'BMP'}
+    supported_formats = {'PNG', 'JPEG', 'BMP', 'WEBP'}
     if format not in supported_formats:
         raise ValueError(f"不支持的文件格式: {format}。支持的格式: {', '.join(supported_formats)}")
 

@@ -69,6 +69,12 @@ class MainWindow(QMainWindow):
         self.history_manager = HistoryManager()
         self.current_file_path: str | None = None
         self.saved_file_path: str | None = None  # 记录已保存的文件路径
+        
+        # 图层管理
+        self.active_layer_id: str = "root"  # 当前激活的图层ID
+        
+        # 保存上一次的参数值（用于非根图层时恢复）
+        self.last_valid_params: dict | None = None
 
         # 异步二值化
         self.binarization_worker: BinarizationWorker | None = None
@@ -92,6 +98,9 @@ class MainWindow(QMainWindow):
         # 设置窗口
         self.setWindowTitle(self.tr.tr('app.title'))
         self.setGeometry(100, 100, 1550, 800)  # 宽度从 1450 增加到 1550
+        
+        # 应用深色标题栏（Windows 11）
+        self._apply_dark_titlebar()
 
         # 创建 UI
         self.setup_ui()
@@ -122,6 +131,10 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """窗口关闭事件 - 清理资源"""
+        # 清理 Canvas 的线程资源
+        if hasattr(self, 'canvas') and self.canvas is not None:
+            self.canvas.cleanup()
+        
         # 停止防抖定时器
         if self.binarization_debounce_timer.isActive():
             self.binarization_debounce_timer.stop()
@@ -139,6 +152,80 @@ class MainWindow(QMainWindow):
 
         # 接受关闭事件
         event.accept()
+
+    def _apply_dark_titlebar(self):
+        """应用深色标题栏（Windows 11）"""
+        import sys
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+                from ctypes import wintypes
+                
+                # 获取当前主题
+                theme = self.config_manager.get('interface', 'theme', 'light')
+                
+                # 如果是跟随系统，检测系统主题
+                if theme == 'system':
+                    from ..utils.theme_manager import ThemeManager
+                    theme_manager = ThemeManager()
+                    theme = theme_manager._detect_system_theme()
+                
+                # Windows 11 标题栏颜色
+                hwnd = int(self.winId())
+                DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                
+                # 根据主题设置标题栏颜色：1 = 深色, 0 = 浅色
+                value = ctypes.c_int(1 if theme == 'dark' else 0)
+                
+                # 尝试调用 DwmSetWindowAttribute
+                try:
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        hwnd,
+                        DWMWA_USE_IMMERSIVE_DARK_MODE,
+                        ctypes.byref(value),
+                        ctypes.sizeof(value)
+                    )
+                except Exception:
+                    pass  # 如果失败（比如 Windows 10），静默忽略
+            except Exception:
+                pass  # 非 Windows 系统或其他错误，静默忽略
+
+    def _apply_dark_titlebar_to_dialog(self, dialog):
+        """为对话框应用标题栏颜色（Windows 11）"""
+        import sys
+        if sys.platform == 'win32':
+            try:
+                import ctypes
+                
+                # 获取当前主题
+                theme = self.config_manager.get('interface', 'theme', 'light')
+                
+                # 如果是跟随系统，检测系统主题
+                if theme == 'system':
+                    from ..utils.theme_manager import ThemeManager
+                    theme_manager = ThemeManager()
+                    theme = theme_manager._detect_system_theme()
+                
+                # 确保对话框已经创建窗口句柄
+                dialog.show()
+                dialog.hide()
+                
+                hwnd = int(dialog.winId())
+                DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+                # 根据主题设置标题栏颜色：1 = 深色, 0 = 浅色
+                value = ctypes.c_int(1 if theme == 'dark' else 0)
+                
+                try:
+                    ctypes.windll.dwmapi.DwmSetWindowAttribute(
+                        hwnd,
+                        DWMWA_USE_IMMERSIVE_DARK_MODE,
+                        ctypes.byref(value),
+                        ctypes.sizeof(value)
+                    )
+                except Exception:
+                    pass
+            except Exception:
+                pass
 
     def setup_ui(self):
         """设置 UI 布局"""
@@ -399,7 +486,8 @@ class MainWindow(QMainWindow):
 
         # 当前工具显示
         self.current_tool_label = QLabel(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
-        self.current_tool_label.setStyleSheet("padding: 0 10px; color: #495057; font-size: 14px; font-weight: 500;")
+        self.current_tool_label.setObjectName("currentToolLabel")
+        self.current_tool_label.setStyleSheet("padding: 0 10px; font-size: 14px; font-weight: 500;")
         toolbar_layout.addWidget(self.current_tool_label)
 
         # 将容器添加到工具栏
@@ -435,6 +523,490 @@ class MainWindow(QMainWindow):
 
         # 属性面板工具设置信号
         self._connect_tool_settings()
+        
+        # 图层面板信号
+        self.properties_panel.layers_panel.layer_selected.connect(self._on_layer_selected)
+        self.properties_panel.layers_panel.save_selection_clicked.connect(self._on_save_selection_as_layer)
+        self.properties_panel.layers_panel.layer_deleted.connect(self._on_layer_deleted)
+        self.properties_panel.layers_panel.layer_visibility_changed.connect(self._on_layer_visibility_changed)
+        
+        # 选区边框渲染完成信号 - 连接一次，避免重复连接
+        if hasattr(self.canvas, 'selection_border_renderer'):
+            self.canvas.selection_border_renderer.update_thread.contours_ready.connect(
+                self.canvas.update
+            )
+        self.properties_panel.layers_panel.merge_layers_clicked.connect(self._on_merge_layers)
+    
+    def _on_layer_selected(self, layer_id: str):
+        """
+        图层被选中
+        
+        Args:
+            layer_id: 图层ID
+        """
+        self.active_layer_id = layer_id
+        
+        # 选区只在根图层显示，切换到用户图层时隐藏（但保留数据）
+        # 这样切换回根图层时选区会重新显示
+        
+        # 如果选中的是用户图层
+        if layer_id != "root" and self.image_data is not None:
+            # 查找对应的图层
+            for layer in self.image_data.user_layers:
+                if layer.id == layer_id:
+                    # 更新二值化面板显示当前图层
+                    self.binarization_panel.set_current_layer(layer.name)
+                    
+                    # 加载该图层的二值化参数
+                    if layer.binarization_params:
+                        self.binarization_panel.load_params(layer.binarization_params)
+                    
+                    # 更新属性面板图层信息
+                    selected_pixels = int(np.sum(layer.mask))
+                    self.properties_panel.set_layer_info(layer.name, selected_pixels)
+                    
+                    self.statusbar.showMessage(f"已切换到图层: {layer.name}")
+                    break
+        else:
+            # 根图层
+            # 更新二值化面板显示根图层
+            self.binarization_panel.set_current_layer(
+                self.tr.tr('binarization_panel.root_layer')
+            )
+            
+            # 加载根图层的参数（恢复到最后有效的根图层参数）
+            if hasattr(self, 'last_valid_params') and self.last_valid_params:
+                self.binarization_panel.load_params(self.last_valid_params)
+            
+            # 更新属性面板图层信息（根图层显示整图尺寸）
+            if self.image_data:
+                self.properties_panel.set_layer_info(
+                    self.tr.tr('properties_panel.root_layer')
+                )
+                # 恢复显示整图尺寸
+                size_text = f"{self.image_data.width} x {self.image_data.height} {self.tr.tr('properties_panel.pixels')}"
+                self.properties_panel.size_label.setText(size_text)
+            
+            self.statusbar.showMessage("已切换到根图层")
+        
+        # 根据当前视图模式更新显示
+        self._safe_update_tile_cache(self.image_data.selection_mask if self.image_data else None)
+        
+        # 控制选区边框的显示：只在根图层显示
+        if self.canvas and hasattr(self.canvas, 'selection_border_renderer'):
+            if layer_id == "root" and self.image_data and self.image_data.selection_mask is not None:
+                # 根图层：更新选区边框（信号已在初始化时连接）
+                self.canvas.selection_border_renderer.update_contours(
+                    self.image_data.selection_mask,
+                    dirty_rect=None,
+                    view_scale=self.canvas.view_transform.scale
+                )
+            else:
+                # 用户图层：清除选区边框显示
+                self.canvas.selection_border_renderer.contour_lock.lock()
+                self.canvas.selection_border_renderer.contours = []
+                self.canvas.selection_border_renderer.contour_lock.unlock()
+        
+        # 更新工具状态（非根图层禁用编辑工具）
+        self._update_tool_states()
+        
+        # 更新画布显示
+        self.canvas.update()
+    
+    def _on_save_selection_as_layer(self):
+        """保存选区为图层"""
+        if self.image_data is None:
+            return
+        
+        # 检查是否有选区
+        if not self.image_data.has_selection():
+            QMessageBox.warning(
+                self,
+                self.tr.tr('dialog.warning'),
+                self.tr.tr('layers_panel.no_selection_warning')
+            )
+            return
+        
+        try:
+            # 提取选区数据
+            layer_data = self._extract_layer_from_selection()
+            
+            # 获取当前二值化参数
+            current_params = self.binarization_panel.get_all_params()
+            
+            # 创建图层对象
+            from src.models.user_layer import UserLayer
+            layer_count = len(self.image_data.user_layers) + 1
+            layer_name = self.tr.tr('layers_panel.layer_name_default', number=layer_count)
+            
+            layer = UserLayer(
+                name=layer_name,
+                pixels=layer_data['pixels'],
+                mask=layer_data['mask'],
+                bbox=layer_data['bbox'],
+                binarization_params=current_params,  # 保存二值化参数
+                original_region=layer_data['original_region']  # 保存原图区域
+            )
+            
+            # 添加到图层列表
+            self.image_data.user_layers.append(layer)
+            
+            # 更新UI
+            self.properties_panel.layers_panel.add_layer(layer.id, layer.name)
+            
+            # 清除选区（包括红色覆盖层）
+            self.image_data.clear_selection()
+            self.canvas.selection_tool.clear_selection()
+            
+            # 更新 tile cache 以清除红色选区显示
+            self._safe_update_tile_cache(None)
+            
+            # 保存到历史
+            self.history_manager.push_state(self.image_data)
+            
+            # 更新 UI 状态
+            self._update_ui_state()
+            
+            # 显示成功消息
+            self.statusbar.showMessage(self.tr.tr('layers_panel.layer_saved', name=layer_name))
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                self.tr.tr('dialog.error'),
+                f"保存图层失败：{str(e)}"
+            )
+    
+    def _on_layer_deleted(self, layer_id: str):
+        """
+        删除图层
+        
+        Args:
+            layer_id: 要删除的图层ID
+        """
+        if self.image_data is None:
+            return
+        
+        # 不能删除根图层
+        if layer_id == "root":
+            QMessageBox.warning(
+                self,
+                self.tr.tr('dialog.warning'),
+                self.tr.tr('layers_panel.cannot_delete_root')
+            )
+            return
+        
+        # 查找图层
+        layer_to_delete = None
+        for layer in self.image_data.user_layers:
+            if layer.id == layer_id:
+                layer_to_delete = layer
+                break
+        
+        if layer_to_delete is None:
+            return
+        
+        # 确认删除
+        reply = QMessageBox.question(
+            self,
+            self.tr.tr('dialog.confirm'),
+            self.tr.tr('layers_panel.confirm_delete', name=layer_to_delete.name),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply != QMessageBox.Yes:
+            return
+        
+        # 删除图层
+        for i, layer in enumerate(self.image_data.user_layers):
+            if layer.id == layer_id:
+                del self.image_data.user_layers[i]
+                break
+        
+        # 从UI中移除
+        self.properties_panel.layers_panel.remove_layer(layer_id)
+        
+        # 如果删除的是当前激活的图层，切换到根图层
+        if self.active_layer_id == layer_id:
+            self.active_layer_id = "root"
+            self.properties_panel.layers_panel.set_active_layer("root")
+            self._on_layer_selected("root")
+        else:
+            # 更新显示（如果在根图层，需要重新合成）
+            if self.active_layer_id == "root":
+                self._safe_update_tile_cache(self.image_data.selection_mask)
+        
+        # 保存到历史
+        self.history_manager.push_state(self.image_data)
+        
+        # 显示成功消息
+        self.statusbar.showMessage(self.tr.tr('layers_panel.layer_deleted', name=layer_to_delete.name))
+    
+    def _on_layer_visibility_changed(self, layer_id: str, visible: bool):
+        """
+        图层可见性改变
+        
+        Args:
+            layer_id: 图层 ID
+            visible: 是否可见
+        """
+        if self.image_data is None:
+            return
+        
+        # 根图层始终可见，不处理
+        if layer_id == "root":
+            return
+        
+        # 查找并更新图层可见性
+        for layer in self.image_data.user_layers:
+            if layer.id == layer_id:
+                layer.visible = visible
+                break
+        
+        # 如果当前在根图层，需要重新合成显示
+        if self.active_layer_id == "root":
+            self._safe_update_tile_cache(self.image_data.selection_mask)
+        
+        # 显示状态消息
+        status = self.tr.tr('layers_panel.layer_visible') if visible else self.tr.tr('layers_panel.layer_hidden')
+        self.statusbar.showMessage(status)
+    
+    def _on_merge_layers(self, layer_ids: list):
+        """
+        合并多个图层
+        
+        Args:
+            layer_ids: 要合并的图层ID列表
+        """
+        if self.image_data is None or len(layer_ids) < 2:
+            return
+        
+        # 过滤掉根图层
+        user_layer_ids = [lid for lid in layer_ids if lid != "root"]
+        if len(user_layer_ids) < 2:
+            QMessageBox.warning(
+                self,
+                self.tr.tr('dialog.warning'),
+                self.tr.tr('layers_panel.need_two_layers')
+            )
+            return
+        
+        try:
+            # 查找要合并的图层，并检查是否在范围内
+            layers_to_merge = []
+            image_shape = (self.image_data.height, self.image_data.width)
+            for layer in self.image_data.user_layers:
+                if layer.id in user_layer_ids:
+                    # 检查图层是否在范围内
+                    if not layer.is_in_bounds(image_shape):
+                        QMessageBox.warning(
+                            self,
+                            self.tr.tr('dialog.warning'),
+                            f"图层 '{layer.name}' 超出图像范围，无法合并"
+                        )
+                        return
+                    layers_to_merge.append(layer)
+            
+            if len(layers_to_merge) < 2:
+                return
+            
+            # 提取图层名称中的最小编号
+            import re
+            min_number = None
+            for layer in layers_to_merge:
+                # 尝试从图层名称中提取数字（如"图层 1" -> 1）
+                match = re.search(r'\d+', layer.name)
+                if match:
+                    number = int(match.group())
+                    if min_number is None or number < min_number:
+                        min_number = number
+            
+            # 如果没有找到编号，使用当前图层总数+1
+            if min_number is None:
+                min_number = len(self.image_data.user_layers) - len(layers_to_merge) + 1
+            
+            # 生成合并后的图层名称
+            merged_layer_name = self.tr.tr('layers_panel.layer_name_default', number=min_number)
+            
+            # 计算合并后的边界框
+            min_x = min(layer.bbox[0] for layer in layers_to_merge)
+            min_y = min(layer.bbox[1] for layer in layers_to_merge)
+            max_x = max(layer.bbox[0] + layer.bbox[2] for layer in layers_to_merge)
+            max_y = max(layer.bbox[1] + layer.bbox[3] for layer in layers_to_merge)
+            
+            merged_width = max_x - min_x
+            merged_height = max_y - min_y
+            merged_bbox = (min_x, min_y, merged_width, merged_height)
+            
+            # 创建合并后的像素和掩码
+            merged_pixels = np.full((merged_height, merged_width), 255, dtype=np.uint8)
+            merged_mask = np.zeros((merged_height, merged_width), dtype=bool)
+            
+            # 按顺序叠加所有图层
+            for layer in layers_to_merge:
+                x, y, w, h = layer.bbox
+                # 计算在合并图层中的相对位置
+                rel_x = x - min_x
+                rel_y = y - min_y
+                
+                # 复制黑色像素
+                black_mask = layer.mask & (layer.pixels == 0)
+                merged_pixels[rel_y:rel_y+h, rel_x:rel_x+w][black_mask] = 0
+                
+                # 更新掩码
+                merged_mask[rel_y:rel_y+h, rel_x:rel_x+w] |= layer.mask
+            
+            # 找到最底层的图层（列表中第一个）作为参数来源
+            bottom_layer = layers_to_merge[0]
+            
+            # 提取合并区域的原图像素（如果原图可用）
+            merged_original_region = None
+            if self.image_data.original_pixels is not None:
+                merged_original_region = self.image_data.original_pixels[
+                    min_y:max_y,
+                    min_x:max_x
+                ].copy()
+            
+            # 创建新图层，继承底层图层的二值化参数
+            from src.models.user_layer import UserLayer
+            merged_layer = UserLayer(
+                name=merged_layer_name,
+                pixels=merged_pixels,
+                mask=merged_mask,
+                bbox=merged_bbox,
+                binarization_params=bottom_layer.binarization_params,
+                original_region=merged_original_region
+            )
+            
+            # 删除原图层
+            for layer in layers_to_merge:
+                self.image_data.user_layers.remove(layer)
+                self.properties_panel.layers_panel.remove_layer(layer.id)
+            
+            # 添加合并后的图层
+            self.image_data.user_layers.append(merged_layer)
+            self.properties_panel.layers_panel.add_layer(merged_layer.id, merged_layer.name)
+            
+            # 切换到合并后的图层
+            self.active_layer_id = merged_layer.id
+            self.properties_panel.layers_panel.set_active_layer(merged_layer.id)
+            self._on_layer_selected(merged_layer.id)
+            
+            # 保存到历史
+            self.history_manager.push_state(self.image_data)
+            
+            # 显示成功消息
+            self.statusbar.showMessage(self.tr.tr('layers_panel.layers_merged'))
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                self.tr.tr('dialog.error'),
+                f"合并图层失败：{str(e)}"
+            )
+    
+    def _extract_layer_from_selection(self) -> dict:
+        """
+        从选区提取图层数据
+        
+        只保存选中的像素，未选中的区域不存储（通过mask控制）
+        同时保存原图对应区域，用于重新二值化
+        
+        Returns:
+            包含 pixels, mask, bbox, original_region 的字典
+        """
+        # 获取选区掩码
+        selection_mask = self.image_data.selection_mask
+        
+        # 获取根图层的像素（不包括用户图层，只包括根图层+编辑层）
+        root_pixels = self.image_data.pixels.copy()
+        
+        # 应用编辑层
+        if self.image_data.edit_mask is not None and self.image_data.edit_mask.any():
+            root_pixels[self.image_data.edit_mask] = self.image_data.edit_values[self.image_data.edit_mask]
+        
+        # 计算边界框
+        y_indices, x_indices = np.where(selection_mask)
+        if len(y_indices) == 0 or len(x_indices) == 0:
+            raise ValueError("选区为空")
+        
+        x_min, x_max = x_indices.min(), x_indices.max()
+        y_min, y_max = y_indices.min(), y_indices.max()
+        bbox = (int(x_min), int(y_min), int(x_max - x_min + 1), int(y_max - y_min + 1))
+        
+        # 裁剪到边界框
+        layer_mask = selection_mask[y_min:y_max+1, x_min:x_max+1].copy()
+        
+        # 只复制选中区域的像素，未选中区域填充白色（255，表示透明）
+        # 合成时白色像素不会覆盖底层
+        layer_pixels = np.full((y_max - y_min + 1, x_max - x_min + 1), 255, dtype=np.uint8)
+        layer_pixels[layer_mask] = root_pixels[y_min:y_max+1, x_min:x_max+1][layer_mask]
+        
+        # 提取原图对应区域（用于重新二值化）
+        original_region = self.image_data.original_pixels[y_min:y_max+1, x_min:x_max+1].copy()
+        
+        return {
+            'pixels': layer_pixels,
+            'mask': layer_mask,  # mask标记哪些像素是有效的
+            'bbox': bbox,
+            'original_region': original_region  # 原图区域
+        }
+    
+    def _composite_layers(self) -> np.ndarray:
+        """
+        合成根图层、编辑层和所有用户图层
+        
+        合成顺序：根图层 → 用户图层 → 编辑层（画笔痕迹）
+        这样画笔痕迹会显示在最上层，覆盖所有用户图层
+        
+        Returns:
+            合成后的像素数据
+        """
+        # 从根图层开始（当前二值化结果）
+        composited = self.image_data.pixels.copy()
+        
+        # 按顺序叠加所有用户图层
+        for layer in self.image_data.user_layers:
+            # 跳过不可见的图层
+            if not layer.visible:
+                continue
+            
+            # 获取图层的边界框
+            x, y, w, h = layer.bbox
+            
+            # 检查图层是否在当前图像范围内
+            img_h, img_w = composited.shape[:2]
+            if x >= img_w or y >= img_h or x + w <= 0 or y + h <= 0:
+                # 图层完全在图像外，跳过
+                continue
+            
+            # 计算有效的重叠区域
+            x_start = max(0, x)
+            y_start = max(0, y)
+            x_end = min(img_w, x + w)
+            y_end = min(img_h, y + h)
+            
+            # 计算在图层坐标系中的偏移
+            layer_x_offset = x_start - x
+            layer_y_offset = y_start - y
+            layer_w = x_end - x_start
+            layer_h = y_end - y_start
+            
+            # 获取图层的像素和掩码的有效部分
+            layer_pixels = layer.pixels[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+            layer_mask = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+            
+            # 只覆盖mask为True的像素（选中的区域）
+            # 未选中的区域（mask为False）保持透明，不覆盖底层
+            region = composited[y_start:y_end, x_start:x_end]
+            region[layer_mask] = layer_pixels[layer_mask]
+        
+        # 最后应用编辑层（画笔痕迹），确保画笔在最上层
+        if self.image_data.edit_mask is not None and self.image_data.edit_mask.any():
+            composited[self.image_data.edit_mask] = self.image_data.edit_values[self.image_data.edit_mask]
+        
+        return composited
 
     def _create_menus(self):
         """创建菜单栏"""
@@ -486,6 +1058,10 @@ class MainWindow(QMainWindow):
         if self.image_data is None:
             self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
             return
+        
+        # 检查画笔工具是否可用（仅在二值化模式且根图层可用）
+        if not self.brush_button.isEnabled():
+            return
 
         self.canvas.set_tool(self.canvas.brush_tool)
         self.pan_button.setChecked(False)
@@ -505,6 +1081,10 @@ class MainWindow(QMainWindow):
         """选择裁剪工具"""
         if self.image_data is None:
             return
+        
+        # 检查裁剪工具是否可用（仅在根图层可用）
+        if not self.crop_button.isEnabled():
+            return
 
         self.canvas.set_tool(self.canvas.crop_tool)
         self.pan_button.setChecked(False)
@@ -521,6 +1101,10 @@ class MainWindow(QMainWindow):
         """选择选择工具"""
         if self.image_data is None:
             self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
+            return
+        
+        # 检查选择工具是否可用（仅在二值化模式且根图层可用）
+        if not self.selection_tool_button.isEnabled():
             return
 
         self.canvas.set_tool(self.canvas.selection_tool)
@@ -547,11 +1131,19 @@ class MainWindow(QMainWindow):
         self.image_data.selection_mask = None
         # 更新分块缓存以清除选区
         self._safe_update_tile_cache(None)
+        
+        # 清除轮廓显示
+        self.canvas.selection_border_renderer.update_contours(
+            None,
+            dirty_rect=None,
+            view_scale=self.canvas.view_transform.scale
+        )
 
         # 保存到历史管理器
         self.history_manager.push_state(self.image_data)
 
         self._update_ui_state()  # 更新 UI 状态
+        self.canvas.update()  # 触发重绘
         self.statusbar.showMessage(self.tr.tr('message.deselected'))
 
     def _invert_selection(self):
@@ -567,11 +1159,19 @@ class MainWindow(QMainWindow):
         self.image_data.selection_mask = self.canvas.selection_tool.selection_mask
         # 更新分块缓存以显示选区
         self._safe_update_tile_cache(self.image_data.selection_mask)
+        
+        # 更新轮廓显示
+        self.canvas.selection_border_renderer.update_contours(
+            self.image_data.selection_mask,
+            dirty_rect=None,
+            view_scale=self.canvas.view_transform.scale
+        )
 
         # 保存到历史管理器（重要！）
         self.history_manager.push_state(self.image_data)
 
         self._update_ui_state()  # 更新 UI 状态
+        self.canvas.update()  # 触发重绘
         self.statusbar.showMessage(self.tr.tr('message.inverted'))
 
     def _select_by_color(self, color: int):
@@ -583,11 +1183,19 @@ class MainWindow(QMainWindow):
         self.image_data.selection_mask = self.canvas.selection_tool.selection_mask
         # 更新分块缓存以显示选区
         self._safe_update_tile_cache(self.image_data.selection_mask)
+        
+        # 更新轮廓显示
+        self.canvas.selection_border_renderer.update_contours(
+            self.image_data.selection_mask,
+            dirty_rect=None,
+            view_scale=self.canvas.view_transform.scale
+        )
 
         # 保存到历史管理器（重要！）
         self.history_manager.push_state(self.image_data)
 
         self._update_ui_state()  # 更新 UI 状态
+        self.canvas.update()  # 触发重绘
         color_name = self.tr.tr('color.black') if color == 0 else self.tr.tr('color.white')
         self.statusbar.showMessage(self.tr.tr('message.selected_color', color=color_name))
 
@@ -615,6 +1223,25 @@ class MainWindow(QMainWindow):
     def _do_load_file(self, file_path: str):
         """实际执行文件加载（延迟调用）"""
         try:
+            # 先检查图像尺寸，避免加载过大的图像
+            max_size = self.config_manager.get('performance', 'max_image_size', 20000)
+
+            # 使用 PIL 快速读取图像尺寸（不加载完整图像数据）
+            from PIL import Image
+            with Image.open(file_path) as img:
+                width, height = img.size
+
+            # 检查是否超出限制
+            if width > max_size or height > max_size:
+                self.canvas.set_processing(False)
+                QMessageBox.warning(
+                    self,
+                    self.tr.tr('dialog.warning'),
+                    self.tr.tr('message.image_too_large', width=width, height=height, max_size=max_size)
+                )
+                self.statusbar.showMessage(self.tr.tr('message.load_cancelled'))
+                return
+
             # 加载图片（不自动二值化）
             self.image_data = load_image(file_path, binarize=False)
 
@@ -673,6 +1300,18 @@ class MainWindow(QMainWindow):
 
             # 更新属性面板
             self.properties_panel.set_image_info(self.image_data, file_path)
+            
+            # 初始化图层面板
+            self._initialize_layers_panel(file_path)
+            
+            # 初始化参数保存（用于非根图层时恢复）
+            method_params = self.binarization_panel.get_method_params()
+            self.last_valid_params = {
+                'preprocess': self.binarization_panel.get_preprocess_params().copy(),  # 注意：键名是 preprocess
+                'method': self.binarization_panel.get_method(),
+                'threshold': self.binarization_panel.get_threshold(),
+                **method_params  # 展开方法参数
+            }
 
             # 隐藏处理中状态
             self.canvas.set_processing(False)
@@ -684,6 +1323,31 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self.canvas.set_processing(False)
             QMessageBox.critical(self, self.tr.tr('error.title'), str(e))
+    
+    def _initialize_layers_panel(self, file_path: str):
+        """
+        初始化图层面板
+        
+        Args:
+            file_path: 图片文件路径
+        """
+        # 清空现有图层
+        self.properties_panel.layers_panel.clear_layers()
+        
+        # 添加根图层
+        import os
+        filename = os.path.basename(file_path)
+        root_layer_name = f"🖼️ {filename}"  # 使用图片图标和文件名
+        
+        self.properties_panel.layers_panel.add_layer(
+            layer_id="root",
+            name=root_layer_name,
+            is_root=True
+        )
+        
+        # 设置根图层为激活状态（UI和内部状态）
+        self.properties_panel.layers_panel.set_active_layer("root")
+        self.active_layer_id = "root"
 
     def _save_file(self):
         """保存文件（第一次另存为，之后覆盖）"""
@@ -730,22 +1394,34 @@ class MainWindow(QMainWindow):
 
     def _generate_default_save_name(self) -> str:
         """
-        生成默认保存文件名（原名_时间戳）
+        根据配置生成默认保存文件名
 
         Returns:
             默认文件名路径
         """
+        # 获取文件名格式配置
+        filename_format = self.config_manager.get('file', 'filename_format', 'timestamp')
+
         if self.current_file_path:
             # 获取原文件信息
             dir_path = os.path.dirname(self.current_file_path)
             file_name = os.path.basename(self.current_file_path)
             name_without_ext, ext = os.path.splitext(file_name)
 
-            # 生成时间戳
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            # 根据配置生成文件名
+            if filename_format == 'timestamp':
+                # 原名_时间戳
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                new_name = f"{name_without_ext}_{timestamp}{ext}"
+            elif filename_format == 'copy':
+                # 原名_副本
+                new_name = f"{name_without_ext}_副本{ext}"
+            else:  # custom
+                # 自定义前缀/后缀
+                prefix = self.config_manager.get('file', 'custom_prefix', '')
+                suffix = self.config_manager.get('file', 'custom_suffix', '')
+                new_name = f"{prefix}{name_without_ext}{suffix}{ext}"
 
-            # 组合新文件名
-            new_name = f"{name_without_ext}_{timestamp}{ext}"
             return os.path.join(dir_path, new_name)
         else:
             # 如果没有原文件路径，使用默认名称
@@ -755,7 +1431,47 @@ class MainWindow(QMainWindow):
     def _save_to_file(self, file_path: str):
         """保存到文件"""
         try:
-            save_image(self.image_data, file_path)
+            # 获取保存格式配置
+            save_format_config = self.config_manager.get('file', 'default_save_format', 'follow_original')
+
+            # 确定实际保存格式
+            if save_format_config == 'follow_original':
+                # 跟随用户选择的文件扩展名
+                format_str = None
+            else:
+                # 使用配置的格式
+                format_map = {
+                    'png': 'PNG',
+                    'jpg': 'JPEG',
+                    'bmp': 'BMP',
+                    'webp': 'WEBP'
+                }
+                format_str = format_map.get(save_format_config)
+
+            # 如果在二值化模式且有用户图层，保存合成后的结果
+            if self.image_data.view_mode == 'binary' and len(self.image_data.user_layers) > 0:
+                # 获取完整的合成结果（包括所有用户图层）
+                composited_pixels = self._composite_layers()
+                
+                # 直接保存合成后的像素
+                from pathlib import Path
+                from PIL import Image
+                
+                path = Path(file_path)
+                
+                # 推断格式
+                if format_str is None:
+                    format_str = path.suffix.upper().lstrip('.')
+                    if format_str == 'JPG':
+                        format_str = 'JPEG'
+                
+                # 转换为 PIL Image 并保存
+                img = Image.fromarray(composited_pixels, mode='L')
+                img.save(file_path, format=format_str)
+            else:
+                # 正常保存
+                save_image(self.image_data, file_path, format=format_str)
+            
             self.current_file_path = file_path
             self.statusbar.showMessage(self.tr.tr('message.saved', path=file_path))
         except Exception as e:
@@ -773,6 +1489,9 @@ class MainWindow(QMainWindow):
             # 同步选择工具的选区状态
             if self.canvas.selection_tool:
                 self.canvas.selection_tool.selection_mask = self.image_data.selection_mask
+
+            # 更新图层面板
+            self._sync_layers_panel()
 
             self.statusbar.showMessage(self.tr.tr('message.undone'))
             self._update_ui_state()
@@ -792,10 +1511,61 @@ class MainWindow(QMainWindow):
             if self.canvas.selection_tool:
                 self.canvas.selection_tool.selection_mask = self.image_data.selection_mask
 
+            # 更新图层面板
+            self._sync_layers_panel()
+
             self.statusbar.showMessage(self.tr.tr('message.redone'))
             self._update_ui_state()
             # 更新属性面板（重做可能改变尺寸）
             self.properties_panel.set_image_info(self.image_data, self.current_file_path)
+    
+    def _sync_layers_panel(self):
+        """同步图层面板与image_data的用户图层"""
+        if self.image_data is None:
+            return
+        
+        # 清空图层面板
+        self.properties_panel.layers_panel.clear_layers()
+        
+        # 重新添加根图层
+        if self.current_file_path:
+            import os
+            filename = os.path.basename(self.current_file_path)
+            root_layer_name = f"🖼️ {filename}"
+        else:
+            root_layer_name = "🖼️ Root"
+        
+        self.properties_panel.layers_panel.add_layer(
+            layer_id="root",
+            name=root_layer_name,
+            is_root=True,
+            visible=True
+        )
+        
+        # 重新添加所有用户图层，检查是否超出范围
+        image_shape = (self.image_data.height, self.image_data.width)
+        for layer in self.image_data.user_layers:
+            is_out_of_bounds = not layer.is_in_bounds(image_shape)
+            self.properties_panel.layers_panel.add_layer(
+                layer.id, 
+                layer.name,
+                is_out_of_bounds=is_out_of_bounds,
+                visible=layer.visible
+            )
+        
+        # 确保当前激活的图层仍然有效
+        layer_exists = self.active_layer_id == "root" or any(
+            layer.id == self.active_layer_id for layer in self.image_data.user_layers
+        )
+        
+        if layer_exists:
+            # 激活的图层仍然存在，保持选中（即使超出范围也允许选中以便删除）
+            self.properties_panel.layers_panel.set_active_layer(self.active_layer_id)
+        else:
+            # 激活的图层不存在，切换到根图层
+            self.active_layer_id = "root"
+            self.properties_panel.layers_panel.set_active_layer("root")
+            self._on_layer_selected("root")
 
     def _reset_to_initial(self):
         """重置到初始状态"""
@@ -848,6 +1618,21 @@ class MainWindow(QMainWindow):
         """参数改变（预处理或二值化）- 根据当前模式决定是否重新计算"""
         if self.image_data is None:
             return
+        
+        # 检查当前激活的图层
+        if self.active_layer_id != "root":
+            # 用户图层：只对该图层重新二值化
+            self._rebinarize_user_layer(preprocess_params, method, threshold)
+            return
+        
+        # 根图层：保存当前参数作为有效参数
+        method_params = self.binarization_panel.get_method_params()
+        self.last_valid_params = {
+            'preprocess': preprocess_params.copy(),  # 注意：键名是 preprocess，不是 preprocess_params
+            'method': method,
+            'threshold': threshold,
+            **method_params  # 展开方法参数
+        }
 
         mode = self.image_data.view_mode
 
@@ -887,6 +1672,163 @@ class MainWindow(QMainWindow):
             # 显示处理中状态
             self.canvas.set_processing(True)
             self.statusbar.showMessage(self.tr.tr('app.processing'))
+
+    def _rebinarize_user_layer(self, preprocess_params: dict, method: int, threshold: int):
+        """
+        重新二值化用户图层
+        
+        Args:
+            preprocess_params: 预处理参数
+            method: 二值化方法
+            threshold: 阈值
+        """
+        if self.image_data is None or self.active_layer_id == "root":
+            return
+        
+        # 查找当前图层
+        current_layer = None
+        for layer in self.image_data.user_layers:
+            if layer.id == self.active_layer_id:
+                current_layer = layer
+                break
+        
+        if current_layer is None or current_layer.original_region is None:
+            self.statusbar.showMessage("图层没有原图数据，无法重新二值化")
+            return
+        
+        try:
+            # 显示处理中状态
+            self.canvas.set_processing(True)
+            self.statusbar.showMessage(self.tr.tr('app.processing'))
+            
+            # 1. 对原图区域进行预处理
+            preprocessed_region = BinarizationEngine.apply_preprocess(
+                current_layer.original_region.copy(),
+                **preprocess_params
+            )
+            
+            # 2. 对预处理后的区域进行二值化
+            method_params = self.binarization_panel.get_method_params()
+            binarized_region = BinarizationEngine.apply_threshold(
+                preprocessed_region,
+                method,
+                threshold,
+                **method_params
+            )
+            
+            # 3. 更新图层的像素数据（只更新mask为True的部分）
+            current_layer.pixels[current_layer.mask] = binarized_region[current_layer.mask]
+            
+            # 4. 更新图层的二值化参数
+            current_layer.binarization_params = {
+                'preprocess': preprocess_params.copy(),
+                'method': method,
+                'threshold': threshold,
+                **method_params
+            }
+            
+            # 5. 更新显示（根据当前视图模式）
+            self._safe_update_tile_cache(self.image_data.selection_mask)
+            
+            # 隐藏处理中状态
+            self.canvas.set_processing(False)
+            self.statusbar.showMessage(f"图层 {current_layer.name} 已重新二值化")
+            
+        except Exception as e:
+            self.canvas.set_processing(False)
+            self.statusbar.showMessage(f"重新二值化失败: {str(e)}")
+            QMessageBox.critical(
+                self,
+                self.tr.tr('dialog.error'),
+                f"重新二值化失败：{str(e)}"
+            )
+    
+    def _restore_parameters(self, params: dict):
+        """
+        恢复参数到面板
+        
+        Args:
+            params: 包含 preprocess_params, method, threshold, method_params 的字典
+        """
+        # 临时断开信号，避免触发参数改变事件
+        self.binarization_panel.blockSignals(True)
+        
+        try:
+            # 恢复预处理参数
+            preprocess_params = params['preprocess_params']
+            self.binarization_panel.exposure_slider.setValue(preprocess_params['exposure'])
+            self.binarization_panel.contrast_slider.setValue(preprocess_params['contrast'])
+            self.binarization_panel.sharpen_slider.setValue(preprocess_params['sharpen'])
+            self.binarization_panel.gamma_slider.setValue(int(preprocess_params['gamma'] * 100))
+            self.binarization_panel.smooth_slider.setValue(preprocess_params['smooth'])
+            
+            # 恢复 RGB 通道
+            self.binarization_panel.red_channel_slider.setValue(preprocess_params['red_channel'])
+            self.binarization_panel.green_channel_slider.setValue(preprocess_params['green_channel'])
+            self.binarization_panel.blue_channel_slider.setValue(preprocess_params['blue_channel'])
+            
+            # 恢复边缘检测
+            edge_mode_map = {0: 'off', 1: 'canny', 2: 'enhance', 3: 'contour'}
+            edge_mode = edge_mode_map.get(preprocess_params['edge_mode'], 'off')
+            self.binarization_panel.edge_mode_combo.setCurrentText(
+                self.tr.tr(f'edge_mode.{edge_mode}')
+            )
+            self.binarization_panel.edge_strength_slider.setValue(preprocess_params['edge_strength'])
+            self.binarization_panel.edge_threshold_slider.setValue(preprocess_params['edge_threshold'])
+            
+            # 恢复降噪
+            denoise_method_map = {0: 'none', 1: 'gaussian', 2: 'median', 3: 'bilateral', 
+                                 4: 'nlmeans', 5: 'morph_open', 6: 'morph_close'}
+            denoise_method = denoise_method_map.get(preprocess_params['denoise_method'], 'none')
+            self.binarization_panel.denoise_method_combo.setCurrentText(
+                self.tr.tr(f'denoise_method.{denoise_method}')
+            )
+            self.binarization_panel.denoise_slider.setValue(preprocess_params['denoise'])
+            
+            # 恢复二值化方法和阈值
+            self.binarization_panel.method_combo.setCurrentIndex(params['method'])
+            self.binarization_panel.threshold_slider.setValue(params['threshold'])
+            
+            # 恢复方法特定参数
+            method_params = params['method_params']
+            method = params['method']
+            
+            # 根据方法恢复对应的参数
+            if method == 1:  # 自适应阈值
+                if 'block_size' in method_params:
+                    self.binarization_panel.adaptive_block_size_slider.setValue(method_params['block_size'])
+            elif method == 3:  # Sauvola
+                if 'window_size' in method_params:
+                    self.binarization_panel.sauvola_window_slider.setValue(method_params['window_size'])
+                if 'k' in method_params:
+                    self.binarization_panel.sauvola_k_slider.setValue(int(method_params['k'] * 100))
+                if 'r' in method_params:
+                    self.binarization_panel.sauvola_r_slider.setValue(method_params['r'])
+            elif method == 4:  # Wolf
+                if 'window_size' in method_params:
+                    self.binarization_panel.wolf_window_slider.setValue(method_params['window_size'])
+                if 'k' in method_params:
+                    self.binarization_panel.wolf_k_slider.setValue(int(method_params['k'] * 100))
+            elif method == 5:  # Nick
+                if 'window_size' in method_params:
+                    self.binarization_panel.nick_window_slider.setValue(method_params['window_size'])
+                if 'k' in method_params:
+                    self.binarization_panel.nick_k_slider.setValue(int(method_params['k'] * 100))
+            elif method == 6:  # Bernsen
+                if 'window_size' in method_params:
+                    self.binarization_panel.bernsen_window_slider.setValue(method_params['window_size'])
+                if 'contrast_threshold' in method_params:
+                    self.binarization_panel.bernsen_contrast_slider.setValue(method_params['contrast_threshold'])
+            elif method in [7, 8, 9]:  # 抖动算法
+                if 'strength' in method_params:
+                    self.binarization_panel.dither_strength_slider.setValue(method_params['strength'])
+                if 'matrix_size' in method_params:
+                    # matrix_size 是实际值（2, 4, 8, 16），需要转换为滑块值
+                    self.binarization_panel.dither_matrix_size_slider.setValue(method_params['matrix_size'])
+        
+        finally:
+            # 恢复信号
+            self.binarization_panel.blockSignals(False)
 
     def _start_preprocess(self):
         """启动异步预处理"""
@@ -1017,6 +1959,12 @@ class MainWindow(QMainWindow):
 
             # 更新属性面板（裁剪后尺寸会变化）
             self.properties_panel.set_image_info(self.image_data, self.current_file_path)
+            
+            # 同步图层面板（裁剪后检查图层边界）
+            self._sync_layers_panel()
+            
+            # 更新显示（确保根图层显示合成效果）
+            self._safe_update_tile_cache()
 
     def _update_ui_state(self):
         """更新 UI 状态"""
@@ -1031,6 +1979,7 @@ class MainWindow(QMainWindow):
         self.reset_action_btn.setEnabled(has_image and self._has_edits())
 
         # 工具
+        self.pan_button.setEnabled(has_image)
         self.brush_button.setEnabled(has_image)
         self.crop_button.setEnabled(has_image)
         self.selection_tool_button.setEnabled(has_image)
@@ -1104,17 +2053,110 @@ class MainWindow(QMainWindow):
         color_name = self.tr.tr('color.black') if color == 0 else self.tr.tr('color.white')
         self.statusbar.showMessage(self.tr.tr('message.filled', color=color_name))
 
-    def _fill_selection_opposite_color(self):
+    def _fill_selection_holes(self):
         """
-        填充选区为相反颜色
-
-        如果目标颜色是黑色（选择黑色区域），则填充白色
-        如果目标颜色是白色（选择白色区域），则填充黑色
+        填充选区内部的空洞
+        
+        使用形态学闭运算或洪水填充算法填充选区内的空洞，使选区变为实心。
         """
-        target_color = self.canvas.selection_tool.target_color
-        # 填充相反的颜色
-        fill_color = 255 if target_color == 0 else 0
-        self._fill_selection(fill_color)
+        if self.image_data is None:
+            return
+        
+        # 检查是否有选区
+        if not self.canvas.selection_tool.has_selection():
+            self.statusbar.showMessage(self.tr.tr('message.no_selection'))
+            return
+        
+        # 获取选区蒙版
+        selection_mask = self.canvas.selection_tool.selection_mask
+        
+        # 检查选区尺寸是否匹配
+        if selection_mask.shape != (self.image_data.height, self.image_data.width):
+            self.statusbar.showMessage(self.tr.tr('message.selection_size_mismatch'))
+            self.canvas.selection_tool.clear_selection()
+            self.image_data.selection_mask = None
+            self._safe_update_tile_cache(None)
+            return
+        
+        try:
+            import cv2
+            import numpy as np
+            
+            # 将布尔蒙版转换为 uint8
+            mask_uint8 = selection_mask.astype(np.uint8) * 255
+            
+            # 使用形态学闭运算填充小空洞
+            # 闭运算 = 先膨胀后腐蚀，可以填充小的空洞
+            kernel_size = max(3, int(self.canvas.selection_tool.size / 10))  # 根据笔刷大小动态调整
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
+            closed = cv2.morphologyEx(mask_uint8, cv2.MORPH_CLOSE, kernel)
+            
+            # 使用洪水填充来填充更大的空洞
+            # 从边缘开始洪水填充背景（反向思路）
+            filled = closed.copy()
+            h, w = filled.shape
+            flood_mask = np.zeros((h + 2, w + 2), dtype=np.uint8)
+            
+            # 从四个角开始洪水填充背景
+            cv2.floodFill(filled, flood_mask, (0, 0), 255)
+            
+            # 反转得到填充后的选区（背景外的都是选区）
+            filled_inverted = cv2.bitwise_not(filled)
+            
+            # 与闭运算结果合并
+            final_mask = cv2.bitwise_or(closed, filled_inverted)
+            
+            # 转换回布尔蒙版
+            self.canvas.selection_tool.selection_mask = (final_mask > 0)
+            self.image_data.selection_mask = self.canvas.selection_tool.selection_mask
+            
+            # 更新轮廓显示
+            self.canvas._request_contour_update(
+                self.canvas.selection_tool.selection_mask, 
+                dirty_rect=None, 
+                immediate=True
+            )
+            
+            # 更新分块缓存
+            self._safe_update_tile_cache(self.canvas.selection_tool.selection_mask)
+            
+            # 更新显示
+            self.canvas.update()
+            
+            # 显示提示
+            self.statusbar.showMessage(self.tr.tr('message.selection_filled'))
+            
+        except ImportError:
+            # 如果没有 cv2，使用简单的 scipy 方法
+            try:
+                from scipy import ndimage
+                import numpy as np
+                
+                # 使用 binary_fill_holes 填充空洞
+                filled_mask = ndimage.binary_fill_holes(selection_mask)
+                
+                # 更新选区
+                self.canvas.selection_tool.selection_mask = filled_mask
+                self.image_data.selection_mask = filled_mask
+                
+                # 更新轮廓显示
+                self.canvas._request_contour_update(
+                    self.canvas.selection_tool.selection_mask, 
+                    dirty_rect=None, 
+                    immediate=True
+                )
+                
+                # 更新分块缓存
+                self._safe_update_tile_cache(self.canvas.selection_tool.selection_mask)
+                
+                # 更新显示
+                self.canvas.update()
+                
+                # 显示提示
+                self.statusbar.showMessage(self.tr.tr('message.selection_filled'))
+                
+            except ImportError:
+                self.statusbar.showMessage(self.tr.tr('message.feature_unavailable'))
 
     def _connect_tool_settings(self):
         """连接属性面板中的工具设置信号"""
@@ -1137,14 +2179,19 @@ class MainWindow(QMainWindow):
         self.properties_panel.selection_method_group.buttonClicked.connect(
             self._on_selection_method_changed_panel
         )
-        self.properties_panel.selection_color_group.buttonClicked.connect(
-            self._on_selection_color_changed_panel
+        # 填充按钮
+        self.properties_panel.fill_black_button.clicked.connect(
+            lambda: self._fill_selection(0)
         )
-        self.properties_panel.fill_button.clicked.connect(
-            self._fill_selection_opposite_color
+        self.properties_panel.fill_white_button.clicked.connect(
+            lambda: self._fill_selection(255)
         )
         self.properties_panel.deselect_button.clicked.connect(self._deselect)
         self.properties_panel.invert_button.clicked.connect(self._invert_selection)
+        # 填充选区空洞按钮
+        self.properties_panel.fill_selection_holes_button.clicked.connect(
+            self._fill_selection_holes
+        )
 
     def _on_selection_size_changed_panel(self, value: int):
         """属性面板：选择范围改变"""
@@ -1156,17 +2203,6 @@ class MainWindow(QMainWindow):
         button_id = self.properties_panel.selection_mode_group.checkedId()
         mode = 'add' if button_id == 0 else 'subtract'
         self.canvas.selection_tool.selection_mode = mode
-        self.canvas.update()
-
-    def _on_selection_color_changed_panel(self):
-        """属性面板：选择目标颜色改变"""
-        button_id = self.properties_panel.selection_color_group.checkedId()
-        self.canvas.selection_tool.target_color = button_id
-        # 更新填充按钮文本
-        if button_id == 0:
-            self.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_white'))
-        else:
-            self.properties_panel.fill_button.setText(self.tr.tr('properties_panel.fill_black'))
         self.canvas.update()
 
     def _on_selection_method_changed_panel(self):
@@ -1267,8 +2303,179 @@ class MainWindow(QMainWindow):
         """
         if self.image_data is None:
             return
+        
+        # 选区只在根图层显示
+        if self.active_layer_id != "root":
+            selection_mask = None
 
-        pixels = self.image_data.get_current_pixels()
+        # 根据当前激活的图层决定显示内容
+        if self.active_layer_id == "root":
+            # 根图层：根据视图模式显示不同内容
+            if self.image_data.view_mode == 'original':
+                # 原图模式：显示原图
+                pixels = self.image_data.original_pixels
+            elif self.image_data.view_mode == 'preprocessed':
+                # 预处理模式：显示预处理结果
+                if self.image_data.preprocessed_pixels is not None:
+                    pixels = self.image_data.preprocessed_pixels
+                else:
+                    pixels = self.image_data.original_pixels
+            else:  # 'binary'
+                # 二值化模式：合成显示所有层
+                pixels = self._composite_layers()
+        else:
+            # 用户图层：根据视图模式显示不同内容
+            pixels = None
+            for layer in self.image_data.user_layers:
+                if layer.id == self.active_layer_id:
+                    # 检查图层是否在图像范围内
+                    image_shape = (self.image_data.height, self.image_data.width)
+                    if not layer.is_in_bounds(image_shape):
+                        # 图层超出范围，显示灰色背景
+                        pixels = np.full(
+                            (self.image_data.height, self.image_data.width),
+                            128,
+                            dtype=np.uint8
+                        )
+                        break
+                    
+                    if self.image_data.view_mode == 'original':
+                        # 原图模式：显示原图对应区域，未选择区域为灰色
+                        if layer.original_region is not None:
+                            # 创建灰色背景（128表示未选择区域）
+                            pixels = np.full(
+                                (self.image_data.height, self.image_data.width),
+                                128,  # 灰色背景
+                                dtype=np.uint8
+                            )
+                            
+                            # 计算有效的重叠区域
+                            x, y, w, h = layer.bbox
+                            img_h, img_w = image_shape
+                            
+                            x_start = max(0, x)
+                            y_start = max(0, y)
+                            x_end = min(img_w, x + w)
+                            y_end = min(img_h, y + h)
+                            
+                            # 计算在图层坐标系中的偏移
+                            layer_x_offset = x_start - x
+                            layer_y_offset = y_start - y
+                            layer_w = x_end - x_start
+                            layer_h = y_end - y_start
+                            
+                            # 将原图区域转换为灰度图
+                            if len(layer.original_region.shape) == 3:
+                                from ..utils.binarization_engine import BinarizationEngine
+                                original_gray = BinarizationEngine.convert_to_grayscale(layer.original_region)
+                            else:
+                                original_gray = layer.original_region
+                            
+                            # 获取有效部分
+                            original_gray_region = original_gray[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            
+                            # 在图层的掩码区域显示原图
+                            region = pixels[y_start:y_end, x_start:x_end]
+                            region[layer_mask_region] = original_gray_region[layer_mask_region]
+                        else:
+                            # 没有原图区域，显示灰色
+                            pixels = np.full(
+                                (self.image_data.height, self.image_data.width),
+                                128,
+                                dtype=np.uint8
+                            )
+                    
+                    elif self.image_data.view_mode == 'preprocessed':
+                        # 预处理模式：对原图区域应用预处理，未选择区域为灰色
+                        if layer.original_region is not None and layer.binarization_params is not None:
+                            # 创建灰色背景
+                            pixels = np.full(
+                                (self.image_data.height, self.image_data.width),
+                                128,  # 灰色背景
+                                dtype=np.uint8
+                            )
+                            
+                            # 对原图区域应用预处理
+                            from ..utils.binarization_engine import BinarizationEngine
+                            preprocess_params = layer.binarization_params.get('preprocess', {})
+                            # 使用 **kwargs 解包参数字典
+                            preprocessed_region = BinarizationEngine.apply_preprocess(
+                                layer.original_region,
+                                **preprocess_params
+                            )
+                            
+                            # 转换为灰度图（如果是彩色）
+                            if len(preprocessed_region.shape) == 3:
+                                preprocessed_region = BinarizationEngine.convert_to_grayscale(preprocessed_region)
+                            
+                            # 计算有效的重叠区域
+                            x, y, w, h = layer.bbox
+                            img_h, img_w = image_shape
+                            
+                            x_start = max(0, x)
+                            y_start = max(0, y)
+                            x_end = min(img_w, x + w)
+                            y_end = min(img_h, y + h)
+                            
+                            # 计算在图层坐标系中的偏移
+                            layer_x_offset = x_start - x
+                            layer_y_offset = y_start - y
+                            layer_w = x_end - x_start
+                            layer_h = y_end - y_start
+                            
+                            # 获取有效部分
+                            preprocessed_region_part = preprocessed_region[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            
+                            # 在图层的掩码区域显示预处理结果
+                            region = pixels[y_start:y_end, x_start:x_end]
+                            region[layer_mask_region] = preprocessed_region_part[layer_mask_region]
+                        else:
+                            # 没有原图区域或参数，显示灰色
+                            pixels = np.full(
+                                (self.image_data.height, self.image_data.width),
+                                128,
+                                dtype=np.uint8
+                            )
+                    
+                    else:  # 'binary'
+                        # 二值化模式：显示该图层的二值化结果（未选中区域为灰色）
+                        # 创建灰色背景（表示透明/未选中区域）
+                        pixels = np.full(
+                            (self.image_data.height, self.image_data.width),
+                            128,  # 灰色背景
+                            dtype=np.uint8
+                        )
+                        
+                        # 计算有效的重叠区域
+                        x, y, w, h = layer.bbox
+                        img_h, img_w = image_shape
+                        
+                        x_start = max(0, x)
+                        y_start = max(0, y)
+                        x_end = min(img_w, x + w)
+                        y_end = min(img_h, y + h)
+                        
+                        # 计算在图层坐标系中的偏移
+                        layer_x_offset = x_start - x
+                        layer_y_offset = y_start - y
+                        layer_w = x_end - x_start
+                        layer_h = y_end - y_start
+                        
+                        # 获取有效部分
+                        layer_pixels_region = layer.pixels[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                        layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                        
+                        # 直接显示图层的像素（完全覆盖该区域）
+                        region = pixels[y_start:y_end, x_start:x_end]
+                        region[layer_mask_region] = layer_pixels_region[layer_mask_region]
+                    
+                    break
+            
+            # 如果找不到图层，回退到根图层
+            if pixels is None:
+                pixels = self._composite_layers()
 
         # 注意：不再强制转换为灰度图，TileCache 现在支持彩色图像
 
@@ -1276,7 +2483,7 @@ class MainWindow(QMainWindow):
         self.canvas.update()
 
     def _update_tool_states(self):
-        """根据当前视图模式更新工具状态"""
+        """根据当前视图模式和图层状态更新工具状态"""
         if self.image_data is None:
             # 没有图片时，所有工具都不可用
             self.pan_button.setEnabled(False)
@@ -1286,26 +2493,40 @@ class MainWindow(QMainWindow):
             return
 
         mode = self.image_data.view_mode
+        is_root_layer = (self.active_layer_id == "root")
 
-        # 抓取工具和裁剪工具：在所有模式下可用
+        # 抓取工具：在所有模式和图层下可用
         self.pan_button.setEnabled(True)
-        self.crop_button.setEnabled(True)
 
-        # 画笔工具：仅在二值化模式下可用
-        brush_enabled = (mode == 'binary')
+        # 裁剪工具：仅在根图层可用
+        crop_enabled = is_root_layer
+        self.crop_button.setEnabled(crop_enabled)
+        if not crop_enabled and self.canvas.current_tool == self.canvas.crop_tool:
+            self.canvas.set_tool(None)
+            self.crop_button.setChecked(False)
+            self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
+            # 隐藏工具设置
+            self.properties_panel.hide_all_tool_settings()
+
+        # 画笔工具：仅在二值化模式且根图层可用
+        brush_enabled = (mode == 'binary' and is_root_layer)
         self.brush_button.setEnabled(brush_enabled)
         if not brush_enabled and self.canvas.current_tool == self.canvas.brush_tool:
             self.canvas.set_tool(None)
             self.brush_button.setChecked(False)
             self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
+            # 隐藏工具设置
+            self.properties_panel.hide_all_tool_settings()
 
-        # 选择工具：仅在二值化模式下可用
-        selection_enabled = (mode == 'binary')
+        # 选择工具：仅在二值化模式且根图层可用
+        selection_enabled = (mode == 'binary' and is_root_layer)
         self.selection_tool_button.setEnabled(selection_enabled)
         if not selection_enabled and self.canvas.current_tool == self.canvas.selection_tool:
             self.canvas.set_tool(None)
             self.selection_tool_button.setChecked(False)
             self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
+            # 隐藏工具设置
+            self.properties_panel.hide_all_tool_settings()
 
     def _get_mode_display_name(self, mode: str) -> str:
         """获取模式的显示名称"""
@@ -1331,6 +2552,31 @@ class MainWindow(QMainWindow):
         config = self.config_manager
 
         # 0. 界面设置
+        # 主题设置
+        theme = config.get('interface', 'theme', 'light')
+        from ..utils.theme_manager import ThemeManager
+        from PySide6.QtWidgets import QApplication
+        from PySide6.QtGui import QIcon, QPixmap
+        from ..utils.resources import APP_ICON_BYTES, APP_ICON_BYTES_DARK
+        
+        theme_manager = ThemeManager()
+        theme_manager.apply_theme(QApplication.instance(), theme)
+        
+        # 应用深色标题栏（主题切换后立即更新）
+        self._apply_dark_titlebar()
+        
+        # 更新应用程序图标
+        if theme == 'system':
+            detected_theme = theme_manager._detect_system_theme()
+        else:
+            detected_theme = theme
+        
+        icon_bytes = APP_ICON_BYTES_DARK if detected_theme == 'dark' else APP_ICON_BYTES
+        pixmap = QPixmap()
+        pixmap.loadFromData(icon_bytes)
+        icon = QIcon(pixmap)
+        QApplication.instance().setWindowIcon(icon)
+        
         # 动画开关
         animations_enabled = config.get('interface', 'animations_enabled', True)
         from ..utils.animations import set_global_animation_enabled
@@ -1371,58 +2617,99 @@ class MainWindow(QMainWindow):
 
     def _show_about(self):
         """显示关于对话框"""
-        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel
+        from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QHBoxLayout
+        from PySide6.QtGui import QPixmap, QImage
+        from PySide6.QtCore import Qt
 
         from src.__version__ import __app_name__, __author__, __release_date__, __version__
+        from ..utils.resources import APP_ICON_BYTES, APP_ICON_BYTES_DARK
 
         dialog = QDialog(self)
         dialog.setWindowTitle(self.tr.tr('about.title', app_name=__app_name__))
         dialog.setMinimumWidth(450)
         dialog.setMinimumHeight(350)
+        
+        # 应用深色标题栏
+        self._apply_dark_titlebar_to_dialog(dialog)
 
         layout = QVBoxLayout(dialog)
         layout.setSpacing(15)
         layout.setContentsMargins(30, 30, 30, 30)
 
+        # 顶部布局：应用名称 + 图标
+        top_layout = QHBoxLayout()
+        top_layout.setSpacing(15)
+        
+        # 左侧信息布局
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(5)
+        
         # 应用名称
         app_name_label = QLabel(__app_name__)
-        app_name_label.setStyleSheet("font-size: 24px; font-weight: bold; color: #212529;")
-        layout.addWidget(app_name_label)
+        app_name_label.setObjectName("aboutAppName")
+        app_name_label.setStyleSheet("font-size: 24px; font-weight: bold;")
+        info_layout.addWidget(app_name_label)
 
         # 版本号
         version_label = QLabel(self.tr.tr('about.version', version=__version__))
-        version_label.setStyleSheet("font-size: 16px; color: #212529; margin-bottom: 10px;")
-        layout.addWidget(version_label)
+        version_label.setObjectName("aboutVersion")
+        version_label.setStyleSheet("font-size: 16px;")
+        info_layout.addWidget(version_label)
 
         # 发布日期
         date_label = QLabel(self.tr.tr('about.release_date', date=__release_date__))
-        date_label.setStyleSheet("font-size: 14px; color: #212529;")
-        layout.addWidget(date_label)
+        date_label.setObjectName("aboutDate")
+        date_label.setStyleSheet("font-size: 14px;")
+        info_layout.addWidget(date_label)
+        
+        info_layout.addStretch()
+        top_layout.addLayout(info_layout)
+        
+        # 应用图标（右侧）- 根据主题选择图标
+        theme = self.config_manager.get('interface', 'theme', 'light')
+        if theme == 'system':
+            from ..utils.theme_manager import ThemeManager
+            theme_manager = ThemeManager()
+            theme = theme_manager._detect_system_theme()
+        
+        icon_bytes = APP_ICON_BYTES_DARK if theme == 'dark' else APP_ICON_BYTES
+        icon_label = QLabel()
+        icon_pixmap = QPixmap.fromImage(QImage.fromData(icon_bytes))
+        icon_label.setPixmap(icon_pixmap.scaled(100, 100, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        icon_label.setFixedSize(100, 100)
+        top_layout.addWidget(icon_label)
+        
+        layout.addLayout(top_layout)
 
         # 分隔线
         separator = QLabel()
-        separator.setStyleSheet("border-top: 1px solid #dee2e6; margin: 10px 0;")
+        separator.setObjectName("aboutSeparator")
+        separator.setStyleSheet("margin: 10px 0;")
         layout.addWidget(separator)
 
         # 描述
         desc_label = QLabel(self.tr.tr('about.description'))
-        desc_label.setStyleSheet("font-size: 14px; color: #212529; line-height: 1.6;")
+        desc_label.setObjectName("aboutDesc")
+        desc_label.setStyleSheet("font-size: 14px; line-height: 1.6;")
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
 
         # 作者
         author_label = QLabel(self.tr.tr('about.author', author=__author__))
-        author_label.setStyleSheet("font-size: 14px; color: #212529; margin-top: 10px;")
+        author_label.setObjectName("aboutAuthor")
+        author_label.setStyleSheet("font-size: 14px; margin-top: 10px;")
         layout.addWidget(author_label)
 
         # 版权
         copyright_label = QLabel(self.tr.tr('about.copyright'))
-        copyright_label.setStyleSheet("font-size: 12px; color: #212529; margin-top: 5px;")
+        copyright_label.setObjectName("aboutCopyright")
+        copyright_label.setStyleSheet("font-size: 12px; margin-top: 5px;")
         layout.addWidget(copyright_label)
 
         # 许可证
         license_label = QLabel(self.tr.tr('about.license'))
-        license_label.setStyleSheet("font-size: 12px; color: #212529;")
+        license_label.setObjectName("aboutLicense")
+        license_label.setStyleSheet("font-size: 12px;")
         layout.addWidget(license_label)
 
         # 添加弹性空间

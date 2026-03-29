@@ -61,12 +61,7 @@ class ViewModeSwitcher(QWidget):
         # 创建选中指示器（滑动背景）
         self.indicator = QWidget(self.button_container)
         self.indicator.setObjectName("viewModeSwitcherIndicator")
-        self.indicator.setStyleSheet("""
-            QWidget#viewModeSwitcherIndicator {
-                background-color: rgba(74, 134, 232, 0.2);
-                border-radius: 4px;
-            }
-        """)
+        # 不设置内联样式，让主题文件控制
         self.indicator.lower()  # 放到按钮下方
 
         # 创建按钮组
