@@ -84,7 +84,11 @@
     "selection_target_color": "Selection Target Color: {color}",
     "selection_size_mismatch": "Selection size mismatch, selection cleared",
     "selection_filled": "Selection filled",
-    "feature_unavailable": "This feature requires OpenCV or SciPy library"
+    "feature_unavailable": "This feature requires OpenCV or SciPy library",
+    "image_inverted": "Image inverted",
+    "image_flipped_horizontal": "Image flipped horizontally",
+    "image_flipped_vertical": "Image flipped vertically",
+    "transform_binary_only": "Image transform is only available in binary view. Please switch to binary mode first"
   },
   "selection": {
     "drag_select": "Paint",
@@ -249,7 +253,12 @@
     "denoise_morph_close": "Morph Close",
     "denoise_strength": "Strength: {value}",
     "tab_preprocess": "Preprocess",
-    "tab_binarization": "Binarization"
+    "tab_binarization": "Binarization",
+    "tab_other": "Other",
+    "image_transform": "Image Transform",
+    "invert_image": "Invert",
+    "flip_horizontal": "Flip Horizontal",
+    "flip_vertical": "Flip Vertical"
   },
   "properties_panel": {
     "properties": "Properties",

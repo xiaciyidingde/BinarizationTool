@@ -512,6 +512,9 @@ class MainWindow(QMainWindow):
         # 视图模式切换
         self.binarization_panel.view_mode_changed.connect(self._on_view_mode_changed)
 
+        # 图像变换操作
+        self.binarization_panel.image_transform.connect(self._on_image_transform)
+
         # Canvas 图片修改
         self.canvas.image_modified.connect(self._on_image_modified)
 
@@ -1393,6 +1396,9 @@ class MainWindow(QMainWindow):
             # 隐藏处理中状态
             self.canvas.set_processing(False)
 
+            # 重置变换复选框
+            self._reset_transform_checkboxes()
+
             # 更新状态
             self.statusbar.showMessage(self.tr.tr('message.loaded', path=file_path))
             self._update_ui_state()
@@ -1570,6 +1576,9 @@ class MainWindow(QMainWindow):
             # 更新图层面板
             self._sync_layers_panel()
 
+            # 重置变换复选框
+            self._reset_transform_checkboxes()
+
             self.statusbar.showMessage(self.tr.tr('message.undone'))
             self._update_ui_state()
             # 更新属性面板（撤销可能恢复裁剪前的尺寸）
@@ -1590,6 +1599,9 @@ class MainWindow(QMainWindow):
 
             # 更新图层面板
             self._sync_layers_panel()
+
+            # 重置变换复选框
+            self._reset_transform_checkboxes()
 
             self.statusbar.showMessage(self.tr.tr('message.redone'))
             self._update_ui_state()
@@ -2332,6 +2344,83 @@ class MainWindow(QMainWindow):
 
         mode_name = self.tr.tr(f'view_mode.{mode}')
         self.statusbar.showMessage(self.tr.tr('message.view_mode_changed', mode=mode_name))
+
+    def _on_image_transform(self, operation: str):
+        """
+        处理图像变换操作（仅在二值化视图下生效）
+
+        Args:
+            operation: 变换操作类型 ('invert', 'flip_horizontal', 'flip_vertical')
+        """
+        if self.image_data is None:
+            self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
+            # 重置复选框状态
+            self._reset_transform_checkboxes()
+            return
+
+        # 只在二值化视图下生效
+        if self.image_data.view_mode != 'binary':
+            self.statusbar.showMessage(self.tr.tr('message.transform_binary_only'))
+            # 重置复选框状态
+            self._reset_transform_checkboxes()
+            return
+
+        import cv2
+        import numpy as np
+
+        # 获取当前二值化图像（合成后的结果）
+        current_pixels = self.image_data.get_current_pixels()
+        if current_pixels is None:
+            self._reset_transform_checkboxes()
+            return
+
+        # 执行变换
+        transformed = None
+        if operation == 'invert':
+            # 反相：255 - 像素值
+            transformed = 255 - current_pixels
+            message = self.tr.tr('message.image_inverted')
+        elif operation == 'flip_horizontal':
+            # 水平翻转
+            transformed = cv2.flip(current_pixels, 1)
+            message = self.tr.tr('message.image_flipped_horizontal')
+        elif operation == 'flip_vertical':
+            # 垂直翻转
+            transformed = cv2.flip(current_pixels, 0)
+            message = self.tr.tr('message.image_flipped_vertical')
+
+        if transformed is not None:
+            # 保存到历史记录
+            self.history_manager.push_state(self.image_data)
+
+            # 更新基础二值化图层
+            self.image_data.update_base_layer(transformed)
+            
+            # 清除编辑图层（变换应用到整个图像）
+            self.image_data.edit_mask = None
+            self.image_data.edit_values = None
+
+            # 更新画布显示
+            self.canvas.update()
+            self.statusbar.showMessage(message)
+
+            # 标记为已修改
+            self._on_image_modified()
+
+    def _reset_transform_checkboxes(self):
+        """重置变换复选框状态"""
+        # 阻止信号，避免触发变换
+        self.binarization_panel.invert_checkbox.blockSignals(True)
+        self.binarization_panel.flip_horizontal_checkbox.blockSignals(True)
+        self.binarization_panel.flip_vertical_checkbox.blockSignals(True)
+        
+        self.binarization_panel.invert_checkbox.setChecked(False)
+        self.binarization_panel.flip_horizontal_checkbox.setChecked(False)
+        self.binarization_panel.flip_vertical_checkbox.setChecked(False)
+        
+        self.binarization_panel.invert_checkbox.blockSignals(False)
+        self.binarization_panel.flip_horizontal_checkbox.blockSignals(False)
+        self.binarization_panel.flip_vertical_checkbox.blockSignals(False)
 
     def _compute_preprocessed_pixels(self):
         """计算并缓存预处理结果"""

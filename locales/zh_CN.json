@@ -84,7 +84,11 @@
     "selection_target_color": "选择目标颜色: {color}",
     "selection_size_mismatch": "选区尺寸不匹配，已清除选区",
     "selection_filled": "选区已填充",
-    "feature_unavailable": "此功能需要 OpenCV 或 SciPy 库"
+    "feature_unavailable": "此功能需要 OpenCV 或 SciPy 库",
+    "image_inverted": "图像已反相",
+    "image_flipped_horizontal": "图像已水平翻转",
+    "image_flipped_vertical": "图像已垂直翻转",
+    "transform_binary_only": "图像变换功能仅在二值化视图下可用，请先切换到二值化模式"
   },
   "selection": {
     "drag_select": "涂抹",
@@ -249,7 +253,12 @@
     "denoise_morph_close": "形态学-闭运算",
     "denoise_strength": "强度：{value}",
     "tab_preprocess": "预处理",
-    "tab_binarization": "二值化"
+    "tab_binarization": "二值化",
+    "tab_other": "其他",
+    "image_transform": "图像变换",
+    "invert_image": "反相",
+    "flip_horizontal": "水平翻转",
+    "flip_vertical": "垂直翻转"
   },
   "properties_panel": {
     "properties": "属性",

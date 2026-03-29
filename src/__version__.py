@@ -4,7 +4,7 @@
 所有版本号从这里读取，确保版本号的一致性。
 """
 
-__version__ = "1.5.9.0"
+__version__ = "v1.5.10.0"
 __author__ = "夏次一定de"
 __release_date__ = "2026-03-29"
 __app_name__ = "BinarizationTool"

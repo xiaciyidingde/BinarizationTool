@@ -37,6 +37,9 @@ class BinarizationPanel(QWidget):
     # 信号：视图模式改变 (mode: 'original', 'preprocessed', 'binary')
     view_mode_changed = Signal(str)
 
+    # 信号：图像变换操作 (operation: 'invert', 'flip_horizontal', 'flip_vertical')
+    image_transform = Signal(str)
+
     def __init__(self, parent=None, panel_width=300):
         """
         初始化二值化面板
@@ -113,6 +116,10 @@ class BinarizationPanel(QWidget):
         # 创建二值化标签页
         binarization_tab = self._create_binarization_tab()
         self.tab_widget.addTab(binarization_tab, self.tr.tr('binarization_panel.tab_binarization'))
+
+        # 创建其他标签页
+        other_tab = self._create_other_tab()
+        self.tab_widget.addTab(other_tab, self.tr.tr('binarization_panel.tab_other'))
 
         # 默认显示预处理标签页
         self.tab_widget.setCurrentIndex(0)
@@ -803,6 +810,65 @@ class BinarizationPanel(QWidget):
 
         return container
 
+    def _create_other_tab(self):
+        """创建其他标签页"""
+        # 创建滚动区域
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollArea > QWidget > QWidget {
+                background-color: transparent;
+            }
+        """)
+
+        # 标签页内容容器
+        tab_content = QWidget()
+        tab_content.setStyleSheet("background-color: transparent;")
+        settings_layout = QVBoxLayout(tab_content)
+        settings_layout.setContentsMargins(12, 8, 12, 8)
+        settings_layout.setSpacing(8)
+
+        # === 图像变换 ===
+        transform_group = QGroupBox(self.tr.tr('binarization_panel.image_transform'))
+        transform_layout = QVBoxLayout()
+        transform_layout.setSpacing(8)
+
+        # 反相复选框
+        from PySide6.QtWidgets import QCheckBox
+        self.invert_checkbox = QCheckBox(self.tr.tr('binarization_panel.invert_image'))
+        self.invert_checkbox.setObjectName("transformCheckbox")
+        self.invert_checkbox.setMinimumHeight(32)
+        self.invert_checkbox.stateChanged.connect(self._on_invert_changed)
+        transform_layout.addWidget(self.invert_checkbox)
+
+        # 水平翻转复选框
+        self.flip_horizontal_checkbox = QCheckBox(self.tr.tr('binarization_panel.flip_horizontal'))
+        self.flip_horizontal_checkbox.setObjectName("transformCheckbox")
+        self.flip_horizontal_checkbox.setMinimumHeight(32)
+        self.flip_horizontal_checkbox.stateChanged.connect(self._on_flip_horizontal_changed)
+        transform_layout.addWidget(self.flip_horizontal_checkbox)
+
+        # 垂直翻转复选框
+        self.flip_vertical_checkbox = QCheckBox(self.tr.tr('binarization_panel.flip_vertical'))
+        self.flip_vertical_checkbox.setObjectName("transformCheckbox")
+        self.flip_vertical_checkbox.setMinimumHeight(32)
+        self.flip_vertical_checkbox.stateChanged.connect(self._on_flip_vertical_changed)
+        transform_layout.addWidget(self.flip_vertical_checkbox)
+
+        transform_group.setLayout(transform_layout)
+        settings_layout.addWidget(transform_group)
+
+        # 添加弹性空间
+        settings_layout.addStretch()
+
+        scroll.setWidget(tab_content)
+        return scroll
+
     def connect_signals(self):
         """连接信号"""
         self.method_combo.currentIndexChanged.connect(self._on_parameters_changed)
@@ -867,6 +933,21 @@ class BinarizationPanel(QWidget):
     def _on_view_mode_changed(self, mode: str):
         """视图模式改变事件"""
         self.view_mode_changed.emit(mode)
+
+    def _on_invert_changed(self, state):
+        """反相复选框状态改变事件"""
+        if state:
+            self.image_transform.emit('invert')
+        else:
+            self.image_transform.emit('invert')  # 再次反相恢复
+
+    def _on_flip_horizontal_changed(self, state):
+        """水平翻转复选框状态改变事件"""
+        self.image_transform.emit('flip_horizontal')
+
+    def _on_flip_vertical_changed(self, state):
+        """垂直翻转复选框状态改变事件"""
+        self.image_transform.emit('flip_vertical')
 
     def _update_threshold_enabled(self):
         """更新二值化方法参数的显示状态"""
