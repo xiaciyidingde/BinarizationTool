@@ -26,6 +26,7 @@
     "brush": "画笔",
     "crop": "裁剪",
     "selection": "选择",
+    "measure": "测量",
     "settings": "设置",
     "about": "关于",
     "current_tool": "当前工具：{tool}"
@@ -35,7 +36,8 @@
     "pan": "抓取",
     "brush": "画笔",
     "crop": "裁剪",
-    "selection": "选择"
+    "selection": "选择",
+    "measure": "测量"
   },
   "tooltip": {
     "open": "打开图片 (Ctrl+O)",
@@ -49,6 +51,7 @@
     "brush_tool": "画笔工具 (B)",
     "crop_tool": "裁剪工具 (C)",
     "selection_tool": "选择工具 (W)",
+    "measure_tool": "测量工具 (M) - 测量距离和角度",
     "deselect": "取消选择 (Ctrl+D)",
     "invert_selection": "反选 (Ctrl+Shift+I)"
   },
@@ -66,6 +69,8 @@
     "brush_activated": "画笔工具已激活",
     "crop_activated": "裁剪工具已激活",
     "selection_activated": "选择工具已激活 - 模式：{mode}",
+    "measure_activated": "测量工具已激活 - 拖动鼠标测量距离和角度",
+    "measure_cleared": "已清除测量数据",
     "deselected": "已取消选择",
     "inverted": "已反选",
     "selected_color": "已选择所有{color}像素",
@@ -295,7 +300,9 @@
     "deselect": "取消选择",
     "invert": "反选",
     "fill_selection_holes": "填充选区",
-    "fill_selection_holes_tooltip": "填充选区内部的空洞，使选区变为实心"
+    "fill_selection_holes_tooltip": "填充选区内部的空洞，使选区变为实心",
+    "clear_measure": "清除测量",
+    "clear_measure_tooltip": "清除当前的测量数据"
   },
   "layers_panel": {
     "save_selection": "保存选区",

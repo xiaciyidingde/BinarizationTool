@@ -423,6 +423,14 @@ class MainWindow(QMainWindow):
         self.selection_tool_action.setToolTip(self.tr.tr('tooltip.selection_tool'))
         self.selection_tool_action.triggered.connect(self._select_selection_tool)
         self.addAction(self.selection_tool_action)
+        
+        # 测量工具动作
+        self.measure_action = QAction(self.tr.tr('toolbar.measure'), self)
+        self.measure_action.setShortcut("M")
+        self.measure_action.setCheckable(True)
+        self.measure_action.setToolTip(self.tr.tr('tooltip.measure_tool'))
+        self.measure_action.triggered.connect(self._select_measure_tool)
+        self.addAction(self.measure_action)
 
         # 选区菜单动作
         self.deselect_action = QAction(self.tr.tr('tooltip.deselect'), self)
@@ -523,6 +531,12 @@ class MainWindow(QMainWindow):
         self.selection_tool_button.clicked.connect(self._select_selection_tool)
         self.selection_tool_button.installEventFilter(self)
         tool_layout.addWidget(self.selection_tool_button)
+        
+        self.measure_button = create_toolbar_button(self.tr.tr('toolbar.measure'), self.tr.tr('tooltip.measure_tool'), checkable=True)
+        self.measure_button.setEnabled(False)  # 初始禁用
+        self.measure_button.clicked.connect(self._select_measure_tool)
+        tool_layout.addWidget(self.measure_button)
+        
         toolbar_layout.addWidget(tool_group)
 
         # 添加弹性空间
@@ -1189,6 +1203,7 @@ class MainWindow(QMainWindow):
         self.brush_button.setChecked(False)
         self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(False)
+        self.measure_button.setChecked(False)
         self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.pan')))
         self.statusbar.showMessage(self.tr.tr('message.pan_activated'))
 
@@ -1213,6 +1228,7 @@ class MainWindow(QMainWindow):
         self.brush_button.setChecked(True)
         self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(False)
+        self.measure_button.setChecked(False)
         self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.brush')))
         self.statusbar.showMessage(self.tr.tr('message.brush_activated'))
 
@@ -1236,6 +1252,7 @@ class MainWindow(QMainWindow):
         self.brush_button.setChecked(False)
         self.crop_button.setChecked(True)
         self.selection_tool_button.setChecked(False)
+        self.measure_button.setChecked(False)
         self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.crop')))
         self.statusbar.showMessage(self.tr.tr('message.crop_activated'))
 
@@ -1257,6 +1274,7 @@ class MainWindow(QMainWindow):
         self.brush_button.setChecked(False)
         self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(True)
+        self.measure_button.setChecked(False)
         self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.selection')))
         mode_text = self.tr.tr('mode.add') if self.canvas.selection_tool.selection_mode == 'add' else self.tr.tr('mode.subtract')
         self.statusbar.showMessage(self.tr.tr('message.selection_activated', mode=mode_text))
@@ -1266,6 +1284,24 @@ class MainWindow(QMainWindow):
 
         # 确保 Canvas 获得焦点以接收键盘事件
         self.canvas.setFocus()
+    
+    def _select_measure_tool(self):
+        """选择测量工具"""
+        if self.image_data is None:
+            self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
+            return
+        
+        self.canvas.set_tool(self.canvas.measure_tool)
+        self.pan_button.setChecked(False)
+        self.brush_button.setChecked(False)
+        self.crop_button.setChecked(False)
+        self.selection_tool_button.setChecked(False)
+        self.measure_button.setChecked(True)
+        self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.measure')))
+        self.statusbar.showMessage(self.tr.tr('message.measure_activated'))
+        
+        # 显示测量工具设置
+        self.properties_panel.show_measure_settings()
 
     def _deselect(self):
         """取消选择"""
@@ -2136,11 +2172,8 @@ class MainWindow(QMainWindow):
         self.redo_action_btn.setEnabled(self.history_manager.can_redo())
         self.reset_action_btn.setEnabled(has_image and self._has_edits())
 
-        # 工具
-        self.pan_button.setEnabled(has_image)
-        self.brush_button.setEnabled(has_image)
-        self.crop_button.setEnabled(has_image)
-        self.selection_tool_button.setEnabled(has_image)
+        # 工具状态（使用专门的方法处理）
+        self._update_tool_states()
 
         # 选区操作（保留 action 引用用于快捷键）
         has_selection = (self.image_data is not None and
@@ -2350,6 +2383,18 @@ class MainWindow(QMainWindow):
         self.properties_panel.fill_selection_holes_button.clicked.connect(
             self._fill_selection_holes
         )
+        
+        # 测量工具设置
+        self.properties_panel.clear_measure_button.clicked.connect(
+            self._clear_measure
+        )
+
+    def _clear_measure(self):
+        """清除测量数据"""
+        if isinstance(self.canvas.current_tool, self.canvas.measure_tool.__class__):
+            self.canvas.measure_tool.clear()
+            self.canvas.update()
+            self.statusbar.showMessage(self.tr.tr('message.measure_cleared'))
 
     def _on_selection_size_changed_panel(self, value: int):
         """属性面板：选择范围改变"""
@@ -2725,13 +2770,16 @@ class MainWindow(QMainWindow):
             self.brush_button.setEnabled(False)
             self.crop_button.setEnabled(False)
             self.selection_tool_button.setEnabled(False)
+            self.measure_button.setEnabled(False)
             return
 
         mode = self.image_data.view_mode
         is_root_layer = (self.active_layer_id == "root")
 
         # 抓取工具：在所有模式和图层下可用
+        # 测量工具：在所有模式和图层下可用
         self.pan_button.setEnabled(True)
+        self.measure_button.setEnabled(True)
 
         # 裁剪工具：仅在根图层可用
         crop_enabled = is_root_layer

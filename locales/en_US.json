@@ -26,6 +26,7 @@
     "brush": "Brush",
     "crop": "Crop",
     "selection": "Selection",
+    "measure": "Measure",
     "settings": "Settings",
     "about": "About",
     "current_tool": "Current Tool: {tool}"
@@ -35,7 +36,8 @@
     "pan": "Pan",
     "brush": "Brush",
     "crop": "Crop",
-    "selection": "Selection"
+    "selection": "Selection",
+    "measure": "Measure"
   },
   "tooltip": {
     "open": "Open Image (Ctrl+O)",
@@ -49,6 +51,7 @@
     "brush_tool": "Brush Tool (B)",
     "crop_tool": "Crop Tool (C)",
     "selection_tool": "Selection Tool (W)",
+    "measure_tool": "Measure Tool (M) - Measure distance and angle",
     "deselect": "Deselect (Ctrl+D)",
     "invert_selection": "Invert Selection (Ctrl+Shift+I)"
   },
@@ -66,6 +69,8 @@
     "brush_activated": "Brush tool activated",
     "crop_activated": "Crop tool activated",
     "selection_activated": "Selection tool activated - Mode: {mode}",
+    "measure_activated": "Measure tool activated - Drag to measure distance and angle",
+    "measure_cleared": "Measurement data cleared",
     "deselected": "Deselected",
     "inverted": "Selection inverted",
     "selected_color": "Selected all {color} pixels",
@@ -295,7 +300,9 @@
     "deselect": "Deselect",
     "invert": "Invert",
     "fill_selection_holes": "Fill Selection",
-    "fill_selection_holes_tooltip": "Fill holes inside the selection to make it solid"
+    "fill_selection_holes_tooltip": "Fill holes inside the selection to make it solid",
+    "clear_measure": "Clear Measure",
+    "clear_measure_tooltip": "Clear current measurement data"
   },
   "layers_panel": {
     "save_selection": "Save Selection",

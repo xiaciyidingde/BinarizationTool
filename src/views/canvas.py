@@ -21,6 +21,7 @@ from PySide6.QtWidgets import QWidget
 from ..models.brush_tool import BrushTool
 from ..models.crop_tool import CropTool
 from ..models.image_data import ImageData
+from ..models.measure_tool import MeasureTool
 from ..models.pan_tool import PanTool
 from ..models.selection_tool import SelectionTool
 from ..models.tile_cache import TileCache
@@ -68,11 +69,12 @@ class Canvas(QWidget):
         self.coord_transform = CoordinateTransform()
 
         # 工具
-        self.current_tool: BrushTool | CropTool | SelectionTool | PanTool | None = None
+        self.current_tool: BrushTool | CropTool | SelectionTool | PanTool | MeasureTool | None = None
         self.pan_tool = PanTool()
         self.brush_tool = BrushTool()
         self.crop_tool = CropTool()
         self.selection_tool = SelectionTool()
+        self.measure_tool = MeasureTool()
 
         # 分块渲染缓存
         # 提高缓存数量以支持大缩放时的流畅绘制
@@ -194,6 +196,9 @@ class Canvas(QWidget):
         elif isinstance(tool, SelectionTool):
             # 选择工具：隐藏系统光标（无论哪种模式都显示自定义光标）
             self.setCursor(Qt.BlankCursor)
+        elif isinstance(tool, MeasureTool):
+            # 测量工具：使用十字光标
+            self.setCursor(Qt.CrossCursor)
         else:
             # 其他工具或无工具：恢复默认光标
             self.setCursor(Qt.ArrowCursor)
@@ -285,6 +290,10 @@ class Canvas(QWidget):
                 self.mouse_pos.y(),
                 view_size
             )
+        
+        # 渲染测量工具的测量线和信息
+        if isinstance(self.current_tool, MeasureTool) and self.current_tool.start_point is not None:
+            self._render_measure_line(painter)
 
         # 渲染处理中提示（最后渲染，确保在最上层）
         if self.is_processing:
@@ -334,6 +343,95 @@ class Canvas(QWidget):
         text_y = box_y + padding + metrics.ascent()
         painter.drawText(int(text_x), int(text_y), text)
 
+        painter.restore()
+    
+    def _render_measure_line(self, painter: QPainter):
+        """
+        渲染测量线和测量信息
+        
+        Args:
+            painter: QPainter 对象
+        """
+        if self.current_tool.start_point is None or self.current_tool.end_point is None:
+            return
+        
+        # 将图像坐标转换为视图坐标
+        start_x, start_y = self.view_transform.pixel_to_view(
+            self.current_tool.start_point[0],
+            self.current_tool.start_point[1]
+        )
+        end_x, end_y = self.view_transform.pixel_to_view(
+            self.current_tool.end_point[0],
+            self.current_tool.end_point[1]
+        )
+        
+        painter.save()
+        
+        # 绘制测量线
+        from PySide6.QtGui import QPen, QColor
+        pen = QPen(QColor(0, 120, 215), 2)  # 蓝色线条
+        pen.setStyle(Qt.SolidLine)
+        painter.setPen(pen)
+        painter.drawLine(int(start_x), int(start_y), int(end_x), int(end_y))
+        
+        # 绘制起点和终点圆圈
+        # 如果鼠标悬停在端点上，绘制更大的圆圈
+        start_radius = 5 if self.current_tool.hover_point == 'start' else 4
+        end_radius = 5 if self.current_tool.hover_point == 'end' else 4
+        
+        # 绘制外圈（白色边框）
+        painter.setPen(QPen(QColor(255, 255, 255), 2))
+        painter.setBrush(QColor(0, 120, 215))
+        painter.drawEllipse(int(start_x) - start_radius, int(start_y) - start_radius, 
+                           start_radius * 2, start_radius * 2)
+        painter.drawEllipse(int(end_x) - end_radius, int(end_y) - end_radius, 
+                           end_radius * 2, end_radius * 2)
+        
+        # 获取测量数据
+        distance = self.current_tool.get_distance()
+        angle = self.current_tool.get_angle()
+        dx, dy = self.current_tool.get_delta()
+        
+        # 绘制测量信息文本
+        info_text = f"D: {distance:.1f}px  ∠: {angle:.1f}°  ΔX: {dx}  ΔY: {dy}"
+        
+        # 设置字体
+        font = painter.font()
+        font.setPointSize(10)
+        painter.setFont(font)
+        
+        # 计算文本位置（在线的中点附近）
+        mid_x = (start_x + end_x) / 2
+        mid_y = (start_y + end_y) / 2
+        
+        # 计算文本尺寸
+        metrics = painter.fontMetrics()
+        text_width = metrics.horizontalAdvance(info_text)
+        text_height = metrics.height()
+        
+        # 文本背景框
+        padding = 6
+        box_x = mid_x - text_width / 2 - padding
+        box_y = mid_y - text_height - padding - 10  # 在线上方显示
+        box_width = text_width + padding * 2
+        box_height = text_height + padding * 2
+        
+        # 绘制半透明背景
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(255, 255, 255, 240))
+        painter.drawRoundedRect(int(box_x), int(box_y), int(box_width), int(box_height), 4, 4)
+        
+        # 绘制边框
+        painter.setPen(QColor(0, 120, 215))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(int(box_x), int(box_y), int(box_width), int(box_height), 4, 4)
+        
+        # 绘制文本
+        painter.setPen(QColor(0, 0, 0))
+        text_x = box_x + padding
+        text_y = box_y + padding + metrics.ascent()
+        painter.drawText(int(text_x), int(text_y), info_text)
+        
         painter.restore()
 
     def mousePressEvent(self, event: QMouseEvent):
@@ -395,6 +493,17 @@ class Canvas(QWidget):
                                 dirty_rect[3] - dirty_rect[1]
                             )
                         self.update()
+                
+                elif isinstance(self.current_tool, MeasureTool):
+                    # 检查是否点击在端点上
+                    hover_point = self.current_tool.check_point_hover(pixel_x, pixel_y)
+                    if hover_point:
+                        # 开始拖动端点
+                        self.current_tool.start_drag_point(hover_point)
+                    else:
+                        # 开始新的测量
+                        self.current_tool.start_measure(pixel_x, pixel_y)
+                    self.update()
 
         elif event.button() == Qt.MiddleButton:
             # 中键平移
@@ -553,6 +662,25 @@ class Canvas(QWidget):
                         # 使用节流来批量失效瓦片
                         if not self.selection_update_timer.isActive():
                             self.selection_update_timer.start(self.selection_throttle_interval)
+            
+            elif isinstance(self.current_tool, MeasureTool):
+                if self.current_tool.is_measuring or self.current_tool.dragging_point:
+                    # 正在测量或拖动端点
+                    if self.current_tool.dragging_point:
+                        self.current_tool.drag_point(pixel_x, pixel_y)
+                    else:
+                        self.current_tool.update_measure(pixel_x, pixel_y)
+                    self.update()
+                else:
+                    # 检查鼠标是否悬停在端点上，更新光标
+                    hover_point = self.current_tool.check_point_hover(pixel_x, pixel_y)
+                    if hover_point != self.current_tool.hover_point:
+                        self.current_tool.hover_point = hover_point
+                        if hover_point:
+                            self.setCursor(Qt.SizeAllCursor)  # 四向箭头光标
+                        else:
+                            self.setCursor(Qt.CrossCursor)  # 恢复十字光标
+                    self.update()
 
             else:
                 # 更新光标显示
@@ -678,6 +806,14 @@ class Canvas(QWidget):
                         # 通知选区已修改（用于更新 UI 状态）
                         self.image_modified.emit()
                         self.update()
+                
+                elif isinstance(self.current_tool, MeasureTool):
+                    # 结束测量或拖动（保持测量结果显示）
+                    if self.current_tool.is_measuring:
+                        self.current_tool.end_measure()
+                    if self.current_tool.dragging_point:
+                        self.current_tool.end_drag_point()
+                    self.update()
 
         elif event.button() == Qt.MiddleButton:
             # 结束中键平移
