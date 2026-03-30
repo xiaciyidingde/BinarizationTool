@@ -838,27 +838,62 @@ class BinarizationPanel(QWidget):
         transform_layout = QVBoxLayout()
         transform_layout.setSpacing(8)
 
-        # 反相复选框
-        from PySide6.QtWidgets import QCheckBox
-        self.invert_checkbox = QCheckBox(self.tr.tr('binarization_panel.invert_image'))
-        self.invert_checkbox.setObjectName("transformCheckbox")
-        self.invert_checkbox.setMinimumHeight(32)
-        self.invert_checkbox.stateChanged.connect(self._on_invert_changed)
-        transform_layout.addWidget(self.invert_checkbox)
+        # 导入图标资源
+        from ..utils.resources import CHECKED, UNCHECKED
 
-        # 水平翻转复选框
-        self.flip_horizontal_checkbox = QCheckBox(self.tr.tr('binarization_panel.flip_horizontal'))
-        self.flip_horizontal_checkbox.setObjectName("transformCheckbox")
-        self.flip_horizontal_checkbox.setMinimumHeight(32)
-        self.flip_horizontal_checkbox.stateChanged.connect(self._on_flip_horizontal_changed)
-        transform_layout.addWidget(self.flip_horizontal_checkbox)
+        # 反相
+        invert_row = QHBoxLayout()
+        invert_row.setSpacing(8)
+        self.invert_checkbox = QPushButton()
+        self.invert_checkbox.setObjectName("iconCheckbox")
+        self.invert_checkbox.setFixedSize(32, 32)
+        self.invert_checkbox.setCheckable(True)
+        self.invert_checkbox.setEnabled(False)
+        self.invert_checkbox.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        self.invert_checkbox.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(UNCHECKED))))
+        self.invert_checkbox.setIconSize(QPixmap.fromImage(QImage.fromData(UNCHECKED)).size().scaled(24, 24, Qt.KeepAspectRatio))
+        self.invert_checkbox.clicked.connect(self._on_invert_changed)
+        invert_label = QLabel(self.tr.tr('binarization_panel.invert_image'))
+        invert_label.setMinimumHeight(32)
+        invert_row.addWidget(self.invert_checkbox)
+        invert_row.addWidget(invert_label, 1)
+        transform_layout.addLayout(invert_row)
 
-        # 垂直翻转复选框
-        self.flip_vertical_checkbox = QCheckBox(self.tr.tr('binarization_panel.flip_vertical'))
-        self.flip_vertical_checkbox.setObjectName("transformCheckbox")
-        self.flip_vertical_checkbox.setMinimumHeight(32)
-        self.flip_vertical_checkbox.stateChanged.connect(self._on_flip_vertical_changed)
-        transform_layout.addWidget(self.flip_vertical_checkbox)
+        # 水平翻转
+        flip_h_row = QHBoxLayout()
+        flip_h_row.setSpacing(8)
+        self.flip_horizontal_checkbox = QPushButton()
+        self.flip_horizontal_checkbox.setObjectName("iconCheckbox")
+        self.flip_horizontal_checkbox.setFixedSize(32, 32)
+        self.flip_horizontal_checkbox.setCheckable(True)
+        self.flip_horizontal_checkbox.setEnabled(False)
+        self.flip_horizontal_checkbox.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        self.flip_horizontal_checkbox.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(UNCHECKED))))
+        self.flip_horizontal_checkbox.setIconSize(QPixmap.fromImage(QImage.fromData(UNCHECKED)).size().scaled(24, 24, Qt.KeepAspectRatio))
+        self.flip_horizontal_checkbox.clicked.connect(self._on_flip_horizontal_changed)
+        flip_h_label = QLabel(self.tr.tr('binarization_panel.flip_horizontal'))
+        flip_h_label.setMinimumHeight(32)
+        flip_h_row.addWidget(self.flip_horizontal_checkbox)
+        flip_h_row.addWidget(flip_h_label, 1)
+        transform_layout.addLayout(flip_h_row)
+
+        # 垂直翻转
+        flip_v_row = QHBoxLayout()
+        flip_v_row.setSpacing(8)
+        self.flip_vertical_checkbox = QPushButton()
+        self.flip_vertical_checkbox.setObjectName("iconCheckbox")
+        self.flip_vertical_checkbox.setFixedSize(32, 32)
+        self.flip_vertical_checkbox.setCheckable(True)
+        self.flip_vertical_checkbox.setEnabled(False)
+        self.flip_vertical_checkbox.setStyleSheet("QPushButton { border: none; background: transparent; }")
+        self.flip_vertical_checkbox.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(UNCHECKED))))
+        self.flip_vertical_checkbox.setIconSize(QPixmap.fromImage(QImage.fromData(UNCHECKED)).size().scaled(24, 24, Qt.KeepAspectRatio))
+        self.flip_vertical_checkbox.clicked.connect(self._on_flip_vertical_changed)
+        flip_v_label = QLabel(self.tr.tr('binarization_panel.flip_vertical'))
+        flip_v_label.setMinimumHeight(32)
+        flip_v_row.addWidget(self.flip_vertical_checkbox)
+        flip_v_row.addWidget(flip_v_label, 1)
+        transform_layout.addLayout(flip_v_row)
 
         transform_group.setLayout(transform_layout)
         settings_layout.addWidget(transform_group)
@@ -934,19 +969,37 @@ class BinarizationPanel(QWidget):
         """视图模式改变事件"""
         self.view_mode_changed.emit(mode)
 
-    def _on_invert_changed(self, state):
-        """反相复选框状态改变事件"""
-        if state:
-            self.image_transform.emit('invert')
+    def _on_invert_changed(self):
+        """反相按钮点击事件"""
+        from ..utils.resources import CHECKED, UNCHECKED
+        # 更新图标
+        if self.invert_checkbox.isChecked():
+            self.invert_checkbox.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(CHECKED))))
         else:
-            self.image_transform.emit('invert')  # 再次反相恢复
+            self.invert_checkbox.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(UNCHECKED))))
+        # 发送信号
+        self.image_transform.emit('invert')
 
-    def _on_flip_horizontal_changed(self, state):
-        """水平翻转复选框状态改变事件"""
+    def _on_flip_horizontal_changed(self):
+        """水平翻转按钮点击事件"""
+        from ..utils.resources import CHECKED, UNCHECKED
+        # 更新图标
+        if self.flip_horizontal_checkbox.isChecked():
+            self.flip_horizontal_checkbox.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(CHECKED))))
+        else:
+            self.flip_horizontal_checkbox.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(UNCHECKED))))
+        # 发送信号
         self.image_transform.emit('flip_horizontal')
 
-    def _on_flip_vertical_changed(self, state):
-        """垂直翻转复选框状态改变事件"""
+    def _on_flip_vertical_changed(self):
+        """垂直翻转按钮点击事件"""
+        from ..utils.resources import CHECKED, UNCHECKED
+        # 更新图标
+        if self.flip_vertical_checkbox.isChecked():
+            self.flip_vertical_checkbox.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(CHECKED))))
+        else:
+            self.flip_vertical_checkbox.setIcon(QIcon(QPixmap.fromImage(QImage.fromData(UNCHECKED))))
+        # 发送信号
         self.image_transform.emit('flip_vertical')
 
     def _update_threshold_enabled(self):
@@ -1123,6 +1176,12 @@ class BinarizationPanel(QWidget):
         self.red_channel_slider.setEnabled(enabled)
         self.green_channel_slider.setEnabled(enabled)
         self.blue_channel_slider.setEnabled(enabled)
+        self.edge_mode_combo.setEnabled(enabled)
+        self.denoise_method_combo.setEnabled(enabled)
+        self.invert_checkbox.setEnabled(enabled)
+        self.flip_horizontal_checkbox.setEnabled(enabled)
+        self.flip_vertical_checkbox.setEnabled(enabled)
+        self.flip_vertical_checkbox.setEnabled(enabled)
 
     def set_current_layer(self, layer_name: str):
         """
