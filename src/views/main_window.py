@@ -2175,6 +2175,9 @@ class MainWindow(QMainWindow):
         # 工具状态（使用专门的方法处理）
         self._update_tool_states()
 
+        # 二值化面板状态
+        self.binarization_panel.set_enabled(has_image)
+
         # 选区操作（保留 action 引用用于快捷键）
         has_selection = (self.image_data is not None and
                         self.image_data.selection_mask is not None and
