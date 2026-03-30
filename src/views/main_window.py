@@ -102,7 +102,7 @@ class MainWindow(QMainWindow):
         # 应用深色标题栏（Windows 11）
         self._apply_dark_titlebar()
 
-        # 创建 UI
+        # 创建 UI（必须在 create_actions 之前，因为 ShortcutHandler 需要 canvas）
         self.setup_ui()
         self.create_actions()
         self.create_toolbars()
@@ -128,6 +128,21 @@ class MainWindow(QMainWindow):
 
         # 初始状态
         self._update_ui_state()
+        
+    def eventFilter(self, obj, event):
+        """事件过滤器 - 更新标尺鼠标指示器"""
+        if obj == self.canvas:
+            from PySide6.QtCore import QEvent
+            if event.type() == QEvent.MouseMove:
+                # 更新标尺的鼠标位置指示器
+                pos = event.pos()
+                self.horizontal_ruler.update_mouse_position(pos.x())
+                self.vertical_ruler.update_mouse_position(pos.y())
+            elif event.type() == QEvent.Leave:
+                # 鼠标离开 Canvas 时清除指示器
+                self.horizontal_ruler.clear_mouse_position()
+                self.vertical_ruler.clear_mouse_position()
+        return super().eventFilter(obj, event)
 
     def closeEvent(self, event):
         """窗口关闭事件 - 清理资源"""
@@ -253,12 +268,11 @@ class MainWindow(QMainWindow):
         center_right_splitter.setHandleWidth(1)  # 设置分隔条宽度
         center_right_splitter.setChildrenCollapsible(False)
 
-        # 中间：Canvas
-        self.canvas = Canvas()
-        self.canvas.setMinimumWidth(self.CANVAS_MIN_WIDTH)
-        center_right_splitter.addWidget(self.canvas)
+        # 中间：Canvas 容器（包含标尺和画布）
+        canvas_container = self._create_canvas_with_rulers()
+        canvas_container.setMinimumWidth(self.CANVAS_MIN_WIDTH)
+        center_right_splitter.addWidget(canvas_container)
 
-        # 右侧：属性面板
         # 右侧：属性面板
         from .properties_panel import PropertiesPanel
         self.properties_panel = PropertiesPanel()
@@ -282,6 +296,47 @@ class MainWindow(QMainWindow):
         main_splitter.handle(1).setEnabled(False)  # 禁用第一个分隔条
 
         main_layout.addWidget(main_splitter)
+        
+    def _create_canvas_with_rulers(self):
+        """创建带标尺的 Canvas 容器"""
+        from PySide6.QtWidgets import QGridLayout
+        from ..widgets.ruler import Ruler, RulerCorner
+        
+        container = QWidget()
+        layout = QGridLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # 创建标尺
+        self.ruler_corner = RulerCorner()
+        self.horizontal_ruler = Ruler(Ruler.HORIZONTAL)
+        self.vertical_ruler = Ruler(Ruler.VERTICAL)
+        
+        # 创建 Canvas
+        self.canvas = Canvas()
+        
+        # 设置坐标转换器
+        self.horizontal_ruler.set_coordinate_transform(self.canvas.coord_transform)
+        self.vertical_ruler.set_coordinate_transform(self.canvas.coord_transform)
+        
+        # 布局：
+        # [角落] [水平标尺]
+        # [垂直标尺] [Canvas]
+        layout.addWidget(self.ruler_corner, 0, 0)
+        layout.addWidget(self.horizontal_ruler, 0, 1)
+        layout.addWidget(self.vertical_ruler, 1, 0)
+        layout.addWidget(self.canvas, 1, 1)
+        
+        # 连接鼠标移动事件以更新标尺指示器
+        self.canvas.installEventFilter(self)
+        
+        # 根据配置显示/隐藏标尺
+        show_ruler = self.config_manager.get('interface', 'show_ruler', True)
+        self.ruler_corner.setVisible(show_ruler)
+        self.horizontal_ruler.setVisible(show_ruler)
+        self.vertical_ruler.setVisible(show_ruler)
+        
+        return container
 
     def create_actions(self):
         """创建动作"""
@@ -368,6 +423,14 @@ class MainWindow(QMainWindow):
         self.selection_tool_action.setToolTip(self.tr.tr('tooltip.selection_tool'))
         self.selection_tool_action.triggered.connect(self._select_selection_tool)
         self.addAction(self.selection_tool_action)
+        
+        # 测量工具动作
+        self.measure_action = QAction(self.tr.tr('toolbar.measure'), self)
+        self.measure_action.setShortcut("M")
+        self.measure_action.setCheckable(True)
+        self.measure_action.setToolTip(self.tr.tr('tooltip.measure_tool'))
+        self.measure_action.triggered.connect(self._select_measure_tool)
+        self.addAction(self.measure_action)
 
         # 选区菜单动作
         self.deselect_action = QAction(self.tr.tr('tooltip.deselect'), self)
@@ -468,6 +531,12 @@ class MainWindow(QMainWindow):
         self.selection_tool_button.clicked.connect(self._select_selection_tool)
         self.selection_tool_button.installEventFilter(self)
         tool_layout.addWidget(self.selection_tool_button)
+        
+        self.measure_button = create_toolbar_button(self.tr.tr('toolbar.measure'), self.tr.tr('tooltip.measure_tool'), checkable=True)
+        self.measure_button.setEnabled(False)  # 初始禁用
+        self.measure_button.clicked.connect(self._select_measure_tool)
+        tool_layout.addWidget(self.measure_button)
+        
         toolbar_layout.addWidget(tool_group)
 
         # 添加弹性空间
@@ -499,6 +568,13 @@ class MainWindow(QMainWindow):
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
         self.statusbar.showMessage(self.tr.tr('app.ready'))
+        
+        # 在状态栏右侧添加鼠标坐标显示
+        from PySide6.QtWidgets import QLabel
+        self.mouse_pos_label = QLabel("")
+        self.mouse_pos_label.setMinimumWidth(150)
+        self.mouse_pos_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.statusbar.addPermanentWidget(self.mouse_pos_label)
 
         # 创建菜单栏（但隐藏，功能通过工具栏和快捷键访问）
         self._create_menus()
@@ -512,6 +588,9 @@ class MainWindow(QMainWindow):
         # 视图模式切换
         self.binarization_panel.view_mode_changed.connect(self._on_view_mode_changed)
 
+        # 图像变换操作
+        self.binarization_panel.image_transform.connect(self._on_image_transform)
+
         # Canvas 图片修改
         self.canvas.image_modified.connect(self._on_image_modified)
 
@@ -520,6 +599,9 @@ class MainWindow(QMainWindow):
 
         # Canvas 缩放变化
         self.canvas.zoom_changed.connect(self.properties_panel.set_zoom_level)
+        
+        # Canvas 鼠标位置变化
+        self.canvas.mouse_position_changed.connect(self._on_mouse_position_changed)
 
         # 属性面板工具设置信号
         self._connect_tool_settings()
@@ -529,6 +611,8 @@ class MainWindow(QMainWindow):
         self.properties_panel.layers_panel.save_selection_clicked.connect(self._on_save_selection_as_layer)
         self.properties_panel.layers_panel.layer_deleted.connect(self._on_layer_deleted)
         self.properties_panel.layers_panel.layer_visibility_changed.connect(self._on_layer_visibility_changed)
+        self.properties_panel.layers_panel.layer_order_changed.connect(self._on_layer_order_changed)
+        self.properties_panel.layers_panel.layer_name_changed.connect(self._on_layer_name_changed)
         
         # 选区边框渲染完成信号 - 连接一次，避免重复连接
         if hasattr(self.canvas, 'selection_border_renderer'):
@@ -771,6 +855,81 @@ class MainWindow(QMainWindow):
         # 显示状态消息
         status = self.tr.tr('layers_panel.layer_visible') if visible else self.tr.tr('layers_panel.layer_hidden')
         self.statusbar.showMessage(status)
+    
+    def _on_layer_order_changed(self, layer_ids: list):
+        """
+        图层顺序改变
+        
+        Args:
+            layer_ids: 新的图层 ID 顺序（从上到下，不包括根图层）
+        """
+        if self.image_data is None:
+            return
+        
+        # 过滤掉根图层 ID
+        user_layer_ids = [lid for lid in layer_ids if lid != "root"]
+        
+        # 根据新顺序重新排列 user_layers
+        new_layers = []
+        for layer_id in user_layer_ids:
+            for layer in self.image_data.user_layers:
+                if layer.id == layer_id:
+                    new_layers.append(layer)
+                    break
+        
+        # 更新图层列表
+        self.image_data.user_layers = new_layers
+        
+        # 如果当前在根图层，需要重新合成显示
+        if self.active_layer_id == "root":
+            self._safe_update_tile_cache(self.image_data.selection_mask)
+        
+        # 显示状态消息
+        self.statusbar.showMessage(self.tr.tr('layers_panel.layer_order_changed'))
+    
+    def _on_layer_name_changed(self, layer_id: str, new_name: str):
+        """
+        图层名称改变
+        
+        Args:
+            layer_id: 图层 ID
+            new_name: 新名称
+        """
+        if self.image_data is None:
+            return
+        
+        # 根图层不可重命名
+        if layer_id == "root":
+            return
+        
+        # 检查名称是否与其他图层重复
+        for layer in self.image_data.user_layers:
+            if layer.id != layer_id and layer.name == new_name:
+                # 名称重复，恢复原名称
+                original_name = None
+                for l in self.image_data.user_layers:
+                    if l.id == layer_id:
+                        original_name = l.name
+                        break
+                
+                if original_name:
+                    # 恢复图层面板中的名称
+                    self.properties_panel.layers_panel.update_layer_name(layer_id, original_name)
+                    # 显示错误消息
+                    self.statusbar.showMessage(self.tr.tr('layers_panel.duplicate_name_error', name=new_name), 3000)
+                return
+        
+        # 查找并更新图层名称
+        for layer in self.image_data.user_layers:
+            if layer.id == layer_id:
+                layer.name = new_name
+                break
+        
+        # 更新图层面板显示
+        self.properties_panel.layers_panel.update_layer_name(layer_id, new_name)
+        
+        # 显示状态消息
+        self.statusbar.showMessage(self.tr.tr('layers_panel.layer_renamed', name=new_name))
     
     def _on_merge_layers(self, layer_ids: list):
         """
@@ -1044,6 +1203,7 @@ class MainWindow(QMainWindow):
         self.brush_button.setChecked(False)
         self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(False)
+        self.measure_button.setChecked(False)
         self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.pan')))
         self.statusbar.showMessage(self.tr.tr('message.pan_activated'))
 
@@ -1068,6 +1228,7 @@ class MainWindow(QMainWindow):
         self.brush_button.setChecked(True)
         self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(False)
+        self.measure_button.setChecked(False)
         self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.brush')))
         self.statusbar.showMessage(self.tr.tr('message.brush_activated'))
 
@@ -1091,6 +1252,7 @@ class MainWindow(QMainWindow):
         self.brush_button.setChecked(False)
         self.crop_button.setChecked(True)
         self.selection_tool_button.setChecked(False)
+        self.measure_button.setChecked(False)
         self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.crop')))
         self.statusbar.showMessage(self.tr.tr('message.crop_activated'))
 
@@ -1112,6 +1274,7 @@ class MainWindow(QMainWindow):
         self.brush_button.setChecked(False)
         self.crop_button.setChecked(False)
         self.selection_tool_button.setChecked(True)
+        self.measure_button.setChecked(False)
         self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.selection')))
         mode_text = self.tr.tr('mode.add') if self.canvas.selection_tool.selection_mode == 'add' else self.tr.tr('mode.subtract')
         self.statusbar.showMessage(self.tr.tr('message.selection_activated', mode=mode_text))
@@ -1121,6 +1284,24 @@ class MainWindow(QMainWindow):
 
         # 确保 Canvas 获得焦点以接收键盘事件
         self.canvas.setFocus()
+    
+    def _select_measure_tool(self):
+        """选择测量工具"""
+        if self.image_data is None:
+            self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
+            return
+        
+        self.canvas.set_tool(self.canvas.measure_tool)
+        self.pan_button.setChecked(False)
+        self.brush_button.setChecked(False)
+        self.crop_button.setChecked(False)
+        self.selection_tool_button.setChecked(False)
+        self.measure_button.setChecked(True)
+        self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.measure')))
+        self.statusbar.showMessage(self.tr.tr('message.measure_activated'))
+        
+        # 显示测量工具设置
+        self.properties_panel.show_measure_settings()
 
     def _deselect(self):
         """取消选择"""
@@ -1316,6 +1497,9 @@ class MainWindow(QMainWindow):
             # 隐藏处理中状态
             self.canvas.set_processing(False)
 
+            # 重置变换复选框
+            self._reset_transform_checkboxes()
+
             # 更新状态
             self.statusbar.showMessage(self.tr.tr('message.loaded', path=file_path))
             self._update_ui_state()
@@ -1493,6 +1677,9 @@ class MainWindow(QMainWindow):
             # 更新图层面板
             self._sync_layers_panel()
 
+            # 重置变换复选框
+            self._reset_transform_checkboxes()
+
             self.statusbar.showMessage(self.tr.tr('message.undone'))
             self._update_ui_state()
             # 更新属性面板（撤销可能恢复裁剪前的尺寸）
@@ -1513,6 +1700,9 @@ class MainWindow(QMainWindow):
 
             # 更新图层面板
             self._sync_layers_panel()
+
+            # 重置变换复选框
+            self._reset_transform_checkboxes()
 
             self.statusbar.showMessage(self.tr.tr('message.redone'))
             self._update_ui_state()
@@ -1965,6 +2155,10 @@ class MainWindow(QMainWindow):
             
             # 更新显示（确保根图层显示合成效果）
             self._safe_update_tile_cache()
+    
+    def _on_mouse_position_changed(self, x: int, y: int):
+        """鼠标位置变化"""
+        self.mouse_pos_label.setText(f"X: {x}, Y: {y}")
 
     def _update_ui_state(self):
         """更新 UI 状态"""
@@ -1978,11 +2172,11 @@ class MainWindow(QMainWindow):
         self.redo_action_btn.setEnabled(self.history_manager.can_redo())
         self.reset_action_btn.setEnabled(has_image and self._has_edits())
 
-        # 工具
-        self.pan_button.setEnabled(has_image)
-        self.brush_button.setEnabled(has_image)
-        self.crop_button.setEnabled(has_image)
-        self.selection_tool_button.setEnabled(has_image)
+        # 工具状态（使用专门的方法处理）
+        self._update_tool_states()
+
+        # 二值化面板状态
+        self.binarization_panel.set_enabled(has_image)
 
         # 选区操作（保留 action 引用用于快捷键）
         has_selection = (self.image_data is not None and
@@ -2192,6 +2386,18 @@ class MainWindow(QMainWindow):
         self.properties_panel.fill_selection_holes_button.clicked.connect(
             self._fill_selection_holes
         )
+        
+        # 测量工具设置
+        self.properties_panel.clear_measure_button.clicked.connect(
+            self._clear_measure
+        )
+
+    def _clear_measure(self):
+        """清除测量数据"""
+        if isinstance(self.canvas.current_tool, self.canvas.measure_tool.__class__):
+            self.canvas.measure_tool.clear()
+            self.canvas.update()
+            self.statusbar.showMessage(self.tr.tr('message.measure_cleared'))
 
     def _on_selection_size_changed_panel(self, value: int):
         """属性面板：选择范围改变"""
@@ -2255,6 +2461,83 @@ class MainWindow(QMainWindow):
 
         mode_name = self.tr.tr(f'view_mode.{mode}')
         self.statusbar.showMessage(self.tr.tr('message.view_mode_changed', mode=mode_name))
+
+    def _on_image_transform(self, operation: str):
+        """
+        处理图像变换操作（仅在二值化视图下生效）
+
+        Args:
+            operation: 变换操作类型 ('invert', 'flip_horizontal', 'flip_vertical')
+        """
+        if self.image_data is None:
+            self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
+            # 重置复选框状态
+            self._reset_transform_checkboxes()
+            return
+
+        # 只在二值化视图下生效
+        if self.image_data.view_mode != 'binary':
+            self.statusbar.showMessage(self.tr.tr('message.transform_binary_only'))
+            # 重置复选框状态
+            self._reset_transform_checkboxes()
+            return
+
+        import cv2
+        import numpy as np
+
+        # 获取当前二值化图像（合成后的结果）
+        current_pixels = self.image_data.get_current_pixels()
+        if current_pixels is None:
+            self._reset_transform_checkboxes()
+            return
+
+        # 执行变换
+        transformed = None
+        if operation == 'invert':
+            # 反相：255 - 像素值
+            transformed = 255 - current_pixels
+            message = self.tr.tr('message.image_inverted')
+        elif operation == 'flip_horizontal':
+            # 水平翻转
+            transformed = cv2.flip(current_pixels, 1)
+            message = self.tr.tr('message.image_flipped_horizontal')
+        elif operation == 'flip_vertical':
+            # 垂直翻转
+            transformed = cv2.flip(current_pixels, 0)
+            message = self.tr.tr('message.image_flipped_vertical')
+
+        if transformed is not None:
+            # 保存到历史记录
+            self.history_manager.push_state(self.image_data)
+
+            # 更新基础二值化图层
+            self.image_data.update_base_layer(transformed)
+            
+            # 清除编辑图层（变换应用到整个图像）
+            self.image_data.edit_mask = None
+            self.image_data.edit_values = None
+
+            # 更新画布显示
+            self.canvas.update()
+            self.statusbar.showMessage(message)
+
+            # 标记为已修改
+            self._on_image_modified()
+
+    def _reset_transform_checkboxes(self):
+        """重置变换复选框状态"""
+        # 阻止信号，避免触发变换
+        self.binarization_panel.invert_checkbox.blockSignals(True)
+        self.binarization_panel.flip_horizontal_checkbox.blockSignals(True)
+        self.binarization_panel.flip_vertical_checkbox.blockSignals(True)
+        
+        self.binarization_panel.invert_checkbox.setChecked(False)
+        self.binarization_panel.flip_horizontal_checkbox.setChecked(False)
+        self.binarization_panel.flip_vertical_checkbox.setChecked(False)
+        
+        self.binarization_panel.invert_checkbox.blockSignals(False)
+        self.binarization_panel.flip_horizontal_checkbox.blockSignals(False)
+        self.binarization_panel.flip_vertical_checkbox.blockSignals(False)
 
     def _compute_preprocessed_pixels(self):
         """计算并缓存预处理结果"""
@@ -2490,13 +2773,16 @@ class MainWindow(QMainWindow):
             self.brush_button.setEnabled(False)
             self.crop_button.setEnabled(False)
             self.selection_tool_button.setEnabled(False)
+            self.measure_button.setEnabled(False)
             return
 
         mode = self.image_data.view_mode
         is_root_layer = (self.active_layer_id == "root")
 
         # 抓取工具：在所有模式和图层下可用
+        # 测量工具：在所有模式和图层下可用
         self.pan_button.setEnabled(True)
+        self.measure_button.setEnabled(True)
 
         # 裁剪工具：仅在根图层可用
         crop_enabled = is_root_layer
@@ -2581,6 +2867,13 @@ class MainWindow(QMainWindow):
         animations_enabled = config.get('interface', 'animations_enabled', True)
         from ..utils.animations import set_global_animation_enabled
         set_global_animation_enabled(animations_enabled)
+        
+        # 标尺显示开关
+        show_ruler = config.get('interface', 'show_ruler', True)
+        if hasattr(self, 'ruler_corner'):
+            self.ruler_corner.setVisible(show_ruler)
+            self.horizontal_ruler.setVisible(show_ruler)
+            self.vertical_ruler.setVisible(show_ruler)
 
         # 1. 编辑器设置
         # 画笔默认大小
@@ -2653,8 +2946,14 @@ class MainWindow(QMainWindow):
         # 版本号
         version_label = QLabel(self.tr.tr('about.version', version=__version__))
         version_label.setObjectName("aboutVersion")
-        version_label.setStyleSheet("font-size: 16px;")
+        version_label.setStyleSheet("font-size: 14px;")
         info_layout.addWidget(version_label)
+
+        # 作者
+        author_label = QLabel(self.tr.tr('about.author', author=__author__))
+        author_label.setObjectName("aboutAuthor")
+        author_label.setStyleSheet("font-size: 14px;")
+        info_layout.addWidget(author_label)
 
         # 发布日期
         date_label = QLabel(self.tr.tr('about.release_date', date=__release_date__))
@@ -2694,16 +2993,10 @@ class MainWindow(QMainWindow):
         desc_label.setWordWrap(True)
         layout.addWidget(desc_label)
 
-        # 作者
-        author_label = QLabel(self.tr.tr('about.author', author=__author__))
-        author_label.setObjectName("aboutAuthor")
-        author_label.setStyleSheet("font-size: 14px; margin-top: 10px;")
-        layout.addWidget(author_label)
-
         # 版权
         copyright_label = QLabel(self.tr.tr('about.copyright'))
         copyright_label.setObjectName("aboutCopyright")
-        copyright_label.setStyleSheet("font-size: 12px; margin-top: 5px;")
+        copyright_label.setStyleSheet("font-size: 12px; margin-top: 10px;")
         layout.addWidget(copyright_label)
 
         # 许可证

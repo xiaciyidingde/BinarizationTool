@@ -200,6 +200,11 @@ class PropertiesPanel(QWidget):
         self.selection_settings = self._create_selection_settings()
         self.selection_settings.setVisible(False)  # 默认隐藏
         layout.addWidget(self.selection_settings)
+        
+        # 测量工具设置
+        self.measure_settings = self._create_measure_settings()
+        self.measure_settings.setVisible(False)  # 默认隐藏
+        layout.addWidget(self.measure_settings)
 
         # 添加弹性空间
         layout.addStretch()
@@ -361,6 +366,20 @@ class PropertiesPanel(QWidget):
         container_layout.addWidget(actions_group)
 
         return container
+    
+    def _create_measure_settings(self) -> QGroupBox:
+        """创建测量工具设置"""
+        group = QGroupBox(self.tr.tr('properties_panel.quick_actions'))
+        layout = QVBoxLayout()
+        layout.setSpacing(8)
+        
+        # 清除测量按钮
+        self.clear_measure_button = QPushButton(self.tr.tr('properties_panel.clear_measure'))
+        self.clear_measure_button.setToolTip(self.tr.tr('properties_panel.clear_measure_tooltip'))
+        layout.addWidget(self.clear_measure_button)
+        
+        group.setLayout(layout)
+        return group
 
     def set_image_info(self, image_data, file_path: str | None = None):
         """
@@ -450,6 +469,7 @@ class PropertiesPanel(QWidget):
         self.tool_hint_label.setVisible(False)
         self.brush_settings.setVisible(True)
         self.selection_settings.setVisible(False)
+        self.measure_settings.setVisible(False)
 
     def show_selection_settings(self):
         """显示选择工具设置，隐藏其他"""
@@ -457,6 +477,15 @@ class PropertiesPanel(QWidget):
         self.tool_hint_label.setVisible(False)
         self.brush_settings.setVisible(False)
         self.selection_settings.setVisible(True)
+        self.measure_settings.setVisible(False)
+    
+    def show_measure_settings(self):
+        """显示测量工具设置，隐藏其他"""
+        self.tab_widget.setCurrentIndex(1)  # 切换到"工具"页
+        self.tool_hint_label.setVisible(False)
+        self.brush_settings.setVisible(False)
+        self.selection_settings.setVisible(False)
+        self.measure_settings.setVisible(True)
 
     def hide_all_tool_settings(self):
         """隐藏所有工具设置，切换回属性页"""
@@ -467,6 +496,7 @@ class PropertiesPanel(QWidget):
         self.tool_hint_label.setVisible(True)
         self.brush_settings.setVisible(False)
         self.selection_settings.setVisible(False)
+        self.measure_settings.setVisible(False)
 
     def _format_file_size(self, size_bytes: int) -> str:
         """

@@ -21,11 +21,13 @@ from PySide6.QtWidgets import QWidget
 from ..models.brush_tool import BrushTool
 from ..models.crop_tool import CropTool
 from ..models.image_data import ImageData
+from ..models.measure_tool import MeasureTool
 from ..models.pan_tool import PanTool
 from ..models.selection_tool import SelectionTool
 from ..models.tile_cache import TileCache
 from ..models.view_transform import ViewTransform
 from ..utils.config_manager import ConfigManager
+from ..utils.coordinate_transform import CoordinateTransform
 from ..utils.selection_border_renderer import SelectionBorderRenderer
 from ..utils.translation_manager import get_translator
 
@@ -42,6 +44,7 @@ class Canvas(QWidget):
     image_modified = Signal()  # 图片被修改时发射
     file_dropped = Signal(str)  # 文件拖放时发射，传递文件路径
     zoom_changed = Signal(float)  # 缩放比例变化时发射
+    mouse_position_changed = Signal(int, int)  # 鼠标位置变化时发射，传递图像坐标 (x, y)
 
     def __init__(self, parent=None):
         """
@@ -61,13 +64,17 @@ class Canvas(QWidget):
         # 数据
         self.image_data: ImageData | None = None
         self.view_transform = ViewTransform()
+        
+        # 坐标转换器
+        self.coord_transform = CoordinateTransform()
 
         # 工具
-        self.current_tool: BrushTool | CropTool | SelectionTool | PanTool | None = None
+        self.current_tool: BrushTool | CropTool | SelectionTool | PanTool | MeasureTool | None = None
         self.pan_tool = PanTool()
         self.brush_tool = BrushTool()
         self.crop_tool = CropTool()
         self.selection_tool = SelectionTool()
+        self.measure_tool = MeasureTool()
 
         # 分块渲染缓存
         # 提高缓存数量以支持大缩放时的流畅绘制
@@ -128,6 +135,19 @@ class Canvas(QWidget):
         # 清理选区边框渲染器的线程
         if hasattr(self, 'selection_border_renderer'):
             self.selection_border_renderer.cleanup()
+            
+    def _sync_coordinate_transform(self):
+        """同步坐标转换器与视图变换"""
+        if self.image_data:
+            self.coord_transform.set_image_size(
+                self.image_data.width,
+                self.image_data.height
+            )
+        self.coord_transform.set_transform(
+            self.view_transform.scale,
+            self.view_transform.offset_x,
+            self.view_transform.offset_y
+        )
 
     def set_image(self, image_data: ImageData):
         """
@@ -148,6 +168,9 @@ class Canvas(QWidget):
 
         # 自动适配缩放
         self._fit_image_to_view()
+        
+        # 同步坐标转换器
+        self._sync_coordinate_transform()
 
         self.update()
 
@@ -173,6 +196,9 @@ class Canvas(QWidget):
         elif isinstance(tool, SelectionTool):
             # 选择工具：隐藏系统光标（无论哪种模式都显示自定义光标）
             self.setCursor(Qt.BlankCursor)
+        elif isinstance(tool, MeasureTool):
+            # 测量工具：使用十字光标
+            self.setCursor(Qt.CrossCursor)
         else:
             # 其他工具或无工具：恢复默认光标
             self.setCursor(Qt.ArrowCursor)
@@ -264,6 +290,10 @@ class Canvas(QWidget):
                 self.mouse_pos.y(),
                 view_size
             )
+        
+        # 渲染测量工具的测量线和信息
+        if isinstance(self.current_tool, MeasureTool) and self.current_tool.start_point is not None:
+            self._render_measure_line(painter)
 
         # 渲染处理中提示（最后渲染，确保在最上层）
         if self.is_processing:
@@ -313,6 +343,97 @@ class Canvas(QWidget):
         text_y = box_y + padding + metrics.ascent()
         painter.drawText(int(text_x), int(text_y), text)
 
+        painter.restore()
+    
+    def _render_measure_line(self, painter: QPainter):
+        """
+        渲染测量线和测量信息
+        
+        Args:
+            painter: QPainter 对象
+        """
+        if self.current_tool.start_point is None or self.current_tool.end_point is None:
+            return
+        
+        # 将图像坐标转换为视图坐标
+        start_x, start_y = self.view_transform.pixel_to_view(
+            self.current_tool.start_point[0],
+            self.current_tool.start_point[1]
+        )
+        end_x, end_y = self.view_transform.pixel_to_view(
+            self.current_tool.end_point[0],
+            self.current_tool.end_point[1]
+        )
+        
+        painter.save()
+        
+        # 获取主题颜色
+        from PySide6.QtGui import QPalette
+        palette = self.palette()
+        highlight_color = palette.color(QPalette.Highlight)  # 主题高亮色
+        text_color = palette.color(QPalette.Text)  # 主题文本色
+        base_color = palette.color(QPalette.Base)  # 主题背景色
+        
+        # 绘制测量线
+        from PySide6.QtGui import QPen, QColor
+        pen = QPen(highlight_color, 2)
+        pen.setStyle(Qt.SolidLine)
+        painter.setPen(pen)
+        painter.drawLine(int(start_x), int(start_y), int(end_x), int(end_y))
+        
+        # 绘制起点和终点圆圈
+        painter.setPen(QPen(base_color, 2))
+        painter.setBrush(highlight_color)
+        painter.drawEllipse(int(start_x) - 3, int(start_y) - 3, 6, 6)
+        painter.drawEllipse(int(end_x) - 3, int(end_y) - 3, 6, 6)
+        
+        # 获取测量数据
+        distance = self.current_tool.get_distance()
+        angle = self.current_tool.get_angle()
+        dx, dy = self.current_tool.get_delta()
+        
+        # 绘制测量信息文本
+        info_text = f"D: {distance:.1f}px  ∠: {angle:.1f}°  ΔX: {dx}  ΔY: {dy}"
+        
+        # 设置字体
+        font = painter.font()
+        font.setPointSize(10)
+        painter.setFont(font)
+        
+        # 计算文本位置（在线的中点附近）
+        mid_x = (start_x + end_x) / 2
+        mid_y = (start_y + end_y) / 2
+        
+        # 计算文本尺寸
+        metrics = painter.fontMetrics()
+        text_width = metrics.horizontalAdvance(info_text)
+        text_height = metrics.height()
+        
+        # 文本背景框
+        padding = 6
+        box_x = mid_x - text_width / 2 - padding
+        box_y = mid_y - text_height - padding - 10  # 在线上方显示
+        box_width = text_width + padding * 2
+        box_height = text_height + padding * 2
+        
+        # 绘制半透明背景
+        bg_color = QColor(base_color)
+        bg_color.setAlpha(240)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(bg_color)
+        painter.drawRoundedRect(int(box_x), int(box_y), int(box_width), int(box_height), 4, 4)
+        
+        # 绘制边框
+        painter.setPen(highlight_color)
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(int(box_x), int(box_y), int(box_width), int(box_height), 4, 4)
+        
+        # 绘制文本
+        painter.setPen(text_color)
+        text_x = box_x + padding
+        text_y = box_y + padding + metrics.ascent()
+        painter.drawText(int(text_x), int(text_y), info_text)
+        
         painter.restore()
 
     def mousePressEvent(self, event: QMouseEvent):
@@ -374,6 +495,17 @@ class Canvas(QWidget):
                                 dirty_rect[3] - dirty_rect[1]
                             )
                         self.update()
+                
+                elif isinstance(self.current_tool, MeasureTool):
+                    # 检查是否点击在端点上
+                    hover_point = self.current_tool.check_point_hover(pixel_x, pixel_y)
+                    if hover_point:
+                        # 开始拖动端点
+                        self.current_tool.start_drag_point(hover_point)
+                    else:
+                        # 开始新的测量
+                        self.current_tool.start_measure(pixel_x, pixel_y)
+                    self.update()
 
         elif event.button() == Qt.MiddleButton:
             # 中键平移
@@ -384,6 +516,16 @@ class Canvas(QWidget):
     def mouseMoveEvent(self, event: QMouseEvent):
         """鼠标移动事件"""
         self.mouse_pos = event.pos()
+        
+        # 发射鼠标位置信号（图像坐标）
+        if self.image_data is not None:
+            pixel_x, pixel_y = self.view_transform.view_to_pixel(
+                event.pos().x(), event.pos().y()
+            )
+            # 只在图像范围内发射信号
+            if (0 <= pixel_x < self.image_data.width and 
+                0 <= pixel_y < self.image_data.height):
+                self.mouse_position_changed.emit(int(pixel_x), int(pixel_y))
 
         if self.is_panning and self.pan_start_pos is not None:
             # 平移视图
@@ -522,6 +664,25 @@ class Canvas(QWidget):
                         # 使用节流来批量失效瓦片
                         if not self.selection_update_timer.isActive():
                             self.selection_update_timer.start(self.selection_throttle_interval)
+            
+            elif isinstance(self.current_tool, MeasureTool):
+                if self.current_tool.is_measuring or self.current_tool.dragging_point:
+                    # 正在测量或拖动端点
+                    if self.current_tool.dragging_point:
+                        self.current_tool.drag_point(pixel_x, pixel_y)
+                    else:
+                        self.current_tool.update_measure(pixel_x, pixel_y)
+                    self.update()
+                else:
+                    # 检查鼠标是否悬停在端点上，更新光标
+                    hover_point = self.current_tool.check_point_hover(pixel_x, pixel_y)
+                    if hover_point != self.current_tool.hover_point:
+                        self.current_tool.hover_point = hover_point
+                        if hover_point:
+                            self.setCursor(Qt.SizeAllCursor)  # 四向箭头光标
+                        else:
+                            self.setCursor(Qt.CrossCursor)  # 恢复十字光标
+                    self.update()
 
             else:
                 # 更新光标显示
@@ -647,6 +808,14 @@ class Canvas(QWidget):
                         # 通知选区已修改（用于更新 UI 状态）
                         self.image_modified.emit()
                         self.update()
+                
+                elif isinstance(self.current_tool, MeasureTool):
+                    # 结束测量或拖动（保持测量结果显示）
+                    if self.current_tool.is_measuring:
+                        self.current_tool.end_measure()
+                    if self.current_tool.dragging_point:
+                        self.current_tool.end_drag_point()
+                    self.update()
 
         elif event.button() == Qt.MiddleButton:
             # 结束中键平移
@@ -670,6 +839,8 @@ class Canvas(QWidget):
         """节流定时器回调：执行延迟的平移更新"""
         if self.pending_pan_update:
             self.pending_pan_update = False
+            # 同步坐标转换器
+            self._sync_coordinate_transform()
             self.update()
 
             # 如果还在拖动，继续定时器
@@ -753,6 +924,9 @@ class Canvas(QWidget):
             event.position().y(),
             scale_factor
         )
+        
+        # 同步坐标转换器
+        self._sync_coordinate_transform()
 
         # 发射缩放变化信号
         self.zoom_changed.emit(self.view_transform.scale)
@@ -854,6 +1028,9 @@ class Canvas(QWidget):
         view_height = self.image_data.height * scale
         self.view_transform.offset_x = (canvas_width - view_width) / 2
         self.view_transform.offset_y = (canvas_height - view_height) / 2
+        
+        # 同步坐标转换器
+        self._sync_coordinate_transform()
 
         # 发射缩放变化信号
         self.zoom_changed.emit(self.view_transform.scale)

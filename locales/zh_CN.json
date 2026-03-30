@@ -26,6 +26,7 @@
     "brush": "画笔",
     "crop": "裁剪",
     "selection": "选择",
+    "measure": "测量",
     "settings": "设置",
     "about": "关于",
     "current_tool": "当前工具：{tool}"
@@ -35,7 +36,8 @@
     "pan": "抓取",
     "brush": "画笔",
     "crop": "裁剪",
-    "selection": "选择"
+    "selection": "选择",
+    "measure": "测量"
   },
   "tooltip": {
     "open": "打开图片 (Ctrl+O)",
@@ -49,6 +51,7 @@
     "brush_tool": "画笔工具 (B)",
     "crop_tool": "裁剪工具 (C)",
     "selection_tool": "选择工具 (W)",
+    "measure_tool": "测量工具 (M) - 测量距离和角度",
     "deselect": "取消选择 (Ctrl+D)",
     "invert_selection": "反选 (Ctrl+Shift+I)"
   },
@@ -66,6 +69,8 @@
     "brush_activated": "画笔工具已激活",
     "crop_activated": "裁剪工具已激活",
     "selection_activated": "选择工具已激活 - 模式：{mode}",
+    "measure_activated": "测量工具已激活 - 拖动鼠标测量距离和角度",
+    "measure_cleared": "已清除测量数据",
     "deselected": "已取消选择",
     "inverted": "已反选",
     "selected_color": "已选择所有{color}像素",
@@ -84,7 +89,11 @@
     "selection_target_color": "选择目标颜色: {color}",
     "selection_size_mismatch": "选区尺寸不匹配，已清除选区",
     "selection_filled": "选区已填充",
-    "feature_unavailable": "此功能需要 OpenCV 或 SciPy 库"
+    "feature_unavailable": "此功能需要 OpenCV 或 SciPy 库",
+    "image_inverted": "图像已反相",
+    "image_flipped_horizontal": "图像已水平翻转",
+    "image_flipped_vertical": "图像已垂直翻转",
+    "transform_binary_only": "图像变换功能仅在二值化视图下可用，请先切换到二值化模式"
   },
   "selection": {
     "drag_select": "涂抹",
@@ -148,6 +157,8 @@
     "theme_note": "注：深色主题和跟随系统功能将在后续版本中支持",
     "animations": "动画效果",
     "enable_animations": "启用 UI 动画",
+    "ruler": "标尺",
+    "show_ruler": "显示标尺",
     "default_tool_size": "默认工具大小",
     "default_brush_size": "默认画笔大小：{value}",
     "default_selection_size": "默认选择范围：{value}",
@@ -189,12 +200,12 @@
   },
   "about": {
     "title": "关于 {app_name}",
-    "version": "版本 {version}",
+    "version": "版本：{version}",
+    "author": "作者：{author}",
     "release_date": "发布日期：{date}",
     "description": "基于 PySide6 的二值化图片编辑应用程序\n提供类似 Photoshop 的编辑功能",
-    "author": "作者：{author}",
     "copyright": "© 2026 夏次一定de. All rights reserved.",
-    "license": "许可证：MIT License"
+    "license": "许可证：CC BY-NC-SA 4.0（非商业使用）"
   },
   "binarization_panel": {
     "title": "二值化设置",
@@ -249,7 +260,12 @@
     "denoise_morph_close": "形态学-闭运算",
     "denoise_strength": "强度：{value}",
     "tab_preprocess": "预处理",
-    "tab_binarization": "二值化"
+    "tab_binarization": "二值化",
+    "tab_other": "其他",
+    "image_transform": "图像变换",
+    "invert_image": "反相",
+    "flip_horizontal": "水平翻转",
+    "flip_vertical": "垂直翻转"
   },
   "properties_panel": {
     "properties": "属性",
@@ -284,7 +300,9 @@
     "deselect": "取消选择",
     "invert": "反选",
     "fill_selection_holes": "填充选区",
-    "fill_selection_holes_tooltip": "填充选区内部的空洞，使选区变为实心"
+    "fill_selection_holes_tooltip": "填充选区内部的空洞，使选区变为实心",
+    "clear_measure": "清除测量",
+    "clear_measure_tooltip": "清除当前的测量数据"
   },
   "layers_panel": {
     "save_selection": "保存选区",
@@ -306,6 +324,9 @@
     "not_root_layer": "当前不是根图层，无法调整二值化参数",
     "layer_visible": "图层已显示",
     "layer_hidden": "图层已隐藏",
+    "layer_order_changed": "图层顺序已更新",
+    "layer_renamed": "图层已重命名为：{name}",
+    "duplicate_name_error": "图层名称\"{name}\"已存在，请使用其他名称",
     "confirm_delete": "确定要删除图层\"{name}\"吗？\n此操作无法撤销。"
   }
 }

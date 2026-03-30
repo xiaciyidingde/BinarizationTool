@@ -26,6 +26,7 @@
     "brush": "Brush",
     "crop": "Crop",
     "selection": "Selection",
+    "measure": "Measure",
     "settings": "Settings",
     "about": "About",
     "current_tool": "Current Tool: {tool}"
@@ -35,7 +36,8 @@
     "pan": "Pan",
     "brush": "Brush",
     "crop": "Crop",
-    "selection": "Selection"
+    "selection": "Selection",
+    "measure": "Measure"
   },
   "tooltip": {
     "open": "Open Image (Ctrl+O)",
@@ -49,6 +51,7 @@
     "brush_tool": "Brush Tool (B)",
     "crop_tool": "Crop Tool (C)",
     "selection_tool": "Selection Tool (W)",
+    "measure_tool": "Measure Tool (M) - Measure distance and angle",
     "deselect": "Deselect (Ctrl+D)",
     "invert_selection": "Invert Selection (Ctrl+Shift+I)"
   },
@@ -66,6 +69,8 @@
     "brush_activated": "Brush tool activated",
     "crop_activated": "Crop tool activated",
     "selection_activated": "Selection tool activated - Mode: {mode}",
+    "measure_activated": "Measure tool activated - Drag to measure distance and angle",
+    "measure_cleared": "Measurement data cleared",
     "deselected": "Deselected",
     "inverted": "Selection inverted",
     "selected_color": "Selected all {color} pixels",
@@ -84,7 +89,11 @@
     "selection_target_color": "Selection Target Color: {color}",
     "selection_size_mismatch": "Selection size mismatch, selection cleared",
     "selection_filled": "Selection filled",
-    "feature_unavailable": "This feature requires OpenCV or SciPy library"
+    "feature_unavailable": "This feature requires OpenCV or SciPy library",
+    "image_inverted": "Image inverted",
+    "image_flipped_horizontal": "Image flipped horizontally",
+    "image_flipped_vertical": "Image flipped vertically",
+    "transform_binary_only": "Image transform is only available in binary view. Please switch to binary mode first"
   },
   "selection": {
     "drag_select": "Paint",
@@ -146,6 +155,8 @@
     "theme_note": "Note: Dark theme and system theme will be supported in future versions",
     "animations": "Animations",
     "enable_animations": "Enable UI Animations",
+    "ruler": "Ruler",
+    "show_ruler": "Show Ruler",
     "default_tool_size": "Default Tool Size",
     "default_brush_size": "Default Brush Size: {value}",
     "default_selection_size": "Default Selection Size: {value}",
@@ -189,12 +200,12 @@
   },
   "about": {
     "title": "About {app_name}",
-    "version": "Version {version}",
+    "version": "Version: {version}",
+    "author": "Author: {author}",
     "release_date": "Release Date: {date}",
     "description": "Binary image editing application based on PySide6\nProvides Photoshop-like editing features",
-    "author": "Author: {author}",
     "copyright": "© 2026 夏次一定de. All rights reserved.",
-    "license": "License: MIT License"
+    "license": "License: CC BY-NC-SA 4.0 (Non-Commercial)"
   },
   "binarization_panel": {
     "title": "Binarization Settings",
@@ -249,7 +260,12 @@
     "denoise_morph_close": "Morph Close",
     "denoise_strength": "Strength: {value}",
     "tab_preprocess": "Preprocess",
-    "tab_binarization": "Binarization"
+    "tab_binarization": "Binarization",
+    "tab_other": "Other",
+    "image_transform": "Image Transform",
+    "invert_image": "Invert",
+    "flip_horizontal": "Flip Horizontal",
+    "flip_vertical": "Flip Vertical"
   },
   "properties_panel": {
     "properties": "Properties",
@@ -284,7 +300,9 @@
     "deselect": "Deselect",
     "invert": "Invert",
     "fill_selection_holes": "Fill Selection",
-    "fill_selection_holes_tooltip": "Fill holes inside the selection to make it solid"
+    "fill_selection_holes_tooltip": "Fill holes inside the selection to make it solid",
+    "clear_measure": "Clear Measure",
+    "clear_measure_tooltip": "Clear current measurement data"
   },
   "layers_panel": {
     "save_selection": "Save Selection",
@@ -306,6 +324,9 @@
     "not_root_layer": "Current layer is not the root layer. Cannot adjust binarization parameters",
     "layer_visible": "Layer is now visible",
     "layer_hidden": "Layer is now hidden",
+    "layer_order_changed": "Layer order updated",
+    "layer_renamed": "Layer renamed to: {name}",
+    "duplicate_name_error": "Layer name \"{name}\" already exists. Please use a different name",
     "confirm_delete": "Are you sure you want to delete layer \"{name}\"?\nThis action cannot be undone."
   }
 }
