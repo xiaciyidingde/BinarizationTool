@@ -152,6 +152,8 @@
     "theme_note": "注：深色主题和跟随系统功能将在后续版本中支持",
     "animations": "动画效果",
     "enable_animations": "启用 UI 动画",
+    "ruler": "标尺",
+    "show_ruler": "显示标尺",
     "default_tool_size": "默认工具大小",
     "default_brush_size": "默认画笔大小：{value}",
     "default_selection_size": "默认选择范围：{value}",

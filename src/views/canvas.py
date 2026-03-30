@@ -26,6 +26,7 @@ from ..models.selection_tool import SelectionTool
 from ..models.tile_cache import TileCache
 from ..models.view_transform import ViewTransform
 from ..utils.config_manager import ConfigManager
+from ..utils.coordinate_transform import CoordinateTransform
 from ..utils.selection_border_renderer import SelectionBorderRenderer
 from ..utils.translation_manager import get_translator
 
@@ -61,6 +62,9 @@ class Canvas(QWidget):
         # 数据
         self.image_data: ImageData | None = None
         self.view_transform = ViewTransform()
+        
+        # 坐标转换器
+        self.coord_transform = CoordinateTransform()
 
         # 工具
         self.current_tool: BrushTool | CropTool | SelectionTool | PanTool | None = None
@@ -128,6 +132,19 @@ class Canvas(QWidget):
         # 清理选区边框渲染器的线程
         if hasattr(self, 'selection_border_renderer'):
             self.selection_border_renderer.cleanup()
+            
+    def _sync_coordinate_transform(self):
+        """同步坐标转换器与视图变换"""
+        if self.image_data:
+            self.coord_transform.set_image_size(
+                self.image_data.width,
+                self.image_data.height
+            )
+        self.coord_transform.set_transform(
+            self.view_transform.scale,
+            self.view_transform.offset_x,
+            self.view_transform.offset_y
+        )
 
     def set_image(self, image_data: ImageData):
         """
@@ -148,6 +165,9 @@ class Canvas(QWidget):
 
         # 自动适配缩放
         self._fit_image_to_view()
+        
+        # 同步坐标转换器
+        self._sync_coordinate_transform()
 
         self.update()
 
@@ -670,6 +690,8 @@ class Canvas(QWidget):
         """节流定时器回调：执行延迟的平移更新"""
         if self.pending_pan_update:
             self.pending_pan_update = False
+            # 同步坐标转换器
+            self._sync_coordinate_transform()
             self.update()
 
             # 如果还在拖动，继续定时器
@@ -753,6 +775,9 @@ class Canvas(QWidget):
             event.position().y(),
             scale_factor
         )
+        
+        # 同步坐标转换器
+        self._sync_coordinate_transform()
 
         # 发射缩放变化信号
         self.zoom_changed.emit(self.view_transform.scale)
@@ -854,6 +879,9 @@ class Canvas(QWidget):
         view_height = self.image_data.height * scale
         self.view_transform.offset_x = (canvas_width - view_width) / 2
         self.view_transform.offset_y = (canvas_height - view_height) / 2
+        
+        # 同步坐标转换器
+        self._sync_coordinate_transform()
 
         # 发射缩放变化信号
         self.zoom_changed.emit(self.view_transform.scale)

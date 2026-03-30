@@ -150,6 +150,8 @@
     "theme_note": "Note: Dark theme and system theme will be supported in future versions",
     "animations": "Animations",
     "enable_animations": "Enable UI Animations",
+    "ruler": "Ruler",
+    "show_ruler": "Show Ruler",
     "default_tool_size": "Default Tool Size",
     "default_brush_size": "Default Brush Size: {value}",
     "default_selection_size": "Default Selection Size: {value}",

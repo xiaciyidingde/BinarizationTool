@@ -102,7 +102,7 @@ class MainWindow(QMainWindow):
         # 应用深色标题栏（Windows 11）
         self._apply_dark_titlebar()
 
-        # 创建 UI
+        # 创建 UI（必须在 create_actions 之前，因为 ShortcutHandler 需要 canvas）
         self.setup_ui()
         self.create_actions()
         self.create_toolbars()
@@ -128,6 +128,21 @@ class MainWindow(QMainWindow):
 
         # 初始状态
         self._update_ui_state()
+        
+    def eventFilter(self, obj, event):
+        """事件过滤器 - 更新标尺鼠标指示器"""
+        if obj == self.canvas:
+            from PySide6.QtCore import QEvent
+            if event.type() == QEvent.MouseMove:
+                # 更新标尺的鼠标位置指示器
+                pos = event.pos()
+                self.horizontal_ruler.update_mouse_position(pos.x())
+                self.vertical_ruler.update_mouse_position(pos.y())
+            elif event.type() == QEvent.Leave:
+                # 鼠标离开 Canvas 时清除指示器
+                self.horizontal_ruler.clear_mouse_position()
+                self.vertical_ruler.clear_mouse_position()
+        return super().eventFilter(obj, event)
 
     def closeEvent(self, event):
         """窗口关闭事件 - 清理资源"""
@@ -253,12 +268,11 @@ class MainWindow(QMainWindow):
         center_right_splitter.setHandleWidth(1)  # 设置分隔条宽度
         center_right_splitter.setChildrenCollapsible(False)
 
-        # 中间：Canvas
-        self.canvas = Canvas()
-        self.canvas.setMinimumWidth(self.CANVAS_MIN_WIDTH)
-        center_right_splitter.addWidget(self.canvas)
+        # 中间：Canvas 容器（包含标尺和画布）
+        canvas_container = self._create_canvas_with_rulers()
+        canvas_container.setMinimumWidth(self.CANVAS_MIN_WIDTH)
+        center_right_splitter.addWidget(canvas_container)
 
-        # 右侧：属性面板
         # 右侧：属性面板
         from .properties_panel import PropertiesPanel
         self.properties_panel = PropertiesPanel()
@@ -282,6 +296,47 @@ class MainWindow(QMainWindow):
         main_splitter.handle(1).setEnabled(False)  # 禁用第一个分隔条
 
         main_layout.addWidget(main_splitter)
+        
+    def _create_canvas_with_rulers(self):
+        """创建带标尺的 Canvas 容器"""
+        from PySide6.QtWidgets import QGridLayout
+        from ..widgets.ruler import Ruler, RulerCorner
+        
+        container = QWidget()
+        layout = QGridLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # 创建标尺
+        self.ruler_corner = RulerCorner()
+        self.horizontal_ruler = Ruler(Ruler.HORIZONTAL)
+        self.vertical_ruler = Ruler(Ruler.VERTICAL)
+        
+        # 创建 Canvas
+        self.canvas = Canvas()
+        
+        # 设置坐标转换器
+        self.horizontal_ruler.set_coordinate_transform(self.canvas.coord_transform)
+        self.vertical_ruler.set_coordinate_transform(self.canvas.coord_transform)
+        
+        # 布局：
+        # [角落] [水平标尺]
+        # [垂直标尺] [Canvas]
+        layout.addWidget(self.ruler_corner, 0, 0)
+        layout.addWidget(self.horizontal_ruler, 0, 1)
+        layout.addWidget(self.vertical_ruler, 1, 0)
+        layout.addWidget(self.canvas, 1, 1)
+        
+        # 连接鼠标移动事件以更新标尺指示器
+        self.canvas.installEventFilter(self)
+        
+        # 根据配置显示/隐藏标尺
+        show_ruler = self.config_manager.get('interface', 'show_ruler', True)
+        self.ruler_corner.setVisible(show_ruler)
+        self.horizontal_ruler.setVisible(show_ruler)
+        self.vertical_ruler.setVisible(show_ruler)
+        
+        return container
 
     def create_actions(self):
         """创建动作"""
@@ -2747,6 +2802,13 @@ class MainWindow(QMainWindow):
         animations_enabled = config.get('interface', 'animations_enabled', True)
         from ..utils.animations import set_global_animation_enabled
         set_global_animation_enabled(animations_enabled)
+        
+        # 标尺显示开关
+        show_ruler = config.get('interface', 'show_ruler', True)
+        if hasattr(self, 'ruler_corner'):
+            self.ruler_corner.setVisible(show_ruler)
+            self.horizontal_ruler.setVisible(show_ruler)
+            self.vertical_ruler.setVisible(show_ruler)
 
         # 1. 编辑器设置
         # 画笔默认大小

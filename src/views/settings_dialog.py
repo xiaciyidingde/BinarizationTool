@@ -96,6 +96,9 @@ class SettingsDialog(QDialog):
 
         # 动画设置
         self.animations_checkbox.setChecked(config.get('interface', 'animations_enabled', True))
+        
+        # 标尺显示设置
+        self.ruler_checkbox.setChecked(config.get('interface', 'show_ruler', True))
 
         # 编辑器设置
         self.brush_size_slider.setValue(config.get('editor', 'default_brush_size', 20))
@@ -255,6 +258,20 @@ class SettingsDialog(QDialog):
 
         animation_group.setLayout(animation_layout)
         layout.addWidget(animation_group)
+        
+        # 标尺显示设置
+        ruler_group = QGroupBox(self.tr.tr('settings.ruler'))
+        ruler_layout = QHBoxLayout()
+
+        ruler_label = QLabel(self.tr.tr('settings.show_ruler'))
+        self.ruler_checkbox = ToggleSwitch()
+
+        ruler_layout.addWidget(ruler_label)
+        ruler_layout.addWidget(self.ruler_checkbox)
+        ruler_layout.addStretch()
+
+        ruler_group.setLayout(ruler_layout)
+        layout.addWidget(ruler_group)
 
         layout.addStretch()
         return widget
@@ -542,6 +559,9 @@ class SettingsDialog(QDialog):
         # 应用动画设置到全局配置
         from ..utils.animations import set_global_animation_enabled
         set_global_animation_enabled(animations_enabled)
+        
+        # 标尺显示设置
+        config.set('interface', 'show_ruler', self.ruler_checkbox.isChecked())
 
         # 编辑器设置
         config.set('editor', 'default_brush_size', self.brush_size_slider.value())
