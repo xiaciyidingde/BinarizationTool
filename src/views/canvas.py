@@ -43,6 +43,7 @@ class Canvas(QWidget):
     image_modified = Signal()  # 图片被修改时发射
     file_dropped = Signal(str)  # 文件拖放时发射，传递文件路径
     zoom_changed = Signal(float)  # 缩放比例变化时发射
+    mouse_position_changed = Signal(int, int)  # 鼠标位置变化时发射，传递图像坐标 (x, y)
 
     def __init__(self, parent=None):
         """
@@ -404,6 +405,16 @@ class Canvas(QWidget):
     def mouseMoveEvent(self, event: QMouseEvent):
         """鼠标移动事件"""
         self.mouse_pos = event.pos()
+        
+        # 发射鼠标位置信号（图像坐标）
+        if self.image_data is not None:
+            pixel_x, pixel_y = self.view_transform.view_to_pixel(
+                event.pos().x(), event.pos().y()
+            )
+            # 只在图像范围内发射信号
+            if (0 <= pixel_x < self.image_data.width and 
+                0 <= pixel_y < self.image_data.height):
+                self.mouse_position_changed.emit(int(pixel_x), int(pixel_y))
 
         if self.is_panning and self.pan_start_pos is not None:
             # 平移视图

@@ -554,6 +554,13 @@ class MainWindow(QMainWindow):
         self.statusbar = QStatusBar()
         self.setStatusBar(self.statusbar)
         self.statusbar.showMessage(self.tr.tr('app.ready'))
+        
+        # 在状态栏右侧添加鼠标坐标显示
+        from PySide6.QtWidgets import QLabel
+        self.mouse_pos_label = QLabel("")
+        self.mouse_pos_label.setMinimumWidth(150)
+        self.mouse_pos_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.statusbar.addPermanentWidget(self.mouse_pos_label)
 
         # 创建菜单栏（但隐藏，功能通过工具栏和快捷键访问）
         self._create_menus()
@@ -578,6 +585,9 @@ class MainWindow(QMainWindow):
 
         # Canvas 缩放变化
         self.canvas.zoom_changed.connect(self.properties_panel.set_zoom_level)
+        
+        # Canvas 鼠标位置变化
+        self.canvas.mouse_position_changed.connect(self._on_mouse_position_changed)
 
         # 属性面板工具设置信号
         self._connect_tool_settings()
@@ -2109,6 +2119,10 @@ class MainWindow(QMainWindow):
             
             # 更新显示（确保根图层显示合成效果）
             self._safe_update_tile_cache()
+    
+    def _on_mouse_position_changed(self, x: int, y: int):
+        """鼠标位置变化"""
+        self.mouse_pos_label.setText(f"X: {x}, Y: {y}")
 
     def _update_ui_state(self):
         """更新 UI 状态"""
