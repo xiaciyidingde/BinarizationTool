@@ -367,25 +367,25 @@ class Canvas(QWidget):
         
         painter.save()
         
+        # 获取主题颜色
+        from PySide6.QtGui import QPalette
+        palette = self.palette()
+        highlight_color = palette.color(QPalette.Highlight)  # 主题高亮色
+        text_color = palette.color(QPalette.Text)  # 主题文本色
+        base_color = palette.color(QPalette.Base)  # 主题背景色
+        
         # 绘制测量线
         from PySide6.QtGui import QPen, QColor
-        pen = QPen(QColor(0, 120, 215), 2)  # 蓝色线条
+        pen = QPen(highlight_color, 2)
         pen.setStyle(Qt.SolidLine)
         painter.setPen(pen)
         painter.drawLine(int(start_x), int(start_y), int(end_x), int(end_y))
         
         # 绘制起点和终点圆圈
-        # 如果鼠标悬停在端点上，绘制更大的圆圈
-        start_radius = 5 if self.current_tool.hover_point == 'start' else 4
-        end_radius = 5 if self.current_tool.hover_point == 'end' else 4
-        
-        # 绘制外圈（白色边框）
-        painter.setPen(QPen(QColor(255, 255, 255), 2))
-        painter.setBrush(QColor(0, 120, 215))
-        painter.drawEllipse(int(start_x) - start_radius, int(start_y) - start_radius, 
-                           start_radius * 2, start_radius * 2)
-        painter.drawEllipse(int(end_x) - end_radius, int(end_y) - end_radius, 
-                           end_radius * 2, end_radius * 2)
+        painter.setPen(QPen(base_color, 2))
+        painter.setBrush(highlight_color)
+        painter.drawEllipse(int(start_x) - 3, int(start_y) - 3, 6, 6)
+        painter.drawEllipse(int(end_x) - 3, int(end_y) - 3, 6, 6)
         
         # 获取测量数据
         distance = self.current_tool.get_distance()
@@ -417,17 +417,19 @@ class Canvas(QWidget):
         box_height = text_height + padding * 2
         
         # 绘制半透明背景
+        bg_color = QColor(base_color)
+        bg_color.setAlpha(240)
         painter.setPen(Qt.NoPen)
-        painter.setBrush(QColor(255, 255, 255, 240))
+        painter.setBrush(bg_color)
         painter.drawRoundedRect(int(box_x), int(box_y), int(box_width), int(box_height), 4, 4)
         
         # 绘制边框
-        painter.setPen(QColor(0, 120, 215))
+        painter.setPen(highlight_color)
         painter.setBrush(Qt.NoBrush)
         painter.drawRoundedRect(int(box_x), int(box_y), int(box_width), int(box_height), 4, 4)
         
         # 绘制文本
-        painter.setPen(QColor(0, 0, 0))
+        painter.setPen(text_color)
         text_x = box_x + padding
         text_y = box_y + padding + metrics.ascent()
         painter.drawText(int(text_x), int(text_y), info_text)

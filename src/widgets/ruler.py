@@ -37,11 +37,6 @@ class Ruler(QWidget):
         # 标尺尺寸
         self.ruler_size = 20  # 标尺宽度/高度（从 25 减小到 20）
         
-        # 颜色
-        self.bg_color = QColor(240, 240, 240)
-        self.line_color = QColor(100, 100, 100)
-        self.text_color = QColor(60, 60, 60)
-        
         # 字体
         self.font = QFont("Arial", 7)  # 字体大小从 8 减小到 7
         
@@ -73,22 +68,29 @@ class Ruler(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, False)
         
+        # 获取主题颜色
+        from PySide6.QtGui import QPalette
+        palette = self.palette()
+        bg_color = palette.color(QPalette.Window)
+        line_color = palette.color(QPalette.Mid)
+        text_color = palette.color(QPalette.Text)
+        
         # 绘制背景
-        painter.fillRect(self.rect(), self.bg_color)
+        painter.fillRect(self.rect(), bg_color)
         
         # 设置字体
         painter.setFont(self.font)
         
         if self.orientation == self.HORIZONTAL:
-            self._draw_horizontal_ruler(painter)
+            self._draw_horizontal_ruler(painter, line_color, text_color)
         else:
-            self._draw_vertical_ruler(painter)
+            self._draw_vertical_ruler(painter, line_color, text_color)
             
         # 绘制鼠标位置指示器
         if self.mouse_pos is not None:
             self._draw_mouse_indicator(painter)
             
-    def _draw_horizontal_ruler(self, painter: QPainter):
+    def _draw_horizontal_ruler(self, painter: QPainter, line_color: QColor, text_color: QColor):
         """绘制水平标尺"""
         width = self.width()
         height = self.height()
@@ -104,7 +106,7 @@ class Ruler(QWidget):
         start_tick = int(start_img_x / interval) * interval
         
         # 绘制刻度
-        painter.setPen(QPen(self.line_color, 1))
+        painter.setPen(QPen(line_color, 1))
         
         tick = start_tick
         while tick <= end_img_x:
@@ -116,13 +118,13 @@ class Ruler(QWidget):
                 painter.drawLine(int(screen_x), height - 6, int(screen_x), height)  # 刻度线从 8 减小到 6
                 
                 # 绘制刻度值
-                painter.setPen(self.text_color)
+                painter.setPen(text_color)
                 text = str(int(tick))
                 text_rect = painter.fontMetrics().boundingRect(text)
                 text_x = int(screen_x - text_rect.width() / 2)
                 text_y = height - 8  # 文字位置从 10 调整到 8
                 painter.drawText(text_x, text_y, text)
-                painter.setPen(QPen(self.line_color, 1))
+                painter.setPen(QPen(line_color, 1))
                 
                 # 绘制次刻度线（间隔的一半）
                 if interval >= 20:  # 只在间隔足够大时显示次刻度
@@ -134,7 +136,7 @@ class Ruler(QWidget):
             
             tick += interval
             
-    def _draw_vertical_ruler(self, painter: QPainter):
+    def _draw_vertical_ruler(self, painter: QPainter, line_color: QColor, text_color: QColor):
         """绘制垂直标尺"""
         width = self.width()
         height = self.height()
@@ -150,7 +152,7 @@ class Ruler(QWidget):
         start_tick = int(start_img_y / interval) * interval
         
         # 绘制刻度
-        painter.setPen(QPen(self.line_color, 1))
+        painter.setPen(QPen(line_color, 1))
         
         tick = start_tick
         while tick <= end_img_y:
@@ -163,7 +165,7 @@ class Ruler(QWidget):
                 
                 # 绘制刻度值（旋转90度）
                 painter.save()
-                painter.setPen(self.text_color)
+                painter.setPen(text_color)
                 text = str(int(tick))
                 text_rect = painter.fontMetrics().boundingRect(text)
                 
@@ -173,7 +175,7 @@ class Ruler(QWidget):
                 painter.drawText(-text_rect.width() / 2, 0, text)
                 painter.restore()
                 
-                painter.setPen(QPen(self.line_color, 1))
+                painter.setPen(QPen(line_color, 1))
                 
                 # 绘制次刻度线（间隔的一半）
                 if interval >= 20:  # 只在间隔足够大时显示次刻度
@@ -258,10 +260,13 @@ class RulerCorner(QWidget):
         self.ruler_size = 20  # 从 25 减小到 20
         self.setFixedSize(self.ruler_size, self.ruler_size)
         
-        # 颜色
-        self.bg_color = QColor(220, 220, 220)
-        
     def paintEvent(self, event):
         """绘制角落"""
         painter = QPainter(self)
-        painter.fillRect(self.rect(), self.bg_color)
+        
+        # 获取主题颜色
+        from PySide6.QtGui import QPalette
+        palette = self.palette()
+        bg_color = palette.color(QPalette.Mid)
+        
+        painter.fillRect(self.rect(), bg_color)
