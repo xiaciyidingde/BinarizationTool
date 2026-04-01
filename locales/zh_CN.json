@@ -294,6 +294,7 @@
     "selection_method": "方式：",
     "method_paint": "涂抹",
     "method_rect": "框选",
+    "smart_selection": "智能选择：",
     "fill_selection": "填充：",
     "fill_white": "白色",
     "fill_black": "黑色",

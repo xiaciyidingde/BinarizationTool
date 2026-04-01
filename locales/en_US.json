@@ -294,6 +294,7 @@
     "selection_method": "Method:",
     "method_paint": "Paint",
     "method_rect": "Rectangle",
+    "smart_selection": "Smart Selection:",
     "fill_selection": "Fill:",
     "fill_white": "White",
     "fill_black": "Black",
