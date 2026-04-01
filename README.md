@@ -104,6 +104,42 @@ BinarizationTool 是一款基于 PySide6 开发的专业二值化图片编辑器
 - **快捷键**：`C`
 - **功能**：拖动选择区域，释放立即裁剪
 
+#### 测量工具
+- **快捷键**：`M`
+- **功能**：测量距离、角度和坐标差值
+- **显示信息**：
+  - D: 距离（像素）
+  - ∠: 角度（度数，相对于水平线）
+  - ΔX: X 方向差值
+  - ΔY: Y 方向差值
+
+### 🤖 AI 功能（可选）
+
+#### 背景去除
+- **模型**：RMBG-1.4
+- **功能**：使用深度学习自动去除图像背景
+- **使用方法**：
+  1. 在预处理标签页找到"AI 工具"分组
+  2. 点击"去除背景"按钮
+  3. 等待处理完成
+  4. 在对比界面中查看效果
+  5. 点击"应用"接受结果
+
+#### 安装 AI 依赖
+
+```bash
+# 安装 onnxruntime（CPU 版本）
+pip install onnxruntime
+
+# 下载 RMBG 模型
+pip install modelscope
+modelscope download --model AI-ModelScope/RMBG-1.4 --local_dir ./data/model
+```
+
+**注意**：
+- AI 功能是可选的，不安装也不影响其他功能
+- 详细说明请查看 [AI 功能使用指南](docs/AI_FEATURES.md)
+
 ---
 
 ## 📦 从源代码开始

@@ -336,5 +336,17 @@
     "title": "AI 处理结果",
     "cancel": "取消",
     "apply": "应用"
+  },
+  "ai_process": {
+    "title": "AI 处理",
+    "loading_model": "正在加载模型，请稍候...",
+    "processing": "正在处理图像...",
+    "finishing": "即将完成...",
+    "cancel": "取消",
+    "model_not_found": "未找到 {model} 模型文件",
+    "unsupported_model": "不支持的模型类型: {model}",
+    "failed": "处理失败: {error}",
+    "rmbg_result": "去除背景 - 结果对比",
+    "applied": "AI 处理结果已应用"
   }
 }

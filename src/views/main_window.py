@@ -595,6 +595,9 @@ class MainWindow(QMainWindow):
 
         # 图像变换操作
         self.binarization_panel.image_transform.connect(self._on_image_transform)
+        
+        # AI 处理请求
+        self.binarization_panel.ai_process_requested.connect(self._on_ai_process_requested)
 
         # Canvas 图片修改
         self.canvas.image_modified.connect(self._on_image_modified)
@@ -2543,6 +2546,267 @@ class MainWindow(QMainWindow):
         self.binarization_panel.invert_checkbox.blockSignals(False)
         self.binarization_panel.flip_horizontal_checkbox.blockSignals(False)
         self.binarization_panel.flip_vertical_checkbox.blockSignals(False)
+    
+    def _on_ai_process_requested(self, model_type: str):
+        """
+        处理 AI 处理请求
+        
+        Args:
+            model_type: 模型类型（'rmbg', ...）
+        """
+        if self.image_data is None:
+            self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
+            return
+        
+        # 获取原始图像
+        original_image = self.image_data.original_pixels
+        if original_image is None:
+            return
+        
+        # 创建 AI 处理器（在显示对话框前快速完成）
+        import os
+        from ..utils.ai_processor import AIProcessorFactory
+        from ..utils.ai_worker import AIWorker
+        
+        # 查找模型文件
+        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
+        model_path = None
+        
+        if os.path.exists(model_dir):
+            for filename in os.listdir(model_dir):
+                if filename.upper().startswith(model_type.upper()) and filename.endswith('.onnx'):
+                    model_path = os.path.join(model_dir, filename)
+                    break
+        
+        if model_path is None:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                self.tr.tr('dialog.error'),
+                self.tr.tr('ai_process.model_not_found', model=model_type)
+            )
+            return
+        
+        # 创建处理器
+        processor = AIProcessorFactory.create_processor(model_type, model_path)
+        if processor is None:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                self.tr.tr('dialog.error'),
+                self.tr.tr('ai_process.unsupported_model', model=model_type)
+            )
+            return
+        
+        # 显示进度对话框
+        from PySide6.QtWidgets import QProgressDialog, QApplication
+        from PySide6.QtCore import QTimer
+        
+        progress = QProgressDialog(
+            self.tr.tr('ai_process.loading_model'),
+            self.tr.tr('ai_process.cancel'),
+            0, 100, self
+        )
+        progress.setWindowTitle(self.tr.tr('ai_process.title'))
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        
+        # 设置进度对话框的最小尺寸，确保标题和内容完整显示
+        progress.setMinimumWidth(400)
+        progress.setMinimumHeight(120)
+        
+        progress.show()
+        
+        # 强制刷新界面，确保对话框显示
+        QApplication.processEvents()
+        
+        # 创建工作线程
+        worker = AIWorker(processor, original_image)
+        
+        # 使用标志避免重复清理
+        cleanup_done = [False]  # 使用列表以便在闭包中修改
+        
+        # 创建模拟进度定时器（用于在模型加载阶段提供视觉反馈）
+        simulation_timer = QTimer()
+        simulation_progress = [0]  # 当前模拟进度
+        actual_progress_received = [False]  # 是否收到实际进度
+        
+        def simulate_progress():
+            """模拟进度更新（仅在加载阶段且未收到实际进度时）"""
+            if not actual_progress_received[0] and simulation_progress[0] < 45:
+                simulation_progress[0] += 1
+                progress.setValue(simulation_progress[0])
+        
+        simulation_timer.timeout.connect(simulate_progress)
+        simulation_timer.start(200)  # 每 200ms 更新一次，给用户反馈
+        
+        def cleanup():
+            """统一的清理函数"""
+            if not cleanup_done[0]:
+                cleanup_done[0] = True
+                simulation_timer.stop()
+                processor.unload_model()
+                if not worker.isFinished():
+                    worker.wait()
+                worker.deleteLater()
+        
+        # 连接信号
+        def on_progress(value):
+            actual_progress_received[0] = True
+            simulation_timer.stop()  # 收到实际进度后停止模拟
+            progress.setValue(value)
+            # 根据进度更新状态文本
+            if value < 50:
+                progress.setLabelText(self.tr.tr('ai_process.loading_model'))
+            elif value < 100:
+                progress.setLabelText(self.tr.tr('ai_process.processing'))
+            else:
+                progress.setLabelText(self.tr.tr('ai_process.finishing'))
+        
+        def on_finished(result):
+            progress.close()
+            # 显示结果对比对话框
+            self._show_ai_result(original_image, result, model_type)
+            # 清理
+            cleanup()
+        
+        def on_failed(error):
+            progress.close()
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                self.tr.tr('dialog.error'),
+                self.tr.tr('ai_process.failed', error=error)
+            )
+            # 清理
+            cleanup()
+        
+        def on_canceled():
+            worker.stop()
+            cleanup()
+        
+        worker.progress_updated.connect(on_progress)
+        worker.processing_finished.connect(on_finished)
+        worker.processing_failed.connect(on_failed)
+        progress.canceled.connect(on_canceled)
+        
+        # 使用 QTimer.singleShot 延迟启动工作线程
+        # 这样可以让进度对话框先完全显示出来
+        def start_worker():
+            worker.start()
+        
+        QTimer.singleShot(100, start_worker)  # 延迟 100ms 启动
+    
+    def _show_ai_result(self, original: 'np.ndarray', processed: 'np.ndarray', model_type: str):
+        """
+        显示 AI 处理结果对比对话框
+        
+        Args:
+            original: 原始图像
+            processed: 处理后的图像
+            model_type: 模型类型
+        """
+        from .ai_result_dialog import AIResultDialog
+        
+        # 根据模型类型设置标题
+        if model_type == 'rmbg':
+            title = self.tr.tr('ai_process.rmbg_result')
+        else:
+            title = self.tr.tr('ai_result.title')
+        
+        dialog = AIResultDialog(original, processed, title, self)
+        
+        def on_result_accepted(result):
+            # 用户接受结果，更新图像
+            self._apply_ai_result(result)
+        
+        dialog.result_accepted.connect(on_result_accepted)
+        dialog.exec()
+    
+    def _apply_ai_result(self, result: 'np.ndarray'):
+        """
+        应用 AI 处理结果
+        
+        Args:
+            result: 处理后的图像
+        """
+        if self.image_data is None:
+            return
+        
+        # 保存到历史记录
+        self.history_manager.push_state(self.image_data)
+        
+        # 更新原始图像
+        self.image_data.original_pixels = result
+        
+        # 使缓存失效
+        self.image_data.invalidate_preprocessed_cache()
+        
+        # 获取当前参数
+        preprocess_params = self.binarization_panel.get_preprocess_params()
+        method = self.binarization_panel.get_method()
+        threshold = self.binarization_panel.get_threshold()
+        method_params = self.binarization_panel.get_method_params()
+        
+        # 显示处理中状态
+        self.canvas.set_processing(True)
+        self.statusbar.showMessage(self.tr.tr('app.processing'))
+        
+        # 使用工作线程重新二值化
+        from ..utils.binarization_worker import BinarizationWorker
+        worker = BinarizationWorker(
+            result,
+            preprocess_params,
+            method,
+            threshold,
+            method_params
+        )
+        
+        def on_finished(binary_pixels):
+            # 更新二值化图像
+            self.image_data.pixels = binary_pixels
+            
+            # 根据当前视图模式更新显示
+            mode = self.image_data.view_mode
+            
+            if mode == 'preprocessed':
+                # 预处理模式：重新计算预处理图像
+                try:
+                    from ..utils.binarization_engine import BinarizationEngine
+                    preprocessed = BinarizationEngine.apply_preprocess(
+                        self.image_data.original_pixels.copy(),
+                        **preprocess_params
+                    )
+                    self.image_data.set_preprocessed_pixels(preprocessed)
+                except Exception as e:
+                    print(f"预处理失败: {e}")
+            
+            # 更新 tile cache（关键！）
+            self.canvas._update_tile_cache()
+            
+            # 更新画布（会根据当前视图模式显示相应的图像）
+            self.canvas.update()
+            self.canvas.set_processing(False)
+            self.statusbar.showMessage(self.tr.tr('ai_process.applied'))
+            worker.deleteLater()
+        
+        def on_error(error):
+            self.canvas.set_processing(False)
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                self.tr.tr('dialog.error'),
+                f"二值化失败: {error}"
+            )
+            worker.deleteLater()
+        
+        worker.finished.connect(on_finished)
+        worker.error.connect(on_error)
+        worker.start()
+        
+        # 标记为已修改
+        self._on_image_modified()
 
     def _compute_preprocessed_pixels(self):
         """计算并缓存预处理结果"""

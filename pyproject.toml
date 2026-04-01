@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "BinarizationTool"
-version = "v1.5.14.0"
+version = "v1.5.16.0"
 description = "二值化图片编辑器"
 authors = [{name = "夏次一定de"}]
 requires-python = ">=3.12"
@@ -13,6 +13,7 @@ dependencies = [
     "opencv-python>=4.8.0",
     "PySide6>=6.5.0",
     "Pillow>=10.0.0",
+    "onnxruntime>=1.17.0",
 ]
 
 [project.optional-dependencies]

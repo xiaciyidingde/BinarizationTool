@@ -39,6 +39,9 @@ class BinarizationPanel(QWidget):
 
     # 信号：图像变换操作 (operation: 'invert', 'flip_horizontal', 'flip_vertical')
     image_transform = Signal(str)
+    
+    # 信号：请求 AI 处理 (model_type: str)
+    ai_process_requested = Signal(str)
 
     def __init__(self, parent=None, panel_width=300):
         """
@@ -165,7 +168,17 @@ class BinarizationPanel(QWidget):
         import os
         model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
         has_rmbg_model = False
-        if os.path.exists(model_dir):
+        has_onnxruntime = False
+        
+        # 检查是否安装了 onnxruntime
+        try:
+            import onnxruntime
+            has_onnxruntime = True
+        except ImportError:
+            pass
+        
+        # 检查是否有模型文件
+        if has_onnxruntime and os.path.exists(model_dir):
             for filename in os.listdir(model_dir):
                 if filename.startswith('RMBG') and filename.endswith('.onnx'):
                     has_rmbg_model = True
@@ -178,6 +191,7 @@ class BinarizationPanel(QWidget):
             
             self.remove_bg_button = QPushButton(self.tr.tr('binarization_panel.remove_background'))
             self.remove_bg_button.setEnabled(False)  # 初始禁用，加载图片后启用
+            self.remove_bg_button.clicked.connect(lambda: self.ai_process_requested.emit('rmbg'))
             ai_tools_layout.addWidget(self.remove_bg_button)
             
             ai_tools_group.setLayout(ai_tools_layout)

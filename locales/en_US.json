@@ -336,5 +336,17 @@
     "title": "AI Processing Result",
     "cancel": "Cancel",
     "apply": "Apply"
+  },
+  "ai_process": {
+    "title": "AI Processing",
+    "loading_model": "Loading model, please wait...",
+    "processing": "Processing image...",
+    "finishing": "Almost done...",
+    "cancel": "Cancel",
+    "model_not_found": "{model} model file not found",
+    "unsupported_model": "Unsupported model type: {model}",
+    "failed": "Processing failed: {error}",
+    "rmbg_result": "Remove Background - Result Comparison",
+    "applied": "AI processing result applied"
   }
 }
