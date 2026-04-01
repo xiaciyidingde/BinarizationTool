@@ -186,7 +186,11 @@ class MainWindow(QMainWindow):
                     theme = theme_manager._detect_system_theme()
                 
                 # Windows 11 标题栏颜色
-                hwnd = int(self.winId())
+                win_id = self.winId()
+                if win_id == 0:  # 窗口ID无效，跳过
+                    return
+                    
+                hwnd = int(win_id)
                 DWMWA_USE_IMMERSIVE_DARK_MODE = 20
                 
                 # 根据主题设置标题栏颜色：1 = 深色, 0 = 浅色
@@ -314,6 +318,7 @@ class MainWindow(QMainWindow):
         
         # 创建 Canvas
         self.canvas = Canvas()
+        self.canvas.main_window = self  # 设置 main_window 引用，用于访问属性面板
         
         # 设置坐标转换器
         self.horizontal_ruler.set_coordinate_transform(self.canvas.coord_transform)

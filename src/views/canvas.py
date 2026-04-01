@@ -788,8 +788,20 @@ class Canvas(QWidget):
                         self.image_modified.emit()
                         self.update()
                     else:
-                        # 结束拖动选择
-                        self.current_tool.end_drag_select()
+                        # 检查智能选择开关状态
+                        smart_enabled = False
+                        if hasattr(self, 'main_window') and self.main_window is not None:
+                            if hasattr(self.main_window, 'properties_panel'):
+                                panel = self.main_window.properties_panel
+                                if hasattr(panel, 'smart_selection_switch'):
+                                    smart_enabled = panel.smart_selection_switch.isChecked()
+                        
+                        # 结束拖动选择，可能触发智能优化
+                        smart_dirty_rect = self.current_tool.end_drag_select(
+                            self.image_data, 
+                            smart_selection=smart_enabled
+                        )
+                        
 
                         # 停止节流定时器并执行最后一次失效
                         if self.selection_update_timer.isActive():
@@ -797,6 +809,15 @@ class Canvas(QWidget):
                         # 失效最后的累积区域
                         if self.pending_selection_dirty_rect[2] > self.pending_selection_dirty_rect[0]:
                             self._do_selection_update()
+                        
+                        # 如果智能选择产生了脏区域，额外失效该区域
+                        if smart_dirty_rect != (0, 0, 0, 0):
+                            x_min, y_min, x_max, y_max = smart_dirty_rect
+                            self.tile_cache.invalidate_region(
+                                x_min, y_min,
+                                x_max - x_min,
+                                y_max - y_min
+                            )
 
                         # 将选区同步到 image_data（引用，不复制）
                         self.image_data.selection_mask = self.current_tool.selection_mask
