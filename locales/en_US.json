@@ -331,5 +331,10 @@
     "layer_renamed": "Layer renamed to: {name}",
     "duplicate_name_error": "Layer name \"{name}\" already exists. Please use a different name",
     "confirm_delete": "Are you sure you want to delete layer \"{name}\"?\nThis action cannot be undone."
+  },
+  "ai_result": {
+    "title": "AI Processing Result",
+    "cancel": "Cancel",
+    "apply": "Apply"
   }
 }
