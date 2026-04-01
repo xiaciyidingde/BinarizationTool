@@ -265,7 +265,9 @@
     "image_transform": "Image Transform",
     "invert_image": "Invert",
     "flip_horizontal": "Flip Horizontal",
-    "flip_vertical": "Flip Vertical"
+    "flip_vertical": "Flip Vertical",
+    "ai_tools": "AI Tools",
+    "remove_background": "Remove Background"
   },
   "properties_panel": {
     "properties": "Properties",

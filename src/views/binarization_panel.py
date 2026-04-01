@@ -161,6 +161,30 @@ class BinarizationPanel(QWidget):
         settings_layout.setContentsMargins(12, 8, 12, 8)  # 左右边距12px
         settings_layout.setSpacing(8)
 
+        # === AI 工具（如果有模型） ===
+        import os
+        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
+        has_rmbg_model = False
+        if os.path.exists(model_dir):
+            for filename in os.listdir(model_dir):
+                if filename.startswith('RMBG') and filename.endswith('.onnx'):
+                    has_rmbg_model = True
+                    break
+        
+        if has_rmbg_model:
+            ai_tools_group = QGroupBox(self.tr.tr('binarization_panel.ai_tools'))
+            ai_tools_layout = QVBoxLayout()
+            ai_tools_layout.setSpacing(6)
+            
+            self.remove_bg_button = QPushButton(self.tr.tr('binarization_panel.remove_background'))
+            self.remove_bg_button.setEnabled(False)  # 初始禁用，加载图片后启用
+            ai_tools_layout.addWidget(self.remove_bg_button)
+            
+            ai_tools_group.setLayout(ai_tools_layout)
+            settings_layout.addWidget(ai_tools_group)
+        else:
+            self.remove_bg_button = None
+
         # === 预处理参数 ===
         preprocess_group = QGroupBox(self.tr.tr('binarization_panel.preprocess'))
         preprocess_layout = QVBoxLayout()
@@ -1182,6 +1206,9 @@ class BinarizationPanel(QWidget):
         self.flip_horizontal_checkbox.setEnabled(enabled)
         self.flip_vertical_checkbox.setEnabled(enabled)
         self.flip_vertical_checkbox.setEnabled(enabled)
+        # 启用/禁用去除背景按钮（如果存在）
+        if hasattr(self, 'remove_bg_button') and self.remove_bg_button is not None:
+            self.remove_bg_button.setEnabled(enabled)
 
     def set_current_layer(self, layer_name: str):
         """

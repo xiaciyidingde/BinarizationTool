@@ -265,7 +265,9 @@
     "image_transform": "图像变换",
     "invert_image": "反相",
     "flip_horizontal": "水平翻转",
-    "flip_vertical": "垂直翻转"
+    "flip_vertical": "垂直翻转",
+    "ai_tools": "AI 工具",
+    "remove_background": "去除背景"
   },
   "properties_panel": {
     "properties": "属性",
