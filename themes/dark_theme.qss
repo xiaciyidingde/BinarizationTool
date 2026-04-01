@@ -304,6 +304,34 @@ QProgressBar::chunk {
     border-radius: 3px;
 }
 
+/* ========== 进度对话框样式 ========== */
+QProgressDialog {
+    background-color: #1e1e1e;
+}
+
+QProgressDialog QLabel {
+    color: #e0e0e0;
+    background-color: transparent;
+}
+
+QProgressDialog QPushButton {
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px;
+    padding: 8px 16px;
+}
+
+QProgressDialog QPushButton:hover {
+    background-color: #454545;
+    border-color: #5a5a5a;
+}
+
+QProgressDialog QPushButton:pressed {
+    background-color: #505050;
+    border-color: #6a6a6a;
+}
+
 /* ========== 分割线样式 ========== */
 QSplitter::handle {
     background-color: #3e3e3e;
@@ -713,3 +741,21 @@ QLabel#currentToolLabel {
     color: #cccccc;
 }
 
+/* ========== 模型下载对话框信息标签 ========== */
+QLabel#infoLabel {
+    color: #cccccc;
+    background-color: #2a2a2a;
+    border: 1px solid #404040;
+    border-radius: 5px;
+    padding: 10px;
+}
+
+QLabel#infoLabel a {
+    color: #6eb3ff;
+    text-decoration: none;
+}
+
+QLabel#infoLabel a:hover {
+    color: #8ec5ff;
+    text-decoration: underline;
+}

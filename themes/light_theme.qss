@@ -598,3 +598,22 @@ QPushButton[fixedSize="24"]:hover {
 QPushButton[fixedSize="24"]:pressed {
     background-color: #d0d0d0;
 }
+
+/* ========== 模型下载对话框信息标签 ========== */
+QLabel#infoLabel {
+    color: #495057;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 5px;
+    padding: 10px;
+}
+
+QLabel#infoLabel a {
+    color: #007bff;
+    text-decoration: none;
+}
+
+QLabel#infoLabel a:hover {
+    color: #0056b3;
+    text-decoration: underline;
+}

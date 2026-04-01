@@ -267,7 +267,9 @@
     "flip_horizontal": "水平翻转",
     "flip_vertical": "垂直翻转",
     "ai_tools": "AI 工具",
-    "remove_background": "去除背景"
+    "remove_background": "去除背景",
+    "download_model": "下载模型",
+    "install_onnxruntime_hint": "提示：需要先安装 onnxruntime\npip install onnxruntime"
   },
   "properties_panel": {
     "properties": "属性",
@@ -348,5 +350,27 @@
     "failed": "处理失败: {error}",
     "rmbg_result": "去除背景 - 结果对比",
     "applied": "AI 处理结果已应用"
+  },
+  "model_download": {
+    "title": "下载 RMBG-2.0 模型",
+    "description": "RMBG-2.0 是一个用于背景去除的深度学习模型。",
+    "model_size": "• 模型大小: 约 223 MB",
+    "license": "• 许可证: CC BY-NC 4.0 (仅限非商业使用)",
+    "commercial_contact": "• 商业使用请联系: ",
+    "download_hint": "点击\"开始下载\"将从 ModelScope 或 HuggingFace 下载模型。",
+    "download_links": "下载链接:",
+    "modelscope": "• ModelScope: ",
+    "huggingface": "• HuggingFace: ",
+    "manual_download": "手动下载请放在程序目录下的 \"./data/model/\" 并改名为 \"RMBG-*.onnx\" ('*' 可替换)",
+    "start_download": "开始下载",
+    "cancel": "取消",
+    "close": "关闭",
+    "complete": "完成",
+    "confirm_cancel": "确认取消",
+    "confirm_cancel_message": "确定要取消下载吗？",
+    "canceling": "正在取消下载...",
+    "download_success": "\n✓ 下载成功！",
+    "download_failed": "\n✗ 下载失败",
+    "download_failed_message": "模型下载失败，请检查网络连接。\n\n您也可以手动下载:\nhttps://huggingface.co/briaai/RMBG-2.0/tree/main/onnx"
   }
 }

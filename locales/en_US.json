@@ -267,7 +267,9 @@
     "flip_horizontal": "Flip Horizontal",
     "flip_vertical": "Flip Vertical",
     "ai_tools": "AI Tools",
-    "remove_background": "Remove Background"
+    "remove_background": "Remove Background",
+    "download_model": "Download Model",
+    "install_onnxruntime_hint": "Hint: Install onnxruntime first\npip install onnxruntime"
   },
   "properties_panel": {
     "properties": "Properties",
@@ -348,5 +350,27 @@
     "failed": "Processing failed: {error}",
     "rmbg_result": "Remove Background - Result Comparison",
     "applied": "AI processing result applied"
+  },
+  "model_download": {
+    "title": "Download RMBG-2.0 Model",
+    "description": "RMBG-2.0 is a deep learning model for background removal.",
+    "model_size": "• Model Size: ~223 MB",
+    "license": "• License: CC BY-NC 4.0 (Non-Commercial Use Only)",
+    "commercial_contact": "• Commercial Use Contact: ",
+    "download_hint": "Click \"Start Download\" to download the model from ModelScope or HuggingFace.",
+    "download_links": "Download Links:",
+    "modelscope": "• ModelScope: ",
+    "huggingface": "• HuggingFace: ",
+    "manual_download": "For manual download, place the file in \"./data/model/\" and rename to \"RMBG-*.onnx\" ('*' can be replaced)",
+    "start_download": "Start Download",
+    "cancel": "Cancel",
+    "close": "Close",
+    "complete": "Complete",
+    "confirm_cancel": "Confirm Cancel",
+    "confirm_cancel_message": "Are you sure you want to cancel the download?",
+    "canceling": "Canceling download...",
+    "download_success": "\n✓ Download successful!",
+    "download_failed": "\n✗ Download failed",
+    "download_failed_message": "Model download failed. Please check your network connection.\n\nYou can also download manually:\nhttps://huggingface.co/briaai/RMBG-2.0/tree/main/onnx"
   }
 }

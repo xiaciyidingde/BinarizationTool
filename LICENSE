@@ -73,3 +73,48 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+特别声明 / SPECIAL NOTICE
+=========================
+
+关于 RMBG 模型 / About RMBG Model
+---------------------------------
+
+本项目包含或依赖 RMBG 模型（背景移除模块）。该模型的使用受其原始许可证约束。
+
+This project includes or depends on the RMBG model (background removal module). 
+The use of this model is subject to its original license terms.
+
+重要提示 / Important Notes:
+  - RMBG 模型是可选依赖，不安装该模型不影响本软件的其他功能
+  - RMBG model is an optional dependency; the software functions without it
+  
+  - RMBG 模型由其原作者开发和维护，具有独立的许可协议
+  - The RMBG model is developed and maintained by its original authors with 
+    separate licensing terms
+  
+  - 在商业使用前，请仔细阅读 RMBG 模型的原始许可证
+  - Before commercial use, please carefully review the RMBG model's original license
+  
+  - RMBG 模型的许可证可能与本项目的 CC BY-NC-SA 4.0 许可证不同
+  - The RMBG model's license may differ from this project's CC BY-NC-SA 4.0 license
+
+RMBG 模型信息 / RMBG Model Information:
+  - RMBG-1.4: https://huggingface.co/briaai/RMBG-1.4
+  - RMBG-2.0: https://huggingface.co/briaai/RMBG-2.0
+  - 原始许可证 / Original License: 请查看模型仓库 / See model repository
+
+免责声明 / Disclaimer:
+  本项目作者不对 RMBG 模型的使用承担任何法律责任。用户需自行确保其使用方式
+  符合 RMBG 模型的许可证要求。
+  
+  The authors of this project assume no legal responsibility for the use of the 
+  RMBG model. Users must ensure their usage complies with the RMBG model's 
+  license requirements.
+
+如有疑问，请联系 / For questions, please contact:
+  - 本项目 / This Project: [GitHub Issues]
+  - RMBG 模型 / RMBG Model: [Model Repository]
+

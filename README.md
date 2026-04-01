@@ -367,6 +367,24 @@ BinarizationTool/
 
 详见 [LICENSE](LICENSE) 文件。
 
+### ⚠️ 特别声明
+
+**关于 RMBG 模型**：
+
+本项目包含或依赖 RMBG 模型（背景移除模块）。该模型的使用受其原始许可证约束，请在商业使用前仔细阅读 RMBG 模型的许可证条款。
+
+- RMBG 模型是**可选依赖**，不安装该模型不影响本软件的其他功能
+- RMBG 模型由其原作者开发和维护，具有独立的许可协议
+- RMBG 模型的许可证可能与本项目的 CC BY-NC-SA 4.0 许可证不同
+- 用户需自行确保其使用方式符合 RMBG 模型的许可证要求
+
+**RMBG 模型信息**：
+- RMBG-1.4: https://huggingface.co/briaai/RMBG-1.4
+- RMBG-2.0: https://huggingface.co/briaai/RMBG-2.0
+- 原始许可证：请查看模型仓库
+
+本项目作者不对 RMBG 模型的使用承担任何法律责任。
+
 ---
 
 ## 👨‍💻 作者

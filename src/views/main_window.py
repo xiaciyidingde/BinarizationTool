@@ -2601,6 +2601,7 @@ class MainWindow(QMainWindow):
         # 显示进度对话框
         from PySide6.QtWidgets import QProgressDialog, QApplication
         from PySide6.QtCore import QTimer
+        from ..utils.window_utils import apply_dark_titlebar_after_show
         
         progress = QProgressDialog(
             self.tr.tr('ai_process.loading_model'),
@@ -2617,6 +2618,9 @@ class MainWindow(QMainWindow):
         progress.setMinimumHeight(120)
         
         progress.show()
+        
+        # 应用深色标题栏
+        apply_dark_titlebar_after_show(progress)
         
         # 强制刷新界面，确保对话框显示
         QApplication.processEvents()

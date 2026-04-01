@@ -327,6 +327,10 @@ class AIResultDialog(QDialog):
         self.resize(1000, 700)
         
         self.setup_ui(original_image, processed_image)
+        
+        # 应用深色标题栏
+        from ..utils.window_utils import apply_dark_titlebar
+        apply_dark_titlebar(self)
     
     def setup_ui(self, original_image: np.ndarray, processed_image: np.ndarray):
         """设置 UI"""
