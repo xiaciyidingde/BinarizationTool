@@ -306,6 +306,7 @@
     "method_paint": "Paint",
     "method_rect": "Rectangle",
     "smart_selection": "Smart Selection:",
+    "use_source_image": "Use Source:",
     "fill_selection": "Fill:",
     "fill_white": "White",
     "fill_black": "Black",

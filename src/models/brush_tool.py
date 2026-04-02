@@ -2,7 +2,6 @@
 画笔工具模块
 
 处理画笔绘制逻辑，包括笔画开始、继续、结束，以及基于间距的点插值。
-遵循 Photoshop 的画笔行为模式。
 """
 
 from typing import TYPE_CHECKING
@@ -61,7 +60,7 @@ class BrushTool:
         """
         继续笔画
 
-        根据间距插值点以保持均匀的笔刷印记分布（Photoshop 行为）。
+        根据间距插值点以保持均匀的笔刷印记分布。
 
         Args:
             pixel_x: 当前 X 坐标（像素）

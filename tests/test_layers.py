@@ -48,21 +48,21 @@ class TestUserLayerModel:
         bbox = (5, 5, 3, 3)
         layer = UserLayer("测试", pixels, mask, bbox)
         
-        # 获取 10x10 完整像素
+        # 获取 10x10 完整像素（RGB格式）
         full_pixels = layer.get_full_pixels((10, 10))
         
         # 验证尺寸
-        assert full_pixels.shape == (10, 10)
+        assert full_pixels.shape == (10, 10, 3)
         
         # 验证图层外是白色
-        assert full_pixels[0, 0] == 255
-        assert full_pixels[9, 9] == 255
+        assert np.all(full_pixels[0, 0] == 255)
+        assert np.all(full_pixels[9, 9] == 255)
         
         # 验证图层内选中像素是黑色
-        assert full_pixels[6, 6] == 0
+        assert np.all(full_pixels[6, 6] == 0)
         
         # 验证图层内非选中像素是白色
-        assert full_pixels[5, 5] == 255
+        assert np.all(full_pixels[5, 5] == 255)
     
     def test_layer_full_mask(self):
         """测试获取完整掩码"""
@@ -272,7 +272,9 @@ class TestLayerOperations:
             rel_y = y - min_y
             
             black_mask = layer.mask & (layer.pixels == 0)
-            merged_pixels[rel_y:rel_y+h, rel_x:rel_x+w][black_mask] = 0
+            # 注意：必须先获取区域引用，再应用掩码，避免 NumPy 链式索引问题
+            pixels_region = merged_pixels[rel_y:rel_y+h, rel_x:rel_x+w]
+            pixels_region[black_mask] = 0
             merged_mask[rel_y:rel_y+h, rel_x:rel_x+w] |= layer.mask
         
         # 验证：左上角是黑色
@@ -318,7 +320,9 @@ class TestLayerOperations:
             rel_y = y - min_y
             
             black_mask = layer.mask & (layer.pixels == 0)
-            merged_pixels[rel_y:rel_y+h, rel_x:rel_x+w][black_mask] = 0
+            # 注意：必须先获取区域引用，再应用掩码，避免 NumPy 链式索引问题
+            pixels_region = merged_pixels[rel_y:rel_y+h, rel_x:rel_x+w]
+            pixels_region[black_mask] = 0
         
         # 验证：重叠区域是黑色
         assert merged_pixels[2, 2] == 0

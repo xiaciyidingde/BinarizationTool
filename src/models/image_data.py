@@ -21,14 +21,15 @@ class ImageData:
         初始化图片数据
 
         Args:
-            pixels: 二值化图片数据，形状为 (H, W)，dtype=uint8
+            pixels: 二值化图片数据，形状为 (H, W, 3)，dtype=uint8（RGB格式）
             original_pixels: 原始图片数据（用于重新二值化），可选
         """
         if pixels.dtype != np.uint8:
             pixels = pixels.astype(np.uint8)
 
         self.pixels = pixels  # 基础二值化图层
-        self.height, self.width = pixels.shape
+        # 所有图像现在都是 RGB 3通道
+        self.height, self.width = pixels.shape[:2]
 
         # 保存原始图片用于重新二值化
         if original_pixels is not None:
@@ -40,7 +41,7 @@ class ImageData:
         self.edit_mask: np.ndarray | None = None  # shape: (H, W), dtype=bool
 
         # 编辑值：存储用户编辑的像素值
-        self.edit_values: np.ndarray | None = None  # shape: (H, W), dtype=uint8
+        self.edit_values: np.ndarray | None = None  # shape: (H, W, 3), dtype=uint8
 
         # 临时图层用于绘制预览
         self.temp_layer: np.ndarray | None = None
@@ -65,6 +66,7 @@ class ImageData:
         获取像素值（带边界检查）
 
         优先级：临时层 > 编辑值 > 基础层
+        对于RGB图像，返回第一个通道的值（假设是灰度图）
 
         Args:
             x: X 坐标
@@ -77,19 +79,23 @@ class ImageData:
             return 0
 
         if self.temp_layer is not None:
-            return int(self.temp_layer[y, x])
+            pixel = self.temp_layer[y, x]
+            return int(pixel[0]) if len(pixel.shape) > 0 else int(pixel)
 
         # 如果该像素被编辑过，返回编辑值
         if self.edit_mask is not None and self.edit_mask[y, x]:
-            return int(self.edit_values[y, x])
+            pixel = self.edit_values[y, x]
+            return int(pixel[0]) if len(pixel.shape) > 0 else int(pixel)
 
-        return int(self.pixels[y, x])
+        pixel = self.pixels[y, x]
+        return int(pixel[0]) if len(pixel.shape) > 0 else int(pixel)
 
     def set_pixel(self, x: int, y: int, value: int):
         """
         设置像素值（带边界检查）
 
         优先写入临时层，并标记该像素为已编辑。
+        对于RGB图像，将值设置到所有通道
 
         Args:
             x: X 坐标
@@ -101,10 +107,11 @@ class ImageData:
 
         # 确保值为 0 或 255
         value = 0 if value < 128 else 255
+        value_rgb = np.array([value, value, value], dtype=np.uint8)
 
         if self.temp_layer is not None:
             # 写入临时层
-            self.temp_layer[y, x] = value
+            self.temp_layer[y, x] = value_rgb
             # 标记为已编辑
             if self.temp_edit_mask is not None:
                 self.temp_edit_mask[y, x] = True
@@ -112,10 +119,10 @@ class ImageData:
             # 直接编辑（不在笔画中）
             if self.edit_mask is None:
                 self.edit_mask = np.zeros((self.height, self.width), dtype=bool)
-                self.edit_values = np.zeros((self.height, self.width), dtype=np.uint8)
+                self.edit_values = np.zeros((self.height, self.width, 3), dtype=np.uint8)
 
             self.edit_mask[y, x] = True
-            self.edit_values[y, x] = value
+            self.edit_values[y, x] = value_rgb
 
     def is_valid_coord(self, x: int, y: int) -> bool:
         """
@@ -161,7 +168,7 @@ class ImageData:
             # 初始化编辑掩码和值（如果不存在）
             if self.edit_mask is None:
                 self.edit_mask = np.zeros((self.height, self.width), dtype=bool)
-                self.edit_values = np.zeros((self.height, self.width), dtype=np.uint8)
+                self.edit_values = np.zeros((self.height, self.width, 3), dtype=np.uint8)
 
             # 只保存被实际编辑的像素
             self.edit_mask[self.temp_edit_mask] = True
@@ -231,8 +238,8 @@ class ImageData:
             self.edit_mask = self.edit_mask[y:y+height, x:x+width].copy()
             self.edit_values = self.edit_values[y:y+height, x:x+width].copy()
 
-        # 更新尺寸
-        self.height, self.width = self.pixels.shape
+        # 更新尺寸（支持RGB格式）
+        self.height, self.width = self.pixels.shape[:2]
 
         # 清除临时图层
         self.temp_layer = None
@@ -319,9 +326,9 @@ class ImageData:
         用于在修改二值化参数时更新基础层，同时保留用户的编辑内容。
 
         Args:
-            new_pixels: 新的二值化像素数据
+            new_pixels: 新的二值化像素数据（RGB格式）
         """
-        if new_pixels.shape != (self.height, self.width):
+        if new_pixels.shape[:2] != (self.height, self.width):
             raise ValueError("新像素数据的尺寸必须与当前图片一致")
 
         self.pixels = new_pixels.copy()

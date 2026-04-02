@@ -79,7 +79,7 @@ class PropertiesPanel(QWidget):
         self.properties_page = self._create_properties_page()
         self.tab_widget.addTab(self.properties_page, self.tr.tr('properties_panel.properties'))
 
-        # 第二页：工具（预留）
+        # 第二页：工具
         self.tools_page = self._create_tools_page()
         self.tab_widget.addTab(self.tools_page, self.tr.tr('properties_panel.tools'))
 

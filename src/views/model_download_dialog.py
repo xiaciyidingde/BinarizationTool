@@ -179,8 +179,14 @@ class ModelDownloadDialog(QDialog):
             
             if reply == QMessageBox.Yes:
                 self.log_text.append(self.tr.tr('model_download.canceling'))
+                # 设置取消标志
                 self.worker.cancel()
-                self.worker.wait()
+                # 等待线程结束（最多等待3秒）
+                if not self.worker.wait(3000):
+                    # 如果3秒后还没结束，强制终止（注意：这可能导致资源泄漏）
+                    self.log_text.append("强制终止下载线程...")
+                    self.worker.terminate()
+                    self.worker.wait()
                 self.reject()
         else:
             self.reject()

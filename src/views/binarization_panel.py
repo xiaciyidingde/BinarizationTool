@@ -889,6 +889,12 @@ class BinarizationPanel(QWidget):
         # 导入图标资源
         from ..utils.resources import CHECKED, UNCHECKED
 
+        # 创建容器来包装所有变换按钮，方便控制显示/隐藏
+        self.transform_buttons_container = QWidget()
+        transform_buttons_layout = QVBoxLayout(self.transform_buttons_container)
+        transform_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        transform_buttons_layout.setSpacing(8)
+
         # 反相
         invert_row = QHBoxLayout()
         invert_row.setSpacing(8)
@@ -905,7 +911,7 @@ class BinarizationPanel(QWidget):
         invert_label.setMinimumHeight(32)
         invert_row.addWidget(self.invert_checkbox)
         invert_row.addWidget(invert_label, 1)
-        transform_layout.addLayout(invert_row)
+        transform_buttons_layout.addLayout(invert_row)
 
         # 水平翻转
         flip_h_row = QHBoxLayout()
@@ -923,7 +929,7 @@ class BinarizationPanel(QWidget):
         flip_h_label.setMinimumHeight(32)
         flip_h_row.addWidget(self.flip_horizontal_checkbox)
         flip_h_row.addWidget(flip_h_label, 1)
-        transform_layout.addLayout(flip_h_row)
+        transform_buttons_layout.addLayout(flip_h_row)
 
         # 垂直翻转
         flip_v_row = QHBoxLayout()
@@ -941,7 +947,10 @@ class BinarizationPanel(QWidget):
         flip_v_label.setMinimumHeight(32)
         flip_v_row.addWidget(self.flip_vertical_checkbox)
         flip_v_row.addWidget(flip_v_label, 1)
-        transform_layout.addLayout(flip_v_row)
+        transform_buttons_layout.addLayout(flip_v_row)
+
+        # 将按钮容器添加到分组布局
+        transform_layout.addWidget(self.transform_buttons_container)
 
         transform_group.setLayout(transform_layout)
         settings_layout.addWidget(transform_group)
@@ -1245,24 +1254,37 @@ class BinarizationPanel(QWidget):
             self.tr.tr('binarization_panel.current_layer', layer=layer_name)
         )
     
+    def set_transform_buttons_visible(self, visible: bool):
+        """
+        设置图像变换按钮的可见性
+        
+        Args:
+            visible: 是否显示按钮
+        """
+        if hasattr(self, 'transform_buttons_container'):
+            self.transform_buttons_container.setVisible(visible)
+    
     def get_all_params(self) -> dict:
         """
         获取所有参数（预处理 + 二值化）
         
         Returns:
-            包含所有参数的字典
+            包含所有参数的字典（嵌套格式）
+            格式: {'preprocess': {...}, 'threshold': {'method': ..., 'threshold': ..., ...}}
         """
         return {
             'preprocess': self.get_preprocess_params(),
-            'method': self.get_method(),
-            'threshold': self.get_threshold(),
-            'block_size': self.block_size_slider.value() if hasattr(self, 'block_size_slider') else 11,
-            'window_size': self.window_size_slider.value() if hasattr(self, 'window_size_slider') else 15,
-            'k_param': self.k_param_slider.value() * 0.01 if hasattr(self, 'k_param_slider') else 0.2,
-            'r_param': self.r_param_slider.value() if hasattr(self, 'r_param_slider') else 128,
-            'contrast_threshold': self.contrast_threshold_slider.value() if hasattr(self, 'contrast_threshold_slider') else 15,
-            'dither_strength': self.dither_strength_slider.value() * 0.01 if hasattr(self, 'dither_strength_slider') else 1.0,
-            'matrix_size': self.matrix_size_slider.value() if hasattr(self, 'matrix_size_slider') else 8,
+            'threshold': {
+                'method': self.get_method(),
+                'threshold': self.get_threshold(),
+                'block_size': self.block_size_slider.value() if hasattr(self, 'block_size_slider') else 11,
+                'window_size': self.window_size_slider.value() if hasattr(self, 'window_size_slider') else 15,
+                'k_param': self.k_param_slider.value() * 0.01 if hasattr(self, 'k_param_slider') else 0.2,
+                'r_param': self.r_param_slider.value() if hasattr(self, 'r_param_slider') else 128,
+                'contrast_threshold': self.contrast_threshold_slider.value() if hasattr(self, 'contrast_threshold_slider') else 15,
+                'dither_strength': self.dither_strength_slider.value() * 0.01 if hasattr(self, 'dither_strength_slider') else 1.0,
+                'matrix_size': self.matrix_size_slider.value() if hasattr(self, 'matrix_size_slider') else 8,
+            }
         }
     
     def load_params(self, params: dict):
@@ -1270,7 +1292,9 @@ class BinarizationPanel(QWidget):
         加载参数到控件
         
         Args:
-            params: 参数字典
+            params: 参数字典（支持新旧两种格式）
+                新格式: {'preprocess': {...}, 'threshold': {'method': ..., 'threshold': ..., ...}}
+                旧格式: {'method': ..., 'threshold': ..., ...}
         """
         # 阻止信号，避免触发参数变化
         self.blockSignals(True)
@@ -1312,27 +1336,54 @@ class BinarizationPanel(QWidget):
                 if 'denoise' in preprocess:
                     self.denoise_slider.setValue(preprocess['denoise'])
             
-            # 加载二值化参数
-            if 'method' in params:
-                self.set_method(params['method'])
-            if 'threshold' in params:
-                self.set_threshold(params['threshold'])
+            # 加载二值化参数（支持新旧格式）
+            threshold_params = params.get('threshold', {})
             
-            # 加载其他二值化参数（如果存在）
-            if 'block_size' in params and hasattr(self, 'block_size_slider'):
-                self.block_size_slider.setValue(params['block_size'])
-            if 'window_size' in params and hasattr(self, 'window_size_slider'):
-                self.window_size_slider.setValue(params['window_size'])
-            if 'k_param' in params and hasattr(self, 'k_param_slider'):
-                self.k_param_slider.setValue(int(params['k_param'] * 100))
-            if 'r_param' in params and hasattr(self, 'r_param_slider'):
-                self.r_param_slider.setValue(params['r_param'])
-            if 'contrast_threshold' in params and hasattr(self, 'contrast_threshold_slider'):
-                self.contrast_threshold_slider.setValue(params['contrast_threshold'])
-            if 'dither_strength' in params and hasattr(self, 'dither_strength_slider'):
-                self.dither_strength_slider.setValue(int(params['dither_strength'] * 100))
-            if 'matrix_size' in params and hasattr(self, 'matrix_size_slider'):
-                self.matrix_size_slider.setValue(params['matrix_size'])
+            # 判断是新格式还是旧格式
+            if isinstance(threshold_params, dict):
+                # 新格式：threshold 是字典
+                if 'method' in threshold_params:
+                    self.set_method(threshold_params['method'])
+                if 'threshold' in threshold_params:
+                    self.set_threshold(threshold_params['threshold'])
+                
+                # 加载其他二值化参数
+                if 'block_size' in threshold_params and hasattr(self, 'block_size_slider'):
+                    self.block_size_slider.setValue(threshold_params['block_size'])
+                if 'window_size' in threshold_params and hasattr(self, 'window_size_slider'):
+                    self.window_size_slider.setValue(threshold_params['window_size'])
+                if 'k_param' in threshold_params and hasattr(self, 'k_param_slider'):
+                    self.k_param_slider.setValue(int(threshold_params['k_param'] * 100))
+                if 'r_param' in threshold_params and hasattr(self, 'r_param_slider'):
+                    self.r_param_slider.setValue(threshold_params['r_param'])
+                if 'contrast_threshold' in threshold_params and hasattr(self, 'contrast_threshold_slider'):
+                    self.contrast_threshold_slider.setValue(threshold_params['contrast_threshold'])
+                if 'dither_strength' in threshold_params and hasattr(self, 'dither_strength_slider'):
+                    self.dither_strength_slider.setValue(int(threshold_params['dither_strength'] * 100))
+                if 'matrix_size' in threshold_params and hasattr(self, 'matrix_size_slider'):
+                    self.matrix_size_slider.setValue(threshold_params['matrix_size'])
+            else:
+                # 旧格式：threshold 是整数，method 在顶层
+                if 'method' in params:
+                    self.set_method(params['method'])
+                if isinstance(threshold_params, int):
+                    self.set_threshold(threshold_params)
+                
+                # 加载其他二值化参数（旧格式在顶层）
+                if 'block_size' in params and hasattr(self, 'block_size_slider'):
+                    self.block_size_slider.setValue(params['block_size'])
+                if 'window_size' in params and hasattr(self, 'window_size_slider'):
+                    self.window_size_slider.setValue(params['window_size'])
+                if 'k_param' in params and hasattr(self, 'k_param_slider'):
+                    self.k_param_slider.setValue(int(params['k_param'] * 100))
+                if 'r_param' in params and hasattr(self, 'r_param_slider'):
+                    self.r_param_slider.setValue(params['r_param'])
+                if 'contrast_threshold' in params and hasattr(self, 'contrast_threshold_slider'):
+                    self.contrast_threshold_slider.setValue(params['contrast_threshold'])
+                if 'dither_strength' in params and hasattr(self, 'dither_strength_slider'):
+                    self.dither_strength_slider.setValue(int(params['dither_strength'] * 100))
+                if 'matrix_size' in params and hasattr(self, 'matrix_size_slider'):
+                    self.matrix_size_slider.setValue(params['matrix_size'])
                 
         finally:
             # 恢复信号

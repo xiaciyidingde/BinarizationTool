@@ -100,14 +100,15 @@ class SelectionStroke:
         在圆形范围内选择匹配目标颜色的像素（NumPy 向量化）
 
         Args:
-            pixels: 像素数据
+            pixels: 像素数据（RGB 3通道）
             selection_mask: 选区蒙版（输出）
             center_x: 圆心 X 坐标
             center_y: 圆心 Y 坐标
             radius: 半径
             tolerance: 边缘容差
         """
-        height, width = pixels.shape
+        # 所有图像现在都是 RGB 3通道
+        height, width, _ = pixels.shape
 
         # 计算边界框（扩大1像素以包含边缘）
         x_min = max(0, int(center_x - radius - 1))
@@ -392,7 +393,8 @@ class SelectionTool:
             color: 目标颜色（0=黑色, 255=白色）
         """
         pixels = image_data.get_current_pixels()
-        height, width = pixels.shape
+        # 所有图像现在都是 RGB 3通道
+        height, width, _ = pixels.shape
 
         # 创建新的选区蒙版
         new_mask = self._global_color_select(pixels,
@@ -487,15 +489,22 @@ class SelectionTool:
         全局颜色选择
 
         Args:
-            pixels: 像素数据
+            pixels: 像素数据（RGB 3通道）
             mask: 选区蒙版（输出）
             target_color: 目标颜色
 
         Returns:
             更新后的蒙版
         """
+        # 将 RGB 转换为灰度进行颜色比较
+        import cv2
+        if len(pixels.shape) == 3 and pixels.shape[2] == 3:
+            gray = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = pixels
+        
         # 选择所有颜色相近的像素
-        color_diff = np.abs(pixels.astype(int) - int(target_color))
+        color_diff = np.abs(gray.astype(int) - int(target_color))
         mask[color_diff <= self.tolerance] = True
         return mask
 
@@ -717,7 +726,16 @@ class SelectionTool:
         threshold1: int,
         threshold2: int
     ) -> np.ndarray:
-        """在选区范围内检测边缘（提高阈值减少噪点）"""
+        """
+        在选区范围内检测边缘（提高阈值减少噪点）
+        
+        Args:
+            image_data: 图片数据
+            mask: 选区蒙版
+            margin: 边缘搜索边距
+            threshold1: Canny 低阈值
+            threshold2: Canny 高阈值
+        """
         import cv2
         
         # 获取选区的包围盒
@@ -730,7 +748,7 @@ class SelectionTool:
         y_min = max(0, y_indices.min() - margin)
         y_max = min(mask.shape[0], y_indices.max() + margin + 1)
         
-        # 提取区域图像
+        # 提取区域图像（使用当前视图）
         pixels = image_data.get_current_pixels()
         region = pixels[y_min:y_max, x_min:x_max]
         
