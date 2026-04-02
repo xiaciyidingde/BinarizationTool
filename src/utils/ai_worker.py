@@ -72,8 +72,27 @@ class AIWorker(QThread):
                 return
             
             # 处理图像
-            self.progress_updated.emit(60)
-            result = self.processor.process(self.image)
+            self.progress_updated.emit(50)
+            
+            # 传递进度回调和取消检查给处理器
+            def process_progress_callback(progress):
+                """处理进度回调"""
+                self.progress_updated.emit(progress)
+            
+            def cancel_check():
+                """取消检查函数"""
+                return self.should_stop
+            
+            # 检查处理器是否支持进度回调和取消检查
+            import inspect
+            sig = inspect.signature(self.processor.process)
+            kwargs = {}
+            if 'progress_callback' in sig.parameters:
+                kwargs['progress_callback'] = process_progress_callback
+            if 'cancel_check' in sig.parameters:
+                kwargs['cancel_check'] = cancel_check
+            
+            result = self.processor.process(self.image, **kwargs)
             
             if self.should_stop:
                 return

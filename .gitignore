@@ -46,4 +46,4 @@ data/config.json
 *.bmp
 
 # model
-*.onnx
+data/model/

@@ -365,18 +365,54 @@ class AIResultDialog(QDialog):
     
     def setup_ui(self, original_image: np.ndarray, processed_image: np.ndarray):
         """设置 UI"""
-        main_layout = QHBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        # 主垂直布局
+        main_v_layout = QVBoxLayout(self)
+        main_v_layout.setContentsMargins(0, 0, 0, 0)
+        main_v_layout.setSpacing(0)
+        
+        # 上部：水平布局（参数面板 + 图像对比）
+        content_layout = QHBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
         
         # 左侧：参数面板（如果启用）
         if self.show_parameters:
             self.parameters_panel = self._create_parameters_panel()
-            main_layout.addWidget(self.parameters_panel)
+            content_layout.addWidget(self.parameters_panel)
         
         # 右侧：图像对比
         self.comparison_widget = ImageComparisonWidget(original_image, processed_image)
-        main_layout.addWidget(self.comparison_widget, 1)
+        content_layout.addWidget(self.comparison_widget, 1)
+        
+        main_v_layout.addLayout(content_layout, 1)
+        
+        # 底部：按钮区域（始终显示）
+        button_container = QWidget()
+        button_container.setObjectName("dialogButtonContainer")
+        button_layout = QHBoxLayout(button_container)
+        button_layout.setContentsMargins(16, 12, 16, 12)
+        button_layout.setSpacing(8)
+        
+        button_layout.addStretch()
+        
+        # 取消按钮
+        cancel_btn = QPushButton(self.tr.tr('ai_result.cancel'))
+        cancel_btn.setMinimumHeight(36)
+        cancel_btn.setMinimumWidth(100)
+        cancel_btn.clicked.connect(self.reject)
+        cancel_btn.setAutoDefault(False)
+        button_layout.addWidget(cancel_btn)
+        
+        # 应用按钮
+        apply_btn = QPushButton(self.tr.tr('ai_result.apply'))
+        apply_btn.setMinimumHeight(36)
+        apply_btn.setMinimumWidth(100)
+        apply_btn.clicked.connect(self.accept_result)
+        apply_btn.setAutoDefault(False)
+        apply_btn.setDefault(False)
+        button_layout.addWidget(apply_btn)
+        
+        main_v_layout.addWidget(button_container)
     
     def _create_parameters_panel(self) -> QWidget:
         """创建参数调节面板"""
@@ -419,31 +455,6 @@ class AIResultDialog(QDialog):
         
         scroll.setWidget(content)
         panel_layout.addWidget(scroll, 1)
-        
-        # 按钮区域（固定在底部）
-        button_container = QWidget()
-        button_container.setObjectName("parametersButtonContainer")
-        button_layout = QHBoxLayout(button_container)
-        button_layout.setContentsMargins(16, 12, 16, 12)
-        button_layout.setSpacing(8)
-        
-        # 应用按钮 - 使用与取消按钮相同的样式
-        apply_btn = QPushButton(self.tr.tr('ai_result.apply'))
-        apply_btn.setMinimumHeight(36)
-        apply_btn.clicked.connect(self.accept_result)
-        # 强制设置为普通按钮样式，不使用default样式
-        apply_btn.setAutoDefault(False)
-        apply_btn.setDefault(False)
-        button_layout.addWidget(apply_btn)
-        
-        # 取消按钮
-        cancel_btn = QPushButton(self.tr.tr('ai_result.cancel'))
-        cancel_btn.setMinimumHeight(36)
-        cancel_btn.clicked.connect(self.reject)
-        cancel_btn.setAutoDefault(False)
-        button_layout.addWidget(cancel_btn)
-        
-        panel_layout.addWidget(button_container)
         
         return panel
     

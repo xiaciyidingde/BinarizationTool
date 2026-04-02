@@ -27,10 +27,11 @@ class DownloadWorker(QThread):
     progress_updated = Signal(str, int)  # 消息, 进度
     download_finished = Signal(bool)  # 成功/失败
     
-    def __init__(self, target_dir: str, target_filename: str):
+    def __init__(self, target_dir: str, target_filename: str, model_type: str = 'rmbg'):
         super().__init__()
         self.target_dir = target_dir
         self.target_filename = target_filename
+        self.model_type = model_type
         self.downloader = None
     
     def run(self):
@@ -39,7 +40,13 @@ class DownloadWorker(QThread):
             self.progress_updated.emit(message, progress)
         
         self.downloader = Downloader(progress_callback)
-        success = self.downloader.download_rmbg_model(self.target_dir, self.target_filename)
+        
+        # 根据模型类型调用不同的下载方法
+        if self.model_type == 'superres':
+            success = self.downloader.download_superres_model(self.target_dir, self.target_filename)
+        else:  # rmbg
+            success = self.downloader.download_rmbg_model(self.target_dir, self.target_filename)
+        
         self.download_finished.emit(success)
     
     def cancel(self):
@@ -53,13 +60,14 @@ class ModelDownloadDialog(QDialog):
     模型下载对话框
     """
     
-    def __init__(self, target_dir: str, target_filename: str = "RMBG-2.0-q4f16.onnx", parent=None):
+    def __init__(self, target_dir: str, target_filename: str = "RMBG-2.0-q4f16.onnx", model_type: str = 'rmbg', parent=None):
         """
         初始化对话框
         
         Args:
             target_dir: 目标目录
             target_filename: 目标文件名
+            model_type: 模型类型 ('rmbg' 或 'superres')
             parent: 父窗口
         """
         super().__init__(parent)
@@ -67,10 +75,16 @@ class ModelDownloadDialog(QDialog):
         self.tr = get_translator()
         self.target_dir = target_dir
         self.target_filename = target_filename
+        self.model_type = model_type
         self.worker = None
         self.download_success = False
         
-        self.setWindowTitle(self.tr.tr('model_download.title'))
+        # 根据模型类型设置标题
+        if model_type == 'superres':
+            self.setWindowTitle(self.tr.tr('model_download.superres_title'))
+        else:
+            self.setWindowTitle(self.tr.tr('model_download.title'))
+        
         self.setModal(True)
         self.setMinimumWidth(500)
         self.setMinimumHeight(400)
@@ -85,7 +99,12 @@ class ModelDownloadDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
         
         # 标题
-        title_label = QLabel(self.tr.tr('model_download.title'))
+        if self.model_type == 'superres':
+            title_text = self.tr.tr('model_download.superres_title')
+        else:
+            title_text = self.tr.tr('model_download.title')
+        
+        title_label = QLabel(title_text)
         title_font = title_label.font()
         title_font.setPointSize(14)
         title_font.setBold(True)
@@ -93,20 +112,32 @@ class ModelDownloadDialog(QDialog):
         layout.addWidget(title_label)
         
         # 说明文本
-        info_text = (
-            f"{self.tr.tr('model_download.description')}<br><br>"
-            f"{self.tr.tr('model_download.model_size')}<br>"
-            f"{self.tr.tr('model_download.license')}<br>"
-            f"{self.tr.tr('model_download.commercial_contact')}"
-            f"<a href='https://bria.ai/'>https://bria.ai/</a><br><br>"
-            f"{self.tr.tr('model_download.download_hint')}<br><br>"
-            f"{self.tr.tr('model_download.download_links')}<br>"
-            f"{self.tr.tr('model_download.modelscope')}"
-            f"<a href='https://modelscope.cn/models/AI-ModelScope/RMBG-2.0'>https://modelscope.cn/models/AI-ModelScope/RMBG-2.0</a><br>"
-            f"{self.tr.tr('model_download.huggingface')}"
-            f"<a href='https://huggingface.co/briaai/RMBG-2.0'>https://huggingface.co/briaai/RMBG-2.0</a><br><br>"
-            f"{self.tr.tr('model_download.manual_download')}"
-        )
+        if self.model_type == 'superres':
+            info_text = (
+                f"{self.tr.tr('model_download.superres_description')}<br><br>"
+                f"{self.tr.tr('model_download.superres_model_size')}<br>"
+                f"{self.tr.tr('model_download.superres_license')}<br><br>"
+                f"{self.tr.tr('model_download.superres_download_hint')}<br><br>"
+                f"{self.tr.tr('model_download.download_links')}<br>"
+                f"{self.tr.tr('model_download.superres_huggingface')}"
+                f"<a href='https://huggingface.co/qualcomm/Real-ESRGAN-x4plus'>https://huggingface.co/qualcomm/Real-ESRGAN-x4plus</a><br><br>"
+                f"{self.tr.tr('model_download.superres_manual_download')}"
+            )
+        else:
+            info_text = (
+                f"{self.tr.tr('model_download.description')}<br><br>"
+                f"{self.tr.tr('model_download.model_size')}<br>"
+                f"{self.tr.tr('model_download.license')}<br>"
+                f"{self.tr.tr('model_download.commercial_contact')}"
+                f"<a href='https://bria.ai/'>https://bria.ai/</a><br><br>"
+                f"{self.tr.tr('model_download.download_hint')}<br><br>"
+                f"{self.tr.tr('model_download.download_links')}<br>"
+                f"{self.tr.tr('model_download.modelscope')}"
+                f"<a href='https://modelscope.cn/models/AI-ModelScope/RMBG-2.0'>https://modelscope.cn/models/AI-ModelScope/RMBG-2.0</a><br>"
+                f"{self.tr.tr('model_download.huggingface')}"
+                f"<a href='https://huggingface.co/briaai/RMBG-2.0'>https://huggingface.co/briaai/RMBG-2.0</a><br><br>"
+                f"{self.tr.tr('model_download.manual_download')}"
+            )
         
         info_label = QLabel(info_text)
         info_label.setWordWrap(True)
@@ -161,7 +192,7 @@ class ModelDownloadDialog(QDialog):
         self.progress_bar.setValue(0)
         
         # 创建工作线程
-        self.worker = DownloadWorker(self.target_dir, self.target_filename)
+        self.worker = DownloadWorker(self.target_dir, self.target_filename, self.model_type)
         self.worker.progress_updated.connect(self.on_progress)
         self.worker.download_finished.connect(self.on_finished)
         self.worker.start()

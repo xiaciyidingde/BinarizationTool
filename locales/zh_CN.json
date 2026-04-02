@@ -271,8 +271,16 @@
     "flip_vertical": "垂直翻转",
     "ai_tools": "AI 工具",
     "remove_background": "去除背景",
-    "download_model": "下载模型",
-    "install_onnxruntime_hint": "提示：需要先安装 onnxruntime"
+    "super_resolution": "超分辨率 x4",
+    "download_rmbg_model": "下载去背景模型",
+    "download_superres_model": "下载超分辨率模型",
+    "install_onnxruntime_hint": "提示：需要先安装 onnxruntime",
+    "rmbg_download_success": "模型下载成功！现在可以使用背景去除功能了。",
+    "superres_download_success": "模型下载成功！现在可以使用超分辨率功能了。",
+    "rmbg_model_required_title": "需要下载模型",
+    "rmbg_model_required_message": "使用背景去除功能需要先下载 RMBG-2.0 模型（约 223 MB）。\n\n是否现在下载？",
+    "superres_model_required_title": "需要下载模型",
+    "superres_model_required_message": "使用超分辨率功能需要先下载 Real-ESRGAN x4 模型（约 64 MB）。\n\n是否现在下载？"
   },
   "properties_panel": {
     "properties": "属性",
@@ -371,19 +379,30 @@
     "unsupported_model": "不支持的模型类型: {model}",
     "failed": "处理失败: {error}",
     "rmbg_result": "去除背景 - 结果对比",
-    "applied": "AI 处理结果已应用"
+    "superres_result": "超分辨率 x4 - 结果对比",
+    "applied": "AI 处理结果已应用",
+    "superres_warning": "超分辨率处理可能需要较长时间，请耐心等待...",
+    "superres_large_image": "图像较大，处理时间可能较长（预计 {time} 秒）",
+    "superres_large_image_warning": "图像尺寸较大，超分辨率处理可能需要较长时间。\n\n当前尺寸：{width} x {height} 像素\n处理后尺寸：{new_width} x {new_height} 像素\n\n是否继续？"
   },
   "model_download": {
     "title": "下载 RMBG-2.0 模型",
+    "superres_title": "下载 Real-ESRGAN x4 模型",
     "description": "RMBG-2.0 是一个用于背景去除的深度学习模型。",
+    "superres_description": "Real-ESRGAN 是一个用于图像超分辨率放大的深度学习模型，可将图像放大 4 倍并保持清晰度。",
     "model_size": "• 模型大小: 约 223 MB",
+    "superres_model_size": "• 模型大小: 约 64 MB",
     "license": "• 许可证: CC BY-NC 4.0 (仅限非商业使用)",
+    "superres_license": "• 许可证: BSD-3-Clause",
     "commercial_contact": "• 商业使用请联系: ",
     "download_hint": "点击\"开始下载\"将从 ModelScope 或 HuggingFace 下载模型。",
+    "superres_download_hint": "点击\"开始下载\"将从 HuggingFace 下载模型。",
     "download_links": "下载链接:",
     "modelscope": "• ModelScope: ",
     "huggingface": "• HuggingFace: ",
+    "superres_huggingface": "• Qualcomm: ",
     "manual_download": "手动下载请放在程序目录下的 \"./data/model/\" 并改名为 \"RMBG-*.onnx\" ('*' 可替换)",
+    "superres_manual_download": "手动下载请解压后将 .onnx 和 .data 文件放到 \"./data/model/\" 目录（保持原文件名）",
     "start_download": "开始下载",
     "cancel": "取消",
     "close": "关闭",
@@ -393,6 +412,7 @@
     "canceling": "正在取消下载...",
     "download_success": "\n✓ 下载成功！",
     "download_failed": "\n✗ 下载失败",
-    "download_failed_message": "模型下载失败，请检查网络连接。\n\n您也可以手动下载:\nhttps://huggingface.co/briaai/RMBG-2.0/tree/main/onnx"
+    "download_failed_message": "模型下载失败，请检查网络连接。\n\n您也可以手动下载:\nhttps://huggingface.co/briaai/RMBG-2.0/tree/main/onnx",
+    "superres_download_failed_message": "模型下载失败，请检查网络连接。\n\n您也可以手动下载:\nhttps://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/real_esrgan_x4plus/releases/v0.49.1/real_esrgan_x4plus-onnx-float.zip\n\n解压后将 .onnx 文件放到 data/model/ 目录"
   }
 }

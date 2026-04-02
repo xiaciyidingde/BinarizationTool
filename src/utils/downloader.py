@@ -293,4 +293,214 @@ class Downloader:
                     shutil.rmtree(temp_dir)
                 except:
                     pass
+    
+    def _download_from_url(self, url: str, temp_dir: str, filename: str = None) -> Optional[str]:
+        """
+        从 URL 直接下载文件
+        
+        Args:
+            url: 下载 URL
+            temp_dir: 临时目录
+            filename: 保存的文件名（可选）
+            
+        Returns:
+            下载的文件路径，失败返回 None
+        """
+        try:
+            import urllib.request
+            import time
+            
+            self._report_progress("正在从 URL 下载...", 10)
+            
+            if self.should_cancel:
+                return None
+            
+            # 确定文件名
+            if not filename:
+                filename = url.split('/')[-1]
+            
+            target_path = os.path.join(temp_dir, filename)
+            
+            # 下载文件
+            def download_with_progress():
+                try:
+                    urllib.request.urlretrieve(url, target_path)
+                    return True
+                except Exception as e:
+                    print(f"下载失败: {e}")
+                    return False
+            
+            # 在后台线程中下载
+            import threading
+            result = {'success': False, 'completed': False}
+            
+            def download_thread():
+                result['success'] = download_with_progress()
+                result['completed'] = True
+            
+            thread = threading.Thread(target=download_thread, daemon=True)
+            thread.start()
+            
+            # 模拟进度更新
+            progress = 10
+            while thread.is_alive() and progress < 75:
+                if self.should_cancel:
+                    self._report_progress("取消下载...", 0)
+                    return None
+                time.sleep(0.5)
+                progress += 2
+                self._report_progress("正在下载...", progress)
+            
+            # 等待下载完成
+            thread.join(timeout=300)
+            
+            if not result['success'] or not os.path.exists(target_path):
+                return None
+            
+            if self.should_cancel:
+                return None
+            
+            self._report_progress("下载完成", 80)
+            return target_path
+            
+        except Exception as e:
+            self._report_progress(f"URL 下载失败: {e}", 0)
+            return None
+    
+    def _extract_zip(self, zip_path: str, extract_dir: str) -> bool:
+        """
+        解压 ZIP 文件
+        
+        Args:
+            zip_path: ZIP 文件路径
+            extract_dir: 解压目录
+            
+        Returns:
+            True 如果成功，否则 False
+        """
+        try:
+            import zipfile
+            
+            self._report_progress("正在解压文件...", 85)
+            
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(extract_dir)
+            
+            self._report_progress("解压完成", 88)
+            return True
+            
+        except Exception as e:
+            self._report_progress(f"解压失败: {e}", 0)
+            return False
+    
+    def download_superres_model(self, target_dir: str, target_filename: str = "RealESRGAN_x4plus.onnx") -> bool:
+        """
+        下载 Real-ESRGAN x4 模型
+        
+        Args:
+            target_dir: 目标目录（程序的 data/model 目录）
+            target_filename: 目标文件名
+            
+        Returns:
+            True 如果下载成功，否则 False
+        """
+        self.should_cancel = False
+        temp_dir = None
+        
+        try:
+            # 创建临时目录
+            temp_dir = tempfile.mkdtemp(prefix="superres_download_")
+            self._report_progress("创建临时目录", 5)
+            
+            if self.should_cancel:
+                return False
+            
+            # 从 Qualcomm AWS S3 下载 ZIP 文件
+            self._report_progress("正在从 Qualcomm 下载 Real-ESRGAN x4 模型...", 10)
+            
+            zip_url = "https://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/real_esrgan_x4plus/releases/v0.49.1/real_esrgan_x4plus-onnx-float.zip"
+            zip_path = self._download_from_url(zip_url, temp_dir, "real_esrgan_x4plus.zip")
+            
+            if not zip_path or not os.path.exists(zip_path):
+                self._report_progress("下载失败：未找到 ZIP 文件", 0)
+                return False
+            
+            if self.should_cancel:
+                return False
+            
+            # 解压 ZIP 文件
+            extract_dir = os.path.join(temp_dir, "extracted")
+            os.makedirs(extract_dir, exist_ok=True)
+            
+            if not self._extract_zip(zip_path, extract_dir):
+                self._report_progress("解压失败", 0)
+                return False
+            
+            if self.should_cancel:
+                return False
+            
+            # 在解压目录中查找 .onnx 文件
+            self._report_progress("查找模型文件...", 90)
+            model_path = self._find_onnx_file(extract_dir)
+            
+            if not model_path or not os.path.exists(model_path):
+                self._report_progress("下载失败：未找到模型文件", 0)
+                return False
+            
+            if self.should_cancel:
+                return False
+            
+            # 创建目标目录
+            os.makedirs(target_dir, exist_ok=True)
+            
+            # 获取模型文件所在目录和原始文件名
+            model_dir = os.path.dirname(model_path)
+            original_basename = os.path.splitext(os.path.basename(model_path))[0]  # 例如: real_esrgan_x4plus
+            
+            # 复制 .onnx 文件，保持原始文件名（因为 .onnx 内部引用了 .data 文件名）
+            target_path = os.path.join(target_dir, os.path.basename(model_path))
+            self._report_progress("正在复制模型文件...", 95)
+            shutil.copy2(model_path, target_path)
+            
+            # 查找并复制对应的 .data 文件（如果存在）
+            data_file = os.path.join(model_dir, f"{original_basename}.data")
+            if os.path.exists(data_file):
+                target_data_file = os.path.join(target_dir, f"{original_basename}.data")
+                self._report_progress("正在复制权重文件...", 97)
+                shutil.copy2(data_file, target_data_file)
+            
+            if self.should_cancel:
+                # 如果取消，删除已复制的文件
+                if os.path.exists(target_path):
+                    os.remove(target_path)
+                target_data_file = os.path.join(target_dir, f"{original_basename}.data")
+                if os.path.exists(target_data_file):
+                    os.remove(target_data_file)
+                return False
+            
+            # 验证文件大小
+            file_size = os.path.getsize(target_path) / (1024 ** 2)  # MB
+            total_size = file_size
+            
+            # 如果有 .data 文件，也计算其大小
+            target_data_file = os.path.join(target_dir, f"{original_basename}.data")
+            if os.path.exists(target_data_file):
+                data_size = os.path.getsize(target_data_file) / (1024 ** 2)
+                total_size += data_size
+            
+            self._report_progress(f"下载完成！总大小: {total_size:.1f} MB", 100)
+            
+            return True
+            
+        except Exception as e:
+            self._report_progress(f"下载失败: {e}", 0)
+            return False
+            
+        finally:
+            # 清理临时目录
+            if temp_dir and os.path.exists(temp_dir):
+                try:
+                    shutil.rmtree(temp_dir)
+                except:
+                    pass
 

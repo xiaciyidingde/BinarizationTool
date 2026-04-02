@@ -643,6 +643,9 @@ class MainWindow(QMainWindow):
         if hasattr(self.binarization_panel, 'remove_bg_button') and self.binarization_panel.remove_bg_button is not None:
             # AI按钮只在根图层且有图像时启用
             self.binarization_panel.remove_bg_button.setEnabled(is_root_layer and self.image_data is not None)
+        if hasattr(self.binarization_panel, 'superres_button') and self.binarization_panel.superres_button is not None:
+            # 超分辨率按钮只在根图层且有图像时启用
+            self.binarization_panel.superres_button.setEnabled(is_root_layer and self.image_data is not None)
         
         # 选区只在根图层显示，切换到用户图层时隐藏（但保留数据）
         # 这样切换回根图层时选区会重新显示
@@ -2620,7 +2623,7 @@ class MainWindow(QMainWindow):
         处理 AI 处理请求
         
         Args:
-            model_type: 模型类型（'rmbg', ...）
+            model_type: 模型类型（'rmbg', 'superres', ...）
         """
         if self.image_data is None:
             self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
@@ -2641,6 +2644,29 @@ class MainWindow(QMainWindow):
         if original_image is None:
             return
         
+        # 超分辨率处理前检查图像尺寸
+        if model_type == 'superres':
+            h, w = original_image.shape[:2]
+            max_dim = max(h, w)
+            
+            # 如果任一维度大于1000像素，显示警告
+            if max_dim > 1000:
+                from PySide6.QtWidgets import QMessageBox
+                
+                # 显示确认对话框
+                reply = QMessageBox.question(
+                    self,
+                    self.tr.tr('dialog.warning'),
+                    self.tr.tr('ai_process.superres_large_image_warning',
+                              width=w, height=h,
+                              new_width=w*4, new_height=h*4),
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                
+                if reply != QMessageBox.Yes:
+                    return
+        
         # 创建 AI 处理器（在显示对话框前快速完成）
         import os
         from ..utils.ai_processor import AIProcessorFactory
@@ -2652,9 +2678,15 @@ class MainWindow(QMainWindow):
         
         if os.path.exists(model_dir):
             for filename in os.listdir(model_dir):
-                if filename.upper().startswith(model_type.upper()) and filename.endswith('.onnx'):
-                    model_path = os.path.join(model_dir, filename)
-                    break
+                # 根据模型类型匹配文件名
+                if model_type == 'superres':
+                    if 'ESRGAN' in filename.upper() and filename.endswith('.onnx'):
+                        model_path = os.path.join(model_dir, filename)
+                        break
+                elif model_type == 'rmbg':
+                    if filename.upper().startswith('RMBG') and filename.endswith('.onnx'):
+                        model_path = os.path.join(model_dir, filename)
+                        break
         
         if model_path is None:
             from PySide6.QtWidgets import QMessageBox
@@ -2681,15 +2713,27 @@ class MainWindow(QMainWindow):
         from PySide6.QtCore import QTimer
         from ..utils.window_utils import apply_dark_titlebar_after_show
         
+        # 根据模型类型决定是否显示取消按钮
+        if model_type == 'rmbg':
+            # 去背景：不显示取消按钮（推理阶段无法中断）
+            cancel_button_text = None
+        else:
+            # 超分辨率：显示取消按钮
+            cancel_button_text = self.tr.tr('ai_process.cancel')
+        
         progress = QProgressDialog(
             self.tr.tr('ai_process.loading_model'),
-            self.tr.tr('ai_process.cancel'),
+            cancel_button_text,
             0, 100, self
         )
         progress.setWindowTitle(self.tr.tr('ai_process.title'))
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(0)
         progress.setValue(0)
+        
+        # 如果没有取消按钮，禁用取消功能
+        if model_type == 'rmbg':
+            progress.setCancelButton(None)
         
         # 设置进度对话框的最小尺寸，确保标题和内容完整显示
         progress.setMinimumWidth(400)
@@ -2797,12 +2841,18 @@ class MainWindow(QMainWindow):
         # 根据模型类型设置标题
         if model_type == 'rmbg':
             title = self.tr.tr('ai_process.rmbg_result')
+        elif model_type == 'superres':
+            title = self.tr.tr('ai_process.superres_result')
         else:
             title = self.tr.tr('ai_result.title')
         
-        # 创建对话框，传入processor以支持参数调节
+        # 根据模型类型决定是否显示参数面板
+        # 超分辨率不需要参数调节，只显示对比结果
+        show_parameters = (model_type != 'superres')
+        
+        # 创建对话框
         dialog = AIResultDialog(original, processed, title, self, 
-                               show_parameters=True, processor=processor)
+                               show_parameters=show_parameters, processor=processor)
         
         def on_result_accepted(result):
             # 用户接受结果，更新图像

@@ -271,8 +271,16 @@
     "flip_vertical": "Flip Vertical",
     "ai_tools": "AI Tools",
     "remove_background": "Remove Background",
-    "download_model": "Download Model",
-    "install_onnxruntime_hint": "Hint: Install onnxruntime first"
+    "super_resolution": "Super Resolution x4",
+    "download_rmbg_model": "Download BG Removal Model",
+    "download_superres_model": "Download Super-Res Model",
+    "install_onnxruntime_hint": "Hint: Install onnxruntime first",
+    "rmbg_download_success": "Model downloaded successfully! You can now use the background removal feature.",
+    "superres_download_success": "Model downloaded successfully! You can now use the super resolution feature.",
+    "rmbg_model_required_title": "Model Download Required",
+    "rmbg_model_required_message": "Background removal requires downloading the RMBG-2.0 model (~223 MB).\n\nDownload now?",
+    "superres_model_required_title": "Model Download Required",
+    "superres_model_required_message": "Super resolution requires downloading the Real-ESRGAN x4 model (~64 MB).\n\nDownload now?"
   },
   "properties_panel": {
     "properties": "Properties",
@@ -371,19 +379,30 @@
     "unsupported_model": "Unsupported model type: {model}",
     "failed": "Processing failed: {error}",
     "rmbg_result": "Remove Background - Result Comparison",
-    "applied": "AI processing result applied"
+    "superres_result": "Super Resolution x4 - Result Comparison",
+    "applied": "AI processing result applied",
+    "superres_warning": "Super resolution may take a while, please be patient...",
+    "superres_large_image": "Large image detected, processing may take longer (estimated {time} seconds)",
+    "superres_large_image_warning": "The image is large and super resolution processing may take a while.\n\nCurrent size: {width} x {height} pixels\nOutput size: {new_width} x {new_height} pixels\n\nContinue?"
   },
   "model_download": {
     "title": "Download RMBG-2.0 Model",
+    "superres_title": "Download Real-ESRGAN x4 Model",
     "description": "RMBG-2.0 is a deep learning model for background removal.",
+    "superres_description": "Real-ESRGAN is a deep learning model for image super-resolution, upscaling images by 4x while maintaining clarity.",
     "model_size": "• Model Size: ~223 MB",
+    "superres_model_size": "• Model Size: ~64 MB",
     "license": "• License: CC BY-NC 4.0 (Non-Commercial Use Only)",
+    "superres_license": "• License: BSD-3-Clause",
     "commercial_contact": "• Commercial Use Contact: ",
     "download_hint": "Click \"Start Download\" to download the model from ModelScope or HuggingFace.",
+    "superres_download_hint": "Click \"Start Download\" to download the model from HuggingFace.",
     "download_links": "Download Links:",
     "modelscope": "• ModelScope: ",
     "huggingface": "• HuggingFace: ",
+    "superres_huggingface": "• Qualcomm: ",
     "manual_download": "For manual download, place the file in \"./data/model/\" and rename to \"RMBG-*.onnx\" ('*' can be replaced)",
+    "superres_manual_download": "For manual download, extract and place both .onnx and .data files in \"./data/model/\" (keep original filenames)",
     "start_download": "Start Download",
     "cancel": "Cancel",
     "close": "Close",
@@ -393,6 +412,7 @@
     "canceling": "Canceling download...",
     "download_success": "\n✓ Download successful!",
     "download_failed": "\n✗ Download failed",
-    "download_failed_message": "Model download failed. Please check your network connection.\n\nYou can also download manually:\nhttps://huggingface.co/briaai/RMBG-2.0/tree/main/onnx"
+    "download_failed_message": "Model download failed. Please check your network connection.\n\nYou can also download manually:\nhttps://huggingface.co/briaai/RMBG-2.0/tree/main/onnx",
+    "superres_download_failed_message": "Model download failed. Please check your network connection.\n\nYou can also download manually:\nhttps://qaihub-public-assets.s3.us-west-2.amazonaws.com/qai-hub-models/models/real_esrgan_x4plus/releases/v0.49.1/real_esrgan_x4plus-onnx-float.zip\n\nExtract and place the .onnx file in data/model/ directory"
   }
 }
