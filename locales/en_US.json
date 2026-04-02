@@ -272,7 +272,11 @@
     "ai_tools": "AI Tools",
     "remove_background": "Remove Background",
     "download_model": "Download Model",
-    "install_onnxruntime_hint": "Hint: Install onnxruntime first"
+    "install_onnxruntime_hint": "Hint: Install onnxruntime first",
+    "onnxruntime_required": "AI features require onnxruntime library.",
+    "download_model_title": "Download Model",
+    "download_model_prompt": "Background removal requires downloading the RMBG-2.0 model (~223 MB).\n\nDownload now?",
+    "model_download_success": "Model downloaded successfully! You can now use the background removal feature."
   },
   "properties_panel": {
     "properties": "Properties",

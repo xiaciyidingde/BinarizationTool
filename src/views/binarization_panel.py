@@ -184,31 +184,27 @@ class BinarizationPanel(QWidget):
                     has_rmbg_model = True
                     break
         
-        # 始终显示 AI 工具组（即使没有模型）
+        # 始终显示 AI 工具组
         ai_tools_group = QGroupBox(self.tr.tr('binarization_panel.ai_tools'))
         ai_tools_layout = QVBoxLayout()
         ai_tools_layout.setSpacing(6)
         
-        if has_rmbg_model:
-            # 有模型：显示"去除背景"按钮
-            self.remove_bg_button = QPushButton(self.tr.tr('binarization_panel.remove_background'))
-            self.remove_bg_button.setEnabled(False)  # 初始禁用，加载图片后启用
-            self.remove_bg_button.clicked.connect(lambda: self.ai_process_requested.emit('rmbg'))
-            ai_tools_layout.addWidget(self.remove_bg_button)
-            self.download_model_button = None
-        else:
-            # 没有模型：显示"下载模型"按钮
-            self.remove_bg_button = None
-            self.download_model_button = QPushButton(self.tr.tr('binarization_panel.download_model'))
-            self.download_model_button.clicked.connect(self._on_download_model_clicked)
-            ai_tools_layout.addWidget(self.download_model_button)
-            
-            # 如果没有 onnxruntime，显示提示
-            if not has_onnxruntime:
-                hint_label = QLabel(self.tr.tr('binarization_panel.install_onnxruntime_hint'))
-                hint_label.setWordWrap(True)
-                hint_label.setStyleSheet("QLabel { color: #666; font-size: 10px; }")
-                ai_tools_layout.addWidget(hint_label)
+        # 始终显示"去除背景"按钮
+        self.remove_bg_button = QPushButton(self.tr.tr('binarization_panel.remove_background'))
+        self.remove_bg_button.setEnabled(False)  # 初始禁用，加载图片后启用
+        self.remove_bg_button.clicked.connect(self._on_remove_bg_clicked)
+        ai_tools_layout.addWidget(self.remove_bg_button)
+        
+        # 保存模型状态
+        self.has_rmbg_model = has_rmbg_model
+        self.has_onnxruntime = has_onnxruntime
+        
+        # 如果没有 onnxruntime，显示提示
+        if not has_onnxruntime:
+            hint_label = QLabel(self.tr.tr('binarization_panel.install_onnxruntime_hint'))
+            hint_label.setWordWrap(True)
+            hint_label.setStyleSheet("QLabel { color: #666; font-size: 10px; }")
+            ai_tools_layout.addWidget(hint_label)
         
         ai_tools_group.setLayout(ai_tools_layout)
         settings_layout.addWidget(ai_tools_group)
@@ -1234,7 +1230,7 @@ class BinarizationPanel(QWidget):
         self.flip_horizontal_checkbox.setEnabled(enabled)
         self.flip_vertical_checkbox.setEnabled(enabled)
         self.flip_vertical_checkbox.setEnabled(enabled)
-        # 启用/禁用去除背景按钮（如果存在）
+        # 启用/禁用去除背景按钮
         if hasattr(self, 'remove_bg_button') and self.remove_bg_button is not None:
             self.remove_bg_button.setEnabled(enabled)
 
@@ -1349,38 +1345,50 @@ class BinarizationPanel(QWidget):
         # 这里只是示例，实际需要保存对 QGroupBox 的引用
         pass
 
-    def _on_download_model_clicked(self):
-        """下载模型按钮点击事件"""
-        from ..views.model_download_dialog import ModelDownloadDialog
-        import os
-        
-        # 获取目标目录
-        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
-        
-        # 直接显示下载对话框
-        dialog = ModelDownloadDialog(model_dir, "RMBG-2.0-q4f16.onnx", self)
-        dialog.exec()
-        
-        # 如果下载成功，刷新 UI
-        if dialog.is_download_success():
+    def _on_remove_bg_clicked(self):
+        """去除背景按钮点击事件"""
+        # 如果没有模型，询问用户是否下载
+        if not self.has_rmbg_model:
             from PySide6.QtWidgets import QMessageBox
+            from ..utils.window_utils import message_box_warning, message_box_question, message_box_information
+            import os
             
-            # 隐藏下载按钮，显示去除背景按钮
-            if self.download_model_button:
-                self.download_model_button.setVisible(False)
+            # 检查是否安装了 onnxruntime
+            if not self.has_onnxruntime:
+                message_box_warning(
+                    self,
+                    self.tr.tr('dialog.warning'),
+                    self.tr.tr('binarization_panel.onnxruntime_required')
+                )
+                return
             
-            # 创建去除背景按钮
-            self.remove_bg_button = QPushButton(self.tr.tr('binarization_panel.remove_background'))
-            self.remove_bg_button.setEnabled(False)  # 初始禁用，加载图片后启用
-            self.remove_bg_button.clicked.connect(lambda: self.ai_process_requested.emit('rmbg'))
-            
-            # 添加到布局
-            ai_tools_group = self.download_model_button.parent()
-            layout = ai_tools_group.layout()
-            layout.addWidget(self.remove_bg_button)
-            
-            QMessageBox.information(
+            # 询问用户是否下载模型
+            reply = message_box_question(
                 self,
-                "下载完成",
-                "模型下载成功！现在可以使用背景去除功能了。"
+                self.tr.tr('binarization_panel.download_model_title'),
+                self.tr.tr('binarization_panel.download_model_prompt'),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
             )
+            
+            if reply == QMessageBox.Yes:
+                # 显示下载对话框
+                from ..views.model_download_dialog import ModelDownloadDialog
+                
+                model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
+                dialog = ModelDownloadDialog(model_dir, "RMBG-2.0-q4f16.onnx", self)
+                dialog.exec()
+                
+                # 如果下载成功，更新状态并执行去除背景
+                if dialog.is_download_success():
+                    self.has_rmbg_model = True
+                    message_box_information(
+                        self,
+                        self.tr.tr('dialog.info'),
+                        self.tr.tr('binarization_panel.model_download_success')
+                    )
+                    # 执行去除背景
+                    self.ai_process_requested.emit('rmbg')
+        else:
+            # 有模型，直接执行去除背景
+            self.ai_process_requested.emit('rmbg')
