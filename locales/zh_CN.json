@@ -42,6 +42,9 @@
   "tooltip": {
     "open": "打开图片 (Ctrl+O)",
     "save": "保存图片 (Ctrl+S)",
+    "save_original": "保存原图 (Ctrl+S)",
+    "save_preprocessed": "保存预处理图像 (Ctrl+S)",
+    "save_binary": "保存二值化图像 (Ctrl+S)",
     "save_as": "另存为 (Ctrl+Shift+S)",
     "exit": "退出程序 (Ctrl+Q)",
     "undo": "后退到上一步 (Ctrl+Z)",

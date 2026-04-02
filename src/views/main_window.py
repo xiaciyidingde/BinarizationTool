@@ -1542,28 +1542,24 @@ class MainWindow(QMainWindow):
         self.active_layer_id = "root"
 
     def _save_file(self):
-        """保存文件（第一次另存为，之后覆盖）"""
+        """保存文件（每次都弹出对话框，但记住上次保存的目录）"""
         if self.image_data is None:
             return
 
-        # 如果已经保存过，直接覆盖
-        if self.saved_file_path:
-            self._save_to_file(self.saved_file_path)
-            return
-
-        # 第一次保存：生成默认文件名并弹出对话框
+        # 生成默认文件名
         default_name = self._generate_default_save_name()
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "保存图片",
+            self.tr.tr('file_dialog.save_image'),
             default_name,
-            "PNG 图片 (*.png);;JPEG 图片 (*.jpg);;BMP 图片 (*.bmp)"
+            self.tr.tr('file_dialog.png_files')
         )
 
         if file_path:
             self._save_to_file(file_path)
-            self.saved_file_path = file_path  # 记录保存路径
+            # 记录保存的目录（用于下次保存时的默认位置）
+            self.saved_file_path = file_path
 
     def _save_file_as(self):
         """另存为（总是弹出对话框）"""
@@ -1591,45 +1587,77 @@ class MainWindow(QMainWindow):
         Returns:
             默认文件名路径
         """
+        import re
+        
         # 获取文件名格式配置
         filename_format = self.config_manager.get('file', 'filename_format', 'timestamp')
 
-        if self.current_file_path:
-            # 获取原文件信息
+        # 确定保存目录：优先使用上次保存的目录，其次使用原文件目录
+        if self.saved_file_path:
+            dir_path = os.path.dirname(self.saved_file_path)
+        elif self.current_file_path:
             dir_path = os.path.dirname(self.current_file_path)
+        else:
+            dir_path = os.getcwd()
+
+        # 确定文件名基础（始终使用原始打开的文件名，而不是上次保存的文件名）
+        if self.current_file_path:
             file_name = os.path.basename(self.current_file_path)
             name_without_ext, ext = os.path.splitext(file_name)
-
-            # 根据配置生成文件名
-            if filename_format == 'timestamp':
-                # 原名_时间戳
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                new_name = f"{name_without_ext}_{timestamp}{ext}"
-            elif filename_format == 'copy':
-                # 原名_副本
-                new_name = f"{name_without_ext}_副本{ext}"
-            else:  # custom
-                # 自定义前缀/后缀
-                prefix = self.config_manager.get('file', 'custom_prefix', '')
-                suffix = self.config_manager.get('file', 'custom_suffix', '')
-                new_name = f"{prefix}{name_without_ext}{suffix}{ext}"
-
-            return os.path.join(dir_path, new_name)
+            
+            # 清理文件名：移除之前可能添加的视图模式后缀和时间戳
+            # 匹配模式：_(binary|preprocessed|original)_时间戳 或 _(binary|preprocessed|original)_副本
+            name_without_ext = re.sub(r'_(binary|preprocessed|original)(_\d{8}_\d{6}|_副本)$', '', name_without_ext)
+            # 也移除单独的时间戳后缀（如果存在）
+            name_without_ext = re.sub(r'_\d{8}_\d{6}$', '', name_without_ext)
+            # 移除单独的"副本"后缀
+            name_without_ext = re.sub(r'_副本$', '', name_without_ext)
         else:
-            # 如果没有原文件路径，使用默认名称
+            name_without_ext = "image"
+            ext = ".png"
+
+        # 根据视图模式添加后缀
+        view_mode_suffix = ""
+        if self.image_data and hasattr(self.image_data, 'view_mode'):
+            if self.image_data.view_mode == 'preprocessed':
+                view_mode_suffix = "_preprocessed"
+            elif self.image_data.view_mode == 'binary':
+                view_mode_suffix = "_binary"
+            elif self.image_data.view_mode == 'original':
+                view_mode_suffix = "_original"
+
+        # 根据配置生成文件名
+        if filename_format == 'timestamp':
+            # 原名_视图模式_时间戳
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            return f"image_{timestamp}.png"
+            new_name = f"{name_without_ext}{view_mode_suffix}_{timestamp}{ext}"
+        elif filename_format == 'copy':
+            # 原名_视图模式_副本
+            new_name = f"{name_without_ext}{view_mode_suffix}_副本{ext}"
+        else:  # custom
+            # 自定义前缀/后缀
+            prefix = self.config_manager.get('file', 'custom_prefix', '')
+            suffix = self.config_manager.get('file', 'custom_suffix', '')
+            new_name = f"{prefix}{name_without_ext}{view_mode_suffix}{suffix}{ext}"
+
+        return os.path.join(dir_path, new_name)
 
     def _save_to_file(self, file_path: str):
         """保存到文件"""
         try:
+            from pathlib import Path
+            from PIL import Image
+            
             # 获取保存格式配置
             save_format_config = self.config_manager.get('file', 'default_save_format', 'follow_original')
 
             # 确定实际保存格式
+            path = Path(file_path)
             if save_format_config == 'follow_original':
                 # 跟随用户选择的文件扩展名
-                format_str = None
+                format_str = path.suffix.upper().lstrip('.')
+                if format_str == 'JPG':
+                    format_str = 'JPEG'
             else:
                 # 使用配置的格式
                 format_map = {
@@ -1640,31 +1668,43 @@ class MainWindow(QMainWindow):
                 }
                 format_str = format_map.get(save_format_config)
 
-            # 如果在二值化模式且有用户图层，保存合成后的结果
-            if self.image_data.view_mode == 'binary' and len(self.image_data.user_layers) > 0:
-                # 获取完整的合成结果（包括所有用户图层）
-                composited_pixels = self._composite_layers()
+            # 根据当前视图模式保存对应的图像
+            if self.image_data.view_mode == 'preprocessed':
+                # 预处理视图：保存预处理后的图像
+                if self.image_data.preprocessed_pixels is not None:
+                    pixels_to_save = self.image_data.preprocessed_pixels
+                else:
+                    # 如果预处理像素不存在，保存原图
+                    pixels_to_save = self.image_data.original_pixels
                 
-                # 直接保存合成后的像素
-                from pathlib import Path
-                from PIL import Image
-                
-                path = Path(file_path)
-                
-                # 推断格式
-                if format_str is None:
-                    format_str = path.suffix.upper().lstrip('.')
-                    if format_str == 'JPG':
-                        format_str = 'JPEG'
-                
-                # 转换为 PIL Image 并保存
-                img = Image.fromarray(composited_pixels, mode='L')
+                # 转换为 PIL Image 并保存（预处理结果可能是RGB或灰度）
+                if len(pixels_to_save.shape) == 3:
+                    img = Image.fromarray(pixels_to_save, mode='RGB')
+                else:
+                    img = Image.fromarray(pixels_to_save, mode='L')
                 img.save(file_path, format=format_str)
+                
+            elif self.image_data.view_mode == 'binary':
+                # 二值化视图：保存二值化图像
+                if len(self.image_data.user_layers) > 0:
+                    # 有用户图层，保存合成后的结果
+                    composited_pixels = self._composite_layers()
+                    img = Image.fromarray(composited_pixels, mode='L')
+                    img.save(file_path, format=format_str)
+                else:
+                    # 没有用户图层，使用原有的保存方法
+                    save_image(self.image_data, file_path, format=format_str)
+                    
             else:
-                # 正常保存
-                save_image(self.image_data, file_path, format=format_str)
+                # 原图视图：保存原图
+                if len(self.image_data.original_pixels.shape) == 3:
+                    img = Image.fromarray(self.image_data.original_pixels, mode='RGB')
+                else:
+                    img = Image.fromarray(self.image_data.original_pixels, mode='L')
+                img.save(file_path, format=format_str)
             
-            self.current_file_path = file_path
+            # 注意：不更新 current_file_path，保持原始文件路径用于生成文件名
+            # self.current_file_path = file_path  # 已移除
             self.statusbar.showMessage(self.tr.tr('message.saved', path=file_path))
         except Exception as e:
             QMessageBox.critical(self, self.tr.tr('dialog.error'), self.tr.tr('dialog.save_error', error=str(e)))
@@ -2194,6 +2234,25 @@ class MainWindow(QMainWindow):
         self.invert_selection_action.setEnabled(has_image)
         self.select_black_action.setEnabled(has_image)
         self.select_white_action.setEnabled(has_image)
+        
+        # 更新保存按钮tooltip
+        if has_image:
+            self._update_save_button_tooltip(self.image_data.view_mode)
+
+    def _update_save_button_tooltip(self, mode: str):
+        """
+        根据视图模式更新保存按钮的tooltip
+        
+        Args:
+            mode: 视图模式 ('original', 'preprocessed', 'binary')
+        """
+        # 根据视图模式选择对应的tooltip键
+        tooltip_key = f'tooltip.save_{mode}'
+        tooltip_text = self.tr.tr(tooltip_key)
+        
+        # 更新工具栏按钮和菜单动作的tooltip
+        self.save_action_btn.setToolTip(tooltip_text)
+        self.save_action.setToolTip(tooltip_text)
 
     def _fill_selection(self, color: int):
         """
@@ -2466,6 +2525,9 @@ class MainWindow(QMainWindow):
 
         # 更新工具状态
         self._update_tool_states()
+        
+        # 更新保存按钮的tooltip
+        self._update_save_button_tooltip(mode)
 
         mode_name = self.tr.tr(f'view_mode.{mode}')
         self.statusbar.showMessage(self.tr.tr('message.view_mode_changed', mode=mode_name))

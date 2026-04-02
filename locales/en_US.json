@@ -42,6 +42,9 @@
   "tooltip": {
     "open": "Open Image (Ctrl+O)",
     "save": "Save Image (Ctrl+S)",
+    "save_original": "Save Original Image (Ctrl+S)",
+    "save_preprocessed": "Save Preprocessed Image (Ctrl+S)",
+    "save_binary": "Save Binary Image (Ctrl+S)",
     "save_as": "Save As (Ctrl+Shift+S)",
     "exit": "Exit (Ctrl+Q)",
     "undo": "Undo (Ctrl+Z)",
