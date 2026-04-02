@@ -638,6 +638,12 @@ class MainWindow(QMainWindow):
         """
         self.active_layer_id = layer_id
         
+        # 更新AI按钮状态（只有根图层可以使用AI工具）
+        is_root_layer = (layer_id == "root")
+        if hasattr(self.binarization_panel, 'remove_bg_button') and self.binarization_panel.remove_bg_button is not None:
+            # AI按钮只在根图层且有图像时启用
+            self.binarization_panel.remove_bg_button.setEnabled(is_root_layer and self.image_data is not None)
+        
         # 选区只在根图层显示，切换到用户图层时隐藏（但保留数据）
         # 这样切换回根图层时选区会重新显示
         
@@ -2620,6 +2626,16 @@ class MainWindow(QMainWindow):
             self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
             return
         
+        # 检查当前是否在根图层
+        if self.active_layer_id != 'root':
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                self.tr.tr('dialog.warning'),
+                "AI工具只能应用于根图层，请先切换到根图层。"
+            )
+            return
+        
         # 获取原始图像
         original_image = self.image_data.original_pixels
         if original_image is None:
@@ -2814,10 +2830,10 @@ class MainWindow(QMainWindow):
         # 保存到历史记录
         self.history_manager.push_state(self.image_data)
         
-        # 更新原始图像
+        # 更新原始图像（只更新根图层）
         self.image_data.original_pixels = result
         
-        # 使缓存失效
+        # 使预处理缓存失效
         self.image_data.invalidate_preprocessed_cache()
         
         # 获取当前参数
@@ -2841,7 +2857,7 @@ class MainWindow(QMainWindow):
         )
         
         def on_finished(binary_pixels):
-            # 更新二值化图像
+            # 更新二值化图像（根图层）
             self.image_data.pixels = binary_pixels
             
             # 根据当前视图模式更新显示
@@ -2859,10 +2875,10 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     print(f"预处理失败: {e}")
             
-            # 更新 tile cache（关键！）
-            self.canvas._update_tile_cache()
+            # 更新分块缓存（关键！这会触发图层合成）
+            self._safe_update_tile_cache()
             
-            # 更新画布（会根据当前视图模式显示相应的图像）
+            # 更新画布显示
             self.canvas.update()
             self.canvas.set_processing(False)
             self.statusbar.showMessage(self.tr.tr('ai_process.applied'))

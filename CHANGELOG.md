@@ -1,5 +1,16 @@
 ﻿# 更新日志
 
+## [v1.6.0.1] - 2026-04-02
+
+### 修复
+- **AI去背景图层更新问题**：
+  - 修复应用AI去背景后图层显示不更新的问题
+  - 修复 `AttributeError: 'ImageData' object has no attribute 'current_layer_id'` 错误
+  - 修复 `AttributeError: 'ImageData' object has no attribute 'invalidate_binary_cache'` 错误
+  - 优化AI结果应用流程，确保图层正确合成和更新
+
+---
+
 ## [v1.6.0.0] - 2026-04-02
 
 ### 完善AI去背景功能
