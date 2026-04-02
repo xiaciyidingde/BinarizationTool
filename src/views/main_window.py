@@ -2712,7 +2712,8 @@ class MainWindow(QMainWindow):
             if not cleanup_done[0]:
                 cleanup_done[0] = True
                 simulation_timer.stop()
-                processor.unload_model()
+                # 注意：不在这里卸载模型，因为对话框可能还在使用
+                # processor.unload_model()
                 if not worker.isFinished():
                     worker.wait()
                 worker.deleteLater()
@@ -2732,9 +2733,9 @@ class MainWindow(QMainWindow):
         
         def on_finished(result):
             progress.close()
-            # 显示结果对比对话框
-            self._show_ai_result(original_image, result, model_type)
-            # 清理
+            # 显示结果对比对话框，传入processor以支持参数调节
+            self._show_ai_result(original_image, result, model_type, processor)
+            # 对话框关闭后清理
             cleanup()
         
         def on_failed(error):
@@ -2764,7 +2765,8 @@ class MainWindow(QMainWindow):
         
         QTimer.singleShot(100, start_worker)  # 延迟 100ms 启动
     
-    def _show_ai_result(self, original: 'np.ndarray', processed: 'np.ndarray', model_type: str):
+    def _show_ai_result(self, original: 'np.ndarray', processed: 'np.ndarray', 
+                        model_type: str, processor=None):
         """
         显示 AI 处理结果对比对话框
         
@@ -2772,6 +2774,7 @@ class MainWindow(QMainWindow):
             original: 原始图像
             processed: 处理后的图像
             model_type: 模型类型
+            processor: AI处理器实例（用于参数调节）
         """
         from .ai_result_dialog import AIResultDialog
         
@@ -2781,14 +2784,22 @@ class MainWindow(QMainWindow):
         else:
             title = self.tr.tr('ai_result.title')
         
-        dialog = AIResultDialog(original, processed, title, self)
+        # 创建对话框，传入processor以支持参数调节
+        dialog = AIResultDialog(original, processed, title, self, 
+                               show_parameters=True, processor=processor)
         
         def on_result_accepted(result):
             # 用户接受结果，更新图像
             self._apply_ai_result(result)
         
         dialog.result_accepted.connect(on_result_accepted)
+        
+        # 显示对话框（模态）
         dialog.exec()
+        
+        # 对话框关闭后，卸载模型释放资源
+        if processor:
+            processor.unload_model()
     
     def _apply_ai_result(self, result: 'np.ndarray'):
         """

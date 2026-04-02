@@ -272,7 +272,7 @@
     "ai_tools": "AI 工具",
     "remove_background": "去除背景",
     "download_model": "下载模型",
-    "install_onnxruntime_hint": "提示：需要先安装 onnxruntime\npip install onnxruntime"
+    "install_onnxruntime_hint": "提示：需要先安装 onnxruntime"
   },
   "properties_panel": {
     "properties": "属性",
@@ -340,7 +340,26 @@
   "ai_result": {
     "title": "AI 处理结果",
     "cancel": "取消",
-    "apply": "应用"
+    "apply": "应用",
+    "parameters_title": "参数调节",
+    "threshold_settings": "阈值设置",
+    "threshold_mode": "阈值模式：",
+    "threshold_auto": "自动",
+    "threshold_manual": "手动",
+    "manual_threshold": "手动阈值：{value}",
+    "manual_threshold_label": "手动阈值：",
+    "edge_settings": "边缘处理",
+    "edge_feather": "边缘羽化",
+    "feather_strength": "羽化强度：{value}",
+    "feather_strength_label": "羽化强度：",
+    "denoise_settings": "降噪设置",
+    "denoise_strength": "降噪强度：{value}",
+    "denoise_strength_label": "降噪强度：",
+    "background_settings": "背景设置",
+    "background_color": "背景颜色：",
+    "bg_white": "白色",
+    "bg_black": "黑色",
+    "bg_transparent": "透明"
   },
   "ai_process": {
     "title": "AI 处理",

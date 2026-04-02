@@ -617,3 +617,115 @@ QLabel#infoLabel a:hover {
     color: #0056b3;
     text-decoration: underline;
 }
+
+/* ========== AI 结果对比对话框参数面板 ========== */
+QFrame#parametersPanel {
+    background-color: #f8f9fa;
+    border-right: 1px solid #dee2e6;
+}
+
+QLabel#parametersPanelTitle {
+    color: #212529;
+    background-color: transparent;
+}
+
+/* 参数面板按钮容器 */
+QWidget#parametersButtonContainer {
+    background-color: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+}
+
+/* 参数面板内的分组框 */
+QFrame#parametersPanel QGroupBox {
+    color: #212529;
+    border: 1px solid #dee2e6;
+    background-color: transparent;
+    font-size: 13px;
+    font-weight: bold;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-radius: 4px;
+}
+
+QFrame#parametersPanel QGroupBox::title {
+    color: #212529;
+    background-color: transparent;
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 8px;
+    top: 0px;
+    padding: 0 4px;
+}
+
+/* 参数面板内的标签 */
+QFrame#parametersPanel QLabel {
+    color: #495057;
+    background-color: transparent;
+    font-size: 12px;
+}
+
+/* 参数面板内的滑块 */
+QFrame#parametersPanel QSlider::groove:horizontal {
+    border: 1px solid #ced4da;
+    background: #e9ecef;
+}
+
+QFrame#parametersPanel QSlider::handle:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #0d6efd, stop:1 #0a58ca);
+    border: 1px solid #0a58ca;
+}
+
+/* 参数面板内的下拉框 */
+QFrame#parametersPanel QComboBox {
+    border: 1px solid #ced4da;
+    background-color: #ffffff;
+    color: #212529;
+    min-width: 80px;
+}
+
+QFrame#parametersPanel QComboBox:hover {
+    border-color: #adb5bd;
+}
+
+QFrame#parametersPanel QComboBox QAbstractItemView {
+    border: 1px solid #ced4da;
+    background-color: #ffffff;
+    color: #212529;
+}
+
+/* 参数面板内的按钮 */
+QWidget#parametersButtonContainer QPushButton {
+    background-color: #f8f9fa;
+    color: #212529;
+    font-weight: 500;
+    font-size: 13px;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+}
+
+QWidget#parametersButtonContainer QPushButton:hover {
+    background-color: #e9ecef;
+    border-color: #ced4da;
+}
+
+QWidget#parametersButtonContainer QPushButton:pressed {
+    background-color: #dee2e6;
+    border-color: #adb5bd;
+}
+
+QWidget#parametersButtonContainer QPushButton:default {
+    background-color: #0d6efd;
+    color: #ffffff;
+    border-color: #0d6efd;
+}
+
+QWidget#parametersButtonContainer QPushButton:default:hover {
+    background-color: #0b5ed7;
+    border-color: #0b5ed7;
+}
+
+QWidget#parametersButtonContainer QPushButton:default:pressed {
+    background-color: #0a58ca;
+    border-color: #0a58ca;
+}

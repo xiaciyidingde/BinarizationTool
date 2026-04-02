@@ -224,6 +224,31 @@ class RMBGProcessor(AIProcessor):
         Returns:
             去除背景后的图像 (H, W, 3) RGB 格式
         """
+        return self.process_with_parameters(image)
+    
+    def process_with_parameters(
+        self,
+        image: np.ndarray,
+        threshold_mode: str = 'auto',
+        manual_threshold: int = 127,
+        edge_feather: bool = True,
+        feather_strength: float = 0.5,
+        background_color: str = 'white'
+    ) -> np.ndarray:
+        """
+        使用指定参数处理图像，去除背景
+        
+        Args:
+            image: 输入图像 (H, W, 3) RGB 格式
+            threshold_mode: 阈值模式 ('auto' 或 'manual')
+            manual_threshold: 手动阈值 (0-255)
+            edge_feather: 是否启用边缘羽化
+            feather_strength: 羽化强度 (0.0-1.0)
+            background_color: 背景颜色 ('white', 'black', 'transparent')
+            
+        Returns:
+            处理后的图像 (H, W, 3 或 H, W, 4) RGB/RGBA 格式
+        """
         if not self.is_loaded:
             raise RuntimeError("模型未加载，请先调用 load_model()")
         
@@ -243,43 +268,64 @@ class RMBGProcessor(AIProcessor):
         # 后处理
         mask = self._postprocess(mask, (original_h, original_w))
         
-        # 优化掩码质量
-        # 1. 使用 Otsu 自动阈值而不是固定阈值
-        _, mask_binary = cv2.threshold(mask, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # 1. 阈值处理
+        if threshold_mode == 'manual':
+            # 使用手动阈值
+            _, mask_binary = cv2.threshold(mask, manual_threshold, 255, cv2.THRESH_BINARY)
+        else:
+            # 使用 Otsu 自动阈值
+            _, mask_binary = cv2.threshold(mask, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         
-        # 2. 形态学操作去除噪点
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-        mask_binary = cv2.morphologyEx(mask_binary, cv2.MORPH_OPEN, kernel, iterations=1)
-        mask_binary = cv2.morphologyEx(mask_binary, cv2.MORPH_CLOSE, kernel, iterations=1)
+        # 2. 边缘羽化
+        if edge_feather:
+            # 将二值掩码转换为浮点
+            mask_float = mask_binary.astype(np.float32) / 255.0
+            
+            # 使用原始掩码的软边缘信息
+            mask_soft = mask.astype(np.float32) / 255.0
+            
+            # 检测边缘
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            edges = cv2.Canny(mask_binary, 50, 150)
+            # 根据羽化强度调整边缘扩展
+            dilation_size = max(1, int(feather_strength * 5))
+            edges_dilated = cv2.dilate(edges, kernel, iterations=dilation_size)
+            edge_mask = (edges_dilated > 0).astype(np.float32)
+            
+            # 混合硬掩码和软掩码
+            final_mask = mask_float * (1 - edge_mask) + mask_soft * edge_mask
+            
+            # 根据羽化强度调整高斯模糊
+            blur_size = max(1, int(feather_strength * 5))
+            if blur_size % 2 == 0:
+                blur_size += 1
+            sigma = feather_strength * 2
+            final_mask = cv2.GaussianBlur(final_mask, (blur_size, blur_size), sigma)
+        else:
+            # 不羽化，直接使用二值掩码
+            final_mask = mask_binary.astype(np.float32) / 255.0
         
-        # 3. 边缘羽化（使用原始掩码的软边缘）
-        # 将二值掩码转换为浮点
-        mask_float = mask_binary.astype(np.float32) / 255.0
+        # 3. 应用背景颜色
+        if background_color == 'transparent':
+            # 创建 RGBA 图像
+            result = np.zeros((original_h, original_w, 4), dtype=np.uint8)
+            result[:, :, :3] = image
+            result[:, :, 3] = (final_mask * 255).astype(np.uint8)
+        else:
+            # 将掩码扩展为 3 通道
+            mask_3ch = np.stack([final_mask, final_mask, final_mask], axis=2)
+            
+            # 确定背景颜色值
+            if background_color == 'black':
+                bg_value = 0.0
+            else:  # white
+                bg_value = 255.0
+            
+            # 应用掩码
+            result = image.astype(np.float32) * mask_3ch + bg_value * (1 - mask_3ch)
+            result = result.astype(np.uint8)
         
-        # 使用原始掩码的软边缘信息
-        mask_soft = mask.astype(np.float32) / 255.0
-        
-        # 在边缘区域使用软掩码，中心区域使用硬掩码
-        # 检测边缘
-        edges = cv2.Canny(mask_binary, 50, 150)
-        edges_dilated = cv2.dilate(edges, kernel, iterations=3)
-        edge_mask = (edges_dilated > 0).astype(np.float32)
-        
-        # 混合硬掩码和软掩码
-        final_mask = mask_float * (1 - edge_mask) + mask_soft * edge_mask
-        
-        # 4. 轻微高斯模糊使边缘更自然
-        final_mask = cv2.GaussianBlur(final_mask, (3, 3), 0.5)
-        
-        # 应用掩码到原始图像
-        # 将掩码扩展为 3 通道
-        mask_3ch = np.stack([final_mask, final_mask, final_mask], axis=2)
-        
-        # 应用掩码（保留前景，背景变为白色）
-        # 使用浮点运算以保持精度
-        result = image.astype(np.float32) * mask_3ch + 255.0 * (1 - mask_3ch)
-        
-        return result.astype(np.uint8)
+        return result
     
     def unload_model(self):
         """卸载模型，释放资源"""
