@@ -201,6 +201,7 @@ class LayerItemWidget(QWidget):
         self.name_edit.setReadOnly(True)
         self.name_edit.setFrame(False)
         # 焦点策略在 EditableLineEdit 中管理
+        # 不设置内联样式，让主题控制颜色
         self.name_edit.setStyleSheet("""
             QLineEdit {
                 padding: 2px;
@@ -211,6 +212,7 @@ class LayerItemWidget(QWidget):
                 background: white;
                 border: 1px solid #0078d4;
                 border-radius: 2px;
+                color: #000000;
             }
         """)
         # 根图层不可重命名
@@ -306,17 +308,18 @@ class LayerItemWidget(QWidget):
             pixmap = QPixmap()
             pixmap.loadFromData(SHOW)
             self.visibility_button.setIcon(QIcon(pixmap))
+            # 不设置颜色，让主题控制
             self.name_edit.setStyleSheet("""
                 QLineEdit {
                     padding: 2px;
                     background: transparent;
                     border: none;
-                    color: palette(text);
                 }
                 QLineEdit:focus {
                     background: white;
                     border: 1px solid #0078d4;
                     border-radius: 2px;
+                    color: #000000;
                 }
             """)
         else:
@@ -335,7 +338,7 @@ class LayerItemWidget(QWidget):
                     background: white;
                     border: 1px solid #0078d4;
                     border-radius: 2px;
-                    color: palette(text);
+                    color: #000000;
                 }
             """)
     

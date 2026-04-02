@@ -263,7 +263,7 @@ def compile_project():
         "--nofollow-import-to=tkinter",  # 排除 tkinter
         "--nofollow-import-to=pandas",  # 排除 pandas
         "--nofollow-import-to=matplotlib",  # 排除 matplotlib
-        "--nofollow-import-to=scipy",  # 排除 scipy
+        "--nofollow-import-to=scipy",  # 排除 scipy（可选依赖，有 opencv 就够了）
         f"--copyright=Copyright © 2026 夏次一定de. All rights reserved.",  # 版权信息
     ]
     

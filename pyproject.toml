@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "BinarizationTool"
-version = "v1.5.14.0"
+version = "v1.6.0.0"
 description = "二值化图片编辑器"
 authors = [{name = "夏次一定de"}]
 requires-python = ">=3.12"
@@ -13,6 +13,9 @@ dependencies = [
     "opencv-python>=4.8.0",
     "PySide6>=6.5.0",
     "Pillow>=10.0.0",
+    "onnxruntime>=1.17.0",
+    "modelscope>=1.9.0",
+    "huggingface-hub>=0.20.0",
 ]
 
 [project.optional-dependencies]
@@ -21,6 +24,9 @@ dev = [
     "pytest>=7.0.0",
     "hypothesis>=6.0.0",
     "ruff>=0.1.0",
+]
+ai = [
+    "scipy>=1.10.0",  # 可选：用于填充选区的备用方案
 ]
 
 [tool.ruff]

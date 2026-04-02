@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
 
 from src.utils.config_manager import get_config_manager
 from src.utils.translation_manager import get_translator
+from src.utils.window_utils import apply_dark_titlebar
 from src.widgets.animated_tab_widget import AnimatedTabWidget
 from src.widgets.toggle_switch import ToggleSwitch
 
@@ -43,38 +44,10 @@ class SettingsDialog(QDialog):
         self.setMinimumHeight(500)
         
         # 应用深色标题栏
-        self._apply_dark_titlebar()
+        apply_dark_titlebar(self)
 
         self.setup_ui()
         self.load_settings()
-
-    def _apply_dark_titlebar(self):
-        """应用深色标题栏（Windows 11）"""
-        import sys
-        if sys.platform == 'win32':
-            try:
-                import ctypes
-                
-                # 获取当前主题
-                theme = self.config_manager.get('interface', 'theme', 'light')
-                
-                # 只在深色主题下应用深色标题栏
-                if theme == 'dark':
-                    hwnd = int(self.winId())
-                    DWMWA_USE_IMMERSIVE_DARK_MODE = 20
-                    value = ctypes.c_int(1)
-                    
-                    try:
-                        ctypes.windll.dwmapi.DwmSetWindowAttribute(
-                            hwnd,
-                            DWMWA_USE_IMMERSIVE_DARK_MODE,
-                            ctypes.byref(value),
-                            ctypes.sizeof(value)
-                        )
-                    except Exception:
-                        pass
-            except Exception:
-                pass
 
     def load_settings(self):
         """从配置文件加载设置"""

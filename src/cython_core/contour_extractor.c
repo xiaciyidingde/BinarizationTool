@@ -12,10 +12,7 @@
         ],
         "extra_compile_args": [
             "/O2",
-            "/openmp"
-        ],
-        "extra_link_args": [
-            "/openmp"
+            "/openmp:llvm"
         ],
         "include_dirs": [
             "C:\\tools\\python\\python3\\Lib\\site-packages\\numpy\\_core\\include"

@@ -39,6 +39,9 @@ class BinarizationPanel(QWidget):
 
     # 信号：图像变换操作 (operation: 'invert', 'flip_horizontal', 'flip_vertical')
     image_transform = Signal(str)
+    
+    # 信号：请求 AI 处理 (model_type: str)
+    ai_process_requested = Signal(str)
 
     def __init__(self, parent=None, panel_width=300):
         """
@@ -160,6 +163,55 @@ class BinarizationPanel(QWidget):
         settings_layout = QVBoxLayout(tab_content)
         settings_layout.setContentsMargins(12, 8, 12, 8)  # 左右边距12px
         settings_layout.setSpacing(8)
+
+        # === AI 工具（如果有模型） ===
+        import os
+        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
+        has_rmbg_model = False
+        has_onnxruntime = False
+        
+        # 检查是否安装了 onnxruntime
+        try:
+            import onnxruntime
+            has_onnxruntime = True
+        except ImportError:
+            pass
+        
+        # 检查是否有模型文件
+        if has_onnxruntime and os.path.exists(model_dir):
+            for filename in os.listdir(model_dir):
+                if filename.startswith('RMBG') and filename.endswith('.onnx'):
+                    has_rmbg_model = True
+                    break
+        
+        # 始终显示 AI 工具组（即使没有模型）
+        ai_tools_group = QGroupBox(self.tr.tr('binarization_panel.ai_tools'))
+        ai_tools_layout = QVBoxLayout()
+        ai_tools_layout.setSpacing(6)
+        
+        if has_rmbg_model:
+            # 有模型：显示"去除背景"按钮
+            self.remove_bg_button = QPushButton(self.tr.tr('binarization_panel.remove_background'))
+            self.remove_bg_button.setEnabled(False)  # 初始禁用，加载图片后启用
+            self.remove_bg_button.clicked.connect(lambda: self.ai_process_requested.emit('rmbg'))
+            ai_tools_layout.addWidget(self.remove_bg_button)
+            self.download_model_button = None
+        else:
+            # 没有模型：显示"下载模型"按钮
+            self.remove_bg_button = None
+            self.download_model_button = QPushButton(self.tr.tr('binarization_panel.download_model'))
+            self.download_model_button.clicked.connect(self._on_download_model_clicked)
+            ai_tools_layout.addWidget(self.download_model_button)
+            
+            # 如果没有 onnxruntime，显示提示
+            if not has_onnxruntime:
+                hint_label = QLabel(self.tr.tr('binarization_panel.install_onnxruntime_hint'))
+                hint_label.setWordWrap(True)
+                hint_label.setStyleSheet("QLabel { color: #666; font-size: 10px; }")
+                ai_tools_layout.addWidget(hint_label)
+        
+        ai_tools_group.setLayout(ai_tools_layout)
+        settings_layout.addWidget(ai_tools_group)
 
         # === 预处理参数 ===
         preprocess_group = QGroupBox(self.tr.tr('binarization_panel.preprocess'))
@@ -1182,6 +1234,9 @@ class BinarizationPanel(QWidget):
         self.flip_horizontal_checkbox.setEnabled(enabled)
         self.flip_vertical_checkbox.setEnabled(enabled)
         self.flip_vertical_checkbox.setEnabled(enabled)
+        # 启用/禁用去除背景按钮（如果存在）
+        if hasattr(self, 'remove_bg_button') and self.remove_bg_button is not None:
+            self.remove_bg_button.setEnabled(enabled)
 
     def set_current_layer(self, layer_name: str):
         """
@@ -1293,3 +1348,39 @@ class BinarizationPanel(QWidget):
         # 注意：QGroupBox 的标题需要通过 setTitle 更新
         # 这里只是示例，实际需要保存对 QGroupBox 的引用
         pass
+
+    def _on_download_model_clicked(self):
+        """下载模型按钮点击事件"""
+        from ..views.model_download_dialog import ModelDownloadDialog
+        import os
+        
+        # 获取目标目录
+        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
+        
+        # 直接显示下载对话框
+        dialog = ModelDownloadDialog(model_dir, "RMBG-2.0-q4f16.onnx", self)
+        dialog.exec()
+        
+        # 如果下载成功，刷新 UI
+        if dialog.is_download_success():
+            from PySide6.QtWidgets import QMessageBox
+            
+            # 隐藏下载按钮，显示去除背景按钮
+            if self.download_model_button:
+                self.download_model_button.setVisible(False)
+            
+            # 创建去除背景按钮
+            self.remove_bg_button = QPushButton(self.tr.tr('binarization_panel.remove_background'))
+            self.remove_bg_button.setEnabled(False)  # 初始禁用，加载图片后启用
+            self.remove_bg_button.clicked.connect(lambda: self.ai_process_requested.emit('rmbg'))
+            
+            # 添加到布局
+            ai_tools_group = self.download_model_button.parent()
+            layout = ai_tools_group.layout()
+            layout.addWidget(self.remove_bg_button)
+            
+            QMessageBox.information(
+                self,
+                "下载完成",
+                "模型下载成功！现在可以使用背景去除功能了。"
+            )

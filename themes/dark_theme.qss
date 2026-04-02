@@ -304,6 +304,34 @@ QProgressBar::chunk {
     border-radius: 3px;
 }
 
+/* ========== 进度对话框样式 ========== */
+QProgressDialog {
+    background-color: #1e1e1e;
+}
+
+QProgressDialog QLabel {
+    color: #e0e0e0;
+    background-color: transparent;
+}
+
+QProgressDialog QPushButton {
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px;
+    padding: 8px 16px;
+}
+
+QProgressDialog QPushButton:hover {
+    background-color: #454545;
+    border-color: #5a5a5a;
+}
+
+QProgressDialog QPushButton:pressed {
+    background-color: #505050;
+    border-color: #6a6a6a;
+}
+
 /* ========== 分割线样式 ========== */
 QSplitter::handle {
     background-color: #3e3e3e;
@@ -713,3 +741,155 @@ QLabel#currentToolLabel {
     color: #cccccc;
 }
 
+/* ========== 模型下载对话框信息标签 ========== */
+QLabel#infoLabel {
+    color: #cccccc;
+    background-color: #2a2a2a;
+    border: 1px solid #404040;
+    border-radius: 5px;
+    padding: 10px;
+}
+
+QLabel#infoLabel a {
+    color: #6eb3ff;
+    text-decoration: none;
+}
+
+QLabel#infoLabel a:hover {
+    color: #8ec5ff;
+    text-decoration: underline;
+}
+
+/* ========== AI 结果对比对话框参数面板 ========== */
+QFrame#parametersPanel {
+    background-color: #252525;
+    border-right: 1px solid #404040;
+}
+
+QLabel#parametersPanelTitle {
+    color: #e8e8e8;
+    background-color: transparent;
+}
+
+/* 参数面板按钮容器 */
+QWidget#parametersButtonContainer {
+    background-color: #252525;
+    border-top: 1px solid #404040;
+}
+
+/* 参数面板内的分组框 */
+QFrame#parametersPanel QGroupBox {
+    color: #e0e0e0;
+    border: 1px solid #404040;
+    background-color: transparent;
+    font-size: 13px;
+    font-weight: bold;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-radius: 4px;
+}
+
+QFrame#parametersPanel QGroupBox::title {
+    color: #e0e0e0;
+    background-color: transparent;
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 8px;
+    top: 0px;
+    padding: 0 4px;
+}
+
+/* 参数面板内的标签 */
+QFrame#parametersPanel QLabel {
+    color: #cccccc;
+    background-color: transparent;
+    font-size: 12px;
+}
+
+/* 参数面板内的滑块 */
+QFrame#parametersPanel QSlider::groove:horizontal {
+    border: 1px solid #404040;
+    background: #2a2a2a;
+}
+
+QFrame#parametersPanel QSlider::handle:horizontal {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #6eb3ff, stop:1 #4a9eff);
+    border: 1px solid #3a8eef;
+}
+
+/* 参数面板内的下拉框 */
+QFrame#parametersPanel QComboBox {
+    border: 1px solid #404040;
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+    min-width: 80px;
+}
+
+QFrame#parametersPanel QComboBox:hover {
+    border-color: #5a5a5a;
+}
+
+QFrame#parametersPanel QComboBox QAbstractItemView {
+    border: 1px solid #404040;
+    background-color: #2a2a2a;
+    color: #e0e0e0;
+}
+
+/* 参数面板内的按钮 */
+QWidget#parametersButtonContainer QPushButton {
+    background-color: #3a3a3a;
+    color: #e0e0e0;
+    font-weight: 500;
+    font-size: 13px;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px;
+}
+
+QWidget#parametersButtonContainer QPushButton:hover {
+    background-color: #454545;
+    border-color: #5a5a5a;
+}
+
+QWidget#parametersButtonContainer QPushButton:pressed {
+    background-color: #505050;
+    border-color: #6a6a6a;
+}
+
+QWidget#parametersButtonContainer QPushButton:default {
+    background-color: #6eb3ff;
+    color: #ffffff;
+    border-color: #6eb3ff;
+}
+
+QWidget#parametersButtonContainer QPushButton:default:hover {
+    background-color: #7ec3ff;
+    border-color: #7ec3ff;
+}
+
+QWidget#parametersButtonContainer QPushButton:default:pressed {
+    background-color: #5ea3ef;
+    border-color: #5ea3ef;
+}
+
+/* ========== 图层面板样式 ========== */
+/* 图层面板容器 */
+QGroupBox#layersPanelContainer {
+    border: none;
+    background-color: transparent;
+}
+
+/* 图层列表分组框标题 */
+QGroupBox#layersPanelContainer QGroupBox::title {
+    color: #e0e0e0;
+    background-color: transparent;
+}
+
+/* 图层项文字颜色 */
+LayerItemWidget QLineEdit {
+    color: #e0e0e0;
+}
+
+LayerItemWidget QLineEdit[readOnly="true"] {
+    color: #e0e0e0;
+}

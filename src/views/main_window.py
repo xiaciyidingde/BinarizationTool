@@ -186,7 +186,11 @@ class MainWindow(QMainWindow):
                     theme = theme_manager._detect_system_theme()
                 
                 # Windows 11 标题栏颜色
-                hwnd = int(self.winId())
+                win_id = self.winId()
+                if win_id == 0:  # 窗口ID无效，跳过
+                    return
+                    
+                hwnd = int(win_id)
                 DWMWA_USE_IMMERSIVE_DARK_MODE = 20
                 
                 # 根据主题设置标题栏颜色：1 = 深色, 0 = 浅色
@@ -314,6 +318,7 @@ class MainWindow(QMainWindow):
         
         # 创建 Canvas
         self.canvas = Canvas()
+        self.canvas.main_window = self  # 设置 main_window 引用，用于访问属性面板
         
         # 设置坐标转换器
         self.horizontal_ruler.set_coordinate_transform(self.canvas.coord_transform)
@@ -590,6 +595,9 @@ class MainWindow(QMainWindow):
 
         # 图像变换操作
         self.binarization_panel.image_transform.connect(self._on_image_transform)
+        
+        # AI 处理请求
+        self.binarization_panel.ai_process_requested.connect(self._on_ai_process_requested)
 
         # Canvas 图片修改
         self.canvas.image_modified.connect(self._on_image_modified)
@@ -1534,28 +1542,24 @@ class MainWindow(QMainWindow):
         self.active_layer_id = "root"
 
     def _save_file(self):
-        """保存文件（第一次另存为，之后覆盖）"""
+        """保存文件（每次都弹出对话框，但记住上次保存的目录）"""
         if self.image_data is None:
             return
 
-        # 如果已经保存过，直接覆盖
-        if self.saved_file_path:
-            self._save_to_file(self.saved_file_path)
-            return
-
-        # 第一次保存：生成默认文件名并弹出对话框
+        # 生成默认文件名
         default_name = self._generate_default_save_name()
 
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            "保存图片",
+            self.tr.tr('file_dialog.save_image'),
             default_name,
-            "PNG 图片 (*.png);;JPEG 图片 (*.jpg);;BMP 图片 (*.bmp)"
+            self.tr.tr('file_dialog.png_files')
         )
 
         if file_path:
             self._save_to_file(file_path)
-            self.saved_file_path = file_path  # 记录保存路径
+            # 记录保存的目录（用于下次保存时的默认位置）
+            self.saved_file_path = file_path
 
     def _save_file_as(self):
         """另存为（总是弹出对话框）"""
@@ -1583,45 +1587,77 @@ class MainWindow(QMainWindow):
         Returns:
             默认文件名路径
         """
+        import re
+        
         # 获取文件名格式配置
         filename_format = self.config_manager.get('file', 'filename_format', 'timestamp')
 
-        if self.current_file_path:
-            # 获取原文件信息
+        # 确定保存目录：优先使用上次保存的目录，其次使用原文件目录
+        if self.saved_file_path:
+            dir_path = os.path.dirname(self.saved_file_path)
+        elif self.current_file_path:
             dir_path = os.path.dirname(self.current_file_path)
+        else:
+            dir_path = os.getcwd()
+
+        # 确定文件名基础（始终使用原始打开的文件名，而不是上次保存的文件名）
+        if self.current_file_path:
             file_name = os.path.basename(self.current_file_path)
             name_without_ext, ext = os.path.splitext(file_name)
-
-            # 根据配置生成文件名
-            if filename_format == 'timestamp':
-                # 原名_时间戳
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                new_name = f"{name_without_ext}_{timestamp}{ext}"
-            elif filename_format == 'copy':
-                # 原名_副本
-                new_name = f"{name_without_ext}_副本{ext}"
-            else:  # custom
-                # 自定义前缀/后缀
-                prefix = self.config_manager.get('file', 'custom_prefix', '')
-                suffix = self.config_manager.get('file', 'custom_suffix', '')
-                new_name = f"{prefix}{name_without_ext}{suffix}{ext}"
-
-            return os.path.join(dir_path, new_name)
+            
+            # 清理文件名：移除之前可能添加的视图模式后缀和时间戳
+            # 匹配模式：_(binary|preprocessed|original)_时间戳 或 _(binary|preprocessed|original)_副本
+            name_without_ext = re.sub(r'_(binary|preprocessed|original)(_\d{8}_\d{6}|_副本)$', '', name_without_ext)
+            # 也移除单独的时间戳后缀（如果存在）
+            name_without_ext = re.sub(r'_\d{8}_\d{6}$', '', name_without_ext)
+            # 移除单独的"副本"后缀
+            name_without_ext = re.sub(r'_副本$', '', name_without_ext)
         else:
-            # 如果没有原文件路径，使用默认名称
+            name_without_ext = "image"
+            ext = ".png"
+
+        # 根据视图模式添加后缀
+        view_mode_suffix = ""
+        if self.image_data and hasattr(self.image_data, 'view_mode'):
+            if self.image_data.view_mode == 'preprocessed':
+                view_mode_suffix = "_preprocessed"
+            elif self.image_data.view_mode == 'binary':
+                view_mode_suffix = "_binary"
+            elif self.image_data.view_mode == 'original':
+                view_mode_suffix = "_original"
+
+        # 根据配置生成文件名
+        if filename_format == 'timestamp':
+            # 原名_视图模式_时间戳
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            return f"image_{timestamp}.png"
+            new_name = f"{name_without_ext}{view_mode_suffix}_{timestamp}{ext}"
+        elif filename_format == 'copy':
+            # 原名_视图模式_副本
+            new_name = f"{name_without_ext}{view_mode_suffix}_副本{ext}"
+        else:  # custom
+            # 自定义前缀/后缀
+            prefix = self.config_manager.get('file', 'custom_prefix', '')
+            suffix = self.config_manager.get('file', 'custom_suffix', '')
+            new_name = f"{prefix}{name_without_ext}{view_mode_suffix}{suffix}{ext}"
+
+        return os.path.join(dir_path, new_name)
 
     def _save_to_file(self, file_path: str):
         """保存到文件"""
         try:
+            from pathlib import Path
+            from PIL import Image
+            
             # 获取保存格式配置
             save_format_config = self.config_manager.get('file', 'default_save_format', 'follow_original')
 
             # 确定实际保存格式
+            path = Path(file_path)
             if save_format_config == 'follow_original':
                 # 跟随用户选择的文件扩展名
-                format_str = None
+                format_str = path.suffix.upper().lstrip('.')
+                if format_str == 'JPG':
+                    format_str = 'JPEG'
             else:
                 # 使用配置的格式
                 format_map = {
@@ -1632,31 +1668,43 @@ class MainWindow(QMainWindow):
                 }
                 format_str = format_map.get(save_format_config)
 
-            # 如果在二值化模式且有用户图层，保存合成后的结果
-            if self.image_data.view_mode == 'binary' and len(self.image_data.user_layers) > 0:
-                # 获取完整的合成结果（包括所有用户图层）
-                composited_pixels = self._composite_layers()
+            # 根据当前视图模式保存对应的图像
+            if self.image_data.view_mode == 'preprocessed':
+                # 预处理视图：保存预处理后的图像
+                if self.image_data.preprocessed_pixels is not None:
+                    pixels_to_save = self.image_data.preprocessed_pixels
+                else:
+                    # 如果预处理像素不存在，保存原图
+                    pixels_to_save = self.image_data.original_pixels
                 
-                # 直接保存合成后的像素
-                from pathlib import Path
-                from PIL import Image
-                
-                path = Path(file_path)
-                
-                # 推断格式
-                if format_str is None:
-                    format_str = path.suffix.upper().lstrip('.')
-                    if format_str == 'JPG':
-                        format_str = 'JPEG'
-                
-                # 转换为 PIL Image 并保存
-                img = Image.fromarray(composited_pixels, mode='L')
+                # 转换为 PIL Image 并保存（预处理结果可能是RGB或灰度）
+                if len(pixels_to_save.shape) == 3:
+                    img = Image.fromarray(pixels_to_save, mode='RGB')
+                else:
+                    img = Image.fromarray(pixels_to_save, mode='L')
                 img.save(file_path, format=format_str)
+                
+            elif self.image_data.view_mode == 'binary':
+                # 二值化视图：保存二值化图像
+                if len(self.image_data.user_layers) > 0:
+                    # 有用户图层，保存合成后的结果
+                    composited_pixels = self._composite_layers()
+                    img = Image.fromarray(composited_pixels, mode='L')
+                    img.save(file_path, format=format_str)
+                else:
+                    # 没有用户图层，使用原有的保存方法
+                    save_image(self.image_data, file_path, format=format_str)
+                    
             else:
-                # 正常保存
-                save_image(self.image_data, file_path, format=format_str)
+                # 原图视图：保存原图
+                if len(self.image_data.original_pixels.shape) == 3:
+                    img = Image.fromarray(self.image_data.original_pixels, mode='RGB')
+                else:
+                    img = Image.fromarray(self.image_data.original_pixels, mode='L')
+                img.save(file_path, format=format_str)
             
-            self.current_file_path = file_path
+            # 注意：不更新 current_file_path，保持原始文件路径用于生成文件名
+            # self.current_file_path = file_path  # 已移除
             self.statusbar.showMessage(self.tr.tr('message.saved', path=file_path))
         except Exception as e:
             QMessageBox.critical(self, self.tr.tr('dialog.error'), self.tr.tr('dialog.save_error', error=str(e)))
@@ -2186,6 +2234,25 @@ class MainWindow(QMainWindow):
         self.invert_selection_action.setEnabled(has_image)
         self.select_black_action.setEnabled(has_image)
         self.select_white_action.setEnabled(has_image)
+        
+        # 更新保存按钮tooltip
+        if has_image:
+            self._update_save_button_tooltip(self.image_data.view_mode)
+
+    def _update_save_button_tooltip(self, mode: str):
+        """
+        根据视图模式更新保存按钮的tooltip
+        
+        Args:
+            mode: 视图模式 ('original', 'preprocessed', 'binary')
+        """
+        # 根据视图模式选择对应的tooltip键
+        tooltip_key = f'tooltip.save_{mode}'
+        tooltip_text = self.tr.tr(tooltip_key)
+        
+        # 更新工具栏按钮和菜单动作的tooltip
+        self.save_action_btn.setToolTip(tooltip_text)
+        self.save_action.setToolTip(tooltip_text)
 
     def _fill_selection(self, color: int):
         """
@@ -2458,6 +2525,9 @@ class MainWindow(QMainWindow):
 
         # 更新工具状态
         self._update_tool_states()
+        
+        # 更新保存按钮的tooltip
+        self._update_save_button_tooltip(mode)
 
         mode_name = self.tr.tr(f'view_mode.{mode}')
         self.statusbar.showMessage(self.tr.tr('message.view_mode_changed', mode=mode_name))
@@ -2538,6 +2608,282 @@ class MainWindow(QMainWindow):
         self.binarization_panel.invert_checkbox.blockSignals(False)
         self.binarization_panel.flip_horizontal_checkbox.blockSignals(False)
         self.binarization_panel.flip_vertical_checkbox.blockSignals(False)
+    
+    def _on_ai_process_requested(self, model_type: str):
+        """
+        处理 AI 处理请求
+        
+        Args:
+            model_type: 模型类型（'rmbg', ...）
+        """
+        if self.image_data is None:
+            self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
+            return
+        
+        # 获取原始图像
+        original_image = self.image_data.original_pixels
+        if original_image is None:
+            return
+        
+        # 创建 AI 处理器（在显示对话框前快速完成）
+        import os
+        from ..utils.ai_processor import AIProcessorFactory
+        from ..utils.ai_worker import AIWorker
+        
+        # 查找模型文件
+        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
+        model_path = None
+        
+        if os.path.exists(model_dir):
+            for filename in os.listdir(model_dir):
+                if filename.upper().startswith(model_type.upper()) and filename.endswith('.onnx'):
+                    model_path = os.path.join(model_dir, filename)
+                    break
+        
+        if model_path is None:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                self.tr.tr('dialog.error'),
+                self.tr.tr('ai_process.model_not_found', model=model_type)
+            )
+            return
+        
+        # 创建处理器
+        processor = AIProcessorFactory.create_processor(model_type, model_path)
+        if processor is None:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                self.tr.tr('dialog.error'),
+                self.tr.tr('ai_process.unsupported_model', model=model_type)
+            )
+            return
+        
+        # 显示进度对话框
+        from PySide6.QtWidgets import QProgressDialog, QApplication
+        from PySide6.QtCore import QTimer
+        from ..utils.window_utils import apply_dark_titlebar_after_show
+        
+        progress = QProgressDialog(
+            self.tr.tr('ai_process.loading_model'),
+            self.tr.tr('ai_process.cancel'),
+            0, 100, self
+        )
+        progress.setWindowTitle(self.tr.tr('ai_process.title'))
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        
+        # 设置进度对话框的最小尺寸，确保标题和内容完整显示
+        progress.setMinimumWidth(400)
+        progress.setMinimumHeight(120)
+        
+        progress.show()
+        
+        # 应用深色标题栏
+        apply_dark_titlebar_after_show(progress)
+        
+        # 强制刷新界面，确保对话框显示
+        QApplication.processEvents()
+        
+        # 创建工作线程
+        worker = AIWorker(processor, original_image)
+        
+        # 使用标志避免重复清理
+        cleanup_done = [False]  # 使用列表以便在闭包中修改
+        
+        # 创建模拟进度定时器（用于在模型加载阶段提供视觉反馈）
+        simulation_timer = QTimer()
+        simulation_progress = [0]  # 当前模拟进度
+        actual_progress_received = [False]  # 是否收到实际进度
+        
+        def simulate_progress():
+            """模拟进度更新（仅在加载阶段且未收到实际进度时）"""
+            if not actual_progress_received[0] and simulation_progress[0] < 45:
+                simulation_progress[0] += 1
+                progress.setValue(simulation_progress[0])
+        
+        simulation_timer.timeout.connect(simulate_progress)
+        simulation_timer.start(200)  # 每 200ms 更新一次，给用户反馈
+        
+        def cleanup():
+            """统一的清理函数"""
+            if not cleanup_done[0]:
+                cleanup_done[0] = True
+                simulation_timer.stop()
+                # 注意：不在这里卸载模型，因为对话框可能还在使用
+                # processor.unload_model()
+                if not worker.isFinished():
+                    worker.wait()
+                worker.deleteLater()
+        
+        # 连接信号
+        def on_progress(value):
+            actual_progress_received[0] = True
+            simulation_timer.stop()  # 收到实际进度后停止模拟
+            progress.setValue(value)
+            # 根据进度更新状态文本
+            if value < 50:
+                progress.setLabelText(self.tr.tr('ai_process.loading_model'))
+            elif value < 100:
+                progress.setLabelText(self.tr.tr('ai_process.processing'))
+            else:
+                progress.setLabelText(self.tr.tr('ai_process.finishing'))
+        
+        def on_finished(result):
+            progress.close()
+            # 显示结果对比对话框，传入processor以支持参数调节
+            self._show_ai_result(original_image, result, model_type, processor)
+            # 对话框关闭后清理
+            cleanup()
+        
+        def on_failed(error):
+            progress.close()
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                self.tr.tr('dialog.error'),
+                self.tr.tr('ai_process.failed', error=error)
+            )
+            # 清理
+            cleanup()
+        
+        def on_canceled():
+            worker.stop()
+            cleanup()
+        
+        worker.progress_updated.connect(on_progress)
+        worker.processing_finished.connect(on_finished)
+        worker.processing_failed.connect(on_failed)
+        progress.canceled.connect(on_canceled)
+        
+        # 使用 QTimer.singleShot 延迟启动工作线程
+        # 这样可以让进度对话框先完全显示出来
+        def start_worker():
+            worker.start()
+        
+        QTimer.singleShot(100, start_worker)  # 延迟 100ms 启动
+    
+    def _show_ai_result(self, original: 'np.ndarray', processed: 'np.ndarray', 
+                        model_type: str, processor=None):
+        """
+        显示 AI 处理结果对比对话框
+        
+        Args:
+            original: 原始图像
+            processed: 处理后的图像
+            model_type: 模型类型
+            processor: AI处理器实例（用于参数调节）
+        """
+        from .ai_result_dialog import AIResultDialog
+        
+        # 根据模型类型设置标题
+        if model_type == 'rmbg':
+            title = self.tr.tr('ai_process.rmbg_result')
+        else:
+            title = self.tr.tr('ai_result.title')
+        
+        # 创建对话框，传入processor以支持参数调节
+        dialog = AIResultDialog(original, processed, title, self, 
+                               show_parameters=True, processor=processor)
+        
+        def on_result_accepted(result):
+            # 用户接受结果，更新图像
+            self._apply_ai_result(result)
+        
+        dialog.result_accepted.connect(on_result_accepted)
+        
+        # 显示对话框（模态）
+        dialog.exec()
+        
+        # 对话框关闭后，卸载模型释放资源
+        if processor:
+            processor.unload_model()
+    
+    def _apply_ai_result(self, result: 'np.ndarray'):
+        """
+        应用 AI 处理结果
+        
+        Args:
+            result: 处理后的图像
+        """
+        if self.image_data is None:
+            return
+        
+        # 保存到历史记录
+        self.history_manager.push_state(self.image_data)
+        
+        # 更新原始图像
+        self.image_data.original_pixels = result
+        
+        # 使缓存失效
+        self.image_data.invalidate_preprocessed_cache()
+        
+        # 获取当前参数
+        preprocess_params = self.binarization_panel.get_preprocess_params()
+        method = self.binarization_panel.get_method()
+        threshold = self.binarization_panel.get_threshold()
+        method_params = self.binarization_panel.get_method_params()
+        
+        # 显示处理中状态
+        self.canvas.set_processing(True)
+        self.statusbar.showMessage(self.tr.tr('app.processing'))
+        
+        # 使用工作线程重新二值化
+        from ..utils.binarization_worker import BinarizationWorker
+        worker = BinarizationWorker(
+            result,
+            preprocess_params,
+            method,
+            threshold,
+            method_params
+        )
+        
+        def on_finished(binary_pixels):
+            # 更新二值化图像
+            self.image_data.pixels = binary_pixels
+            
+            # 根据当前视图模式更新显示
+            mode = self.image_data.view_mode
+            
+            if mode == 'preprocessed':
+                # 预处理模式：重新计算预处理图像
+                try:
+                    from ..utils.binarization_engine import BinarizationEngine
+                    preprocessed = BinarizationEngine.apply_preprocess(
+                        self.image_data.original_pixels.copy(),
+                        **preprocess_params
+                    )
+                    self.image_data.set_preprocessed_pixels(preprocessed)
+                except Exception as e:
+                    print(f"预处理失败: {e}")
+            
+            # 更新 tile cache（关键！）
+            self.canvas._update_tile_cache()
+            
+            # 更新画布（会根据当前视图模式显示相应的图像）
+            self.canvas.update()
+            self.canvas.set_processing(False)
+            self.statusbar.showMessage(self.tr.tr('ai_process.applied'))
+            worker.deleteLater()
+        
+        def on_error(error):
+            self.canvas.set_processing(False)
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                self,
+                self.tr.tr('dialog.error'),
+                f"二值化失败: {error}"
+            )
+            worker.deleteLater()
+        
+        worker.finished.connect(on_finished)
+        worker.error.connect(on_error)
+        worker.start()
+        
+        # 标记为已修改
+        self._on_image_modified()
 
     def _compute_preprocessed_pixels(self):
         """计算并缓存预处理结果"""

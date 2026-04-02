@@ -6,6 +6,19 @@ numpy>=1.24.0
 Pillow>=10.0.0
 opencv-python>=4.8.0
 
+# Optional: scipy (fallback for selection fill when opencv is not available)
+# scipy>=1.10.0
+
+# AI Models (Optional - for background removal and other AI features)
+# Install with: pip install onnxruntime
+# For GPU support: pip install onnxruntime-gpu
+# Note: RMBG-2.0 requires onnxruntime>=1.17.0
+onnxruntime>=1.17.0
+
+# Model Download (Optional - for downloading AI models)
+modelscope>=1.9.0
+huggingface-hub>=0.20.0
+
 # Testing
 pytest>=7.4.0
 hypothesis>=6.82.0

@@ -320,6 +320,21 @@ class PropertiesPanel(QWidget):
         method_layout.addStretch()
         basic_layout.addLayout(method_layout)
 
+        # 智能选择设置
+        smart_layout = QHBoxLayout()
+        smart_layout.setSpacing(8)
+        smart_label = QLabel(self.tr.tr('properties_panel.smart_selection'))
+        smart_label.setMinimumWidth(40)
+        smart_layout.addWidget(smart_label)
+        
+        from ..widgets.toggle_switch import ToggleSwitch
+        self.smart_selection_switch = ToggleSwitch()
+        self.smart_selection_switch.setChecked(False)  # 默认关闭
+        
+        smart_layout.addWidget(self.smart_selection_switch)
+        smart_layout.addStretch()
+        basic_layout.addLayout(smart_layout)
+
         # 填充选区（两个按钮：黑色和白色）
         fill_layout = QHBoxLayout()
         fill_layout.setSpacing(8)
