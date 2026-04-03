@@ -347,17 +347,42 @@ class AIProcessorFactory:
         创建 AI 处理器
         
         Args:
-            model_type: 模型类型（'rmbg', 'other_model', ...）
-            model_path: 模型文件路径
+            model_type: 模型类型（'rmbg', 'sam', ...）
+            model_path: 模型文件路径（对于 SAM，这是模型目录）
             
         Returns:
             AI 处理器实例，如果类型不支持则返回 None
         """
         if model_type.lower() == 'rmbg':
             return RMBGProcessor(model_path)
+        elif model_type.lower() == 'sam':
+            # SAM 需要两个模型文件
+            from .sam_processor import SAMProcessor
+            import os
+            
+            # 如果 model_path 是目录，查找编码器和解码器
+            if os.path.isdir(model_path):
+                encoder_path = None
+                decoder_path = None
+                
+                # 查找包含 "sam" 的模型文件（不区分大小写）
+                for filename in os.listdir(model_path):
+                    filename_lower = filename.lower()
+                    if not filename.endswith('.onnx'):
+                        continue
+                    
+                    # 匹配包含 "sam" 的文件
+                    if 'sam' in filename_lower:
+                        if 'encoder' in filename_lower:
+                            encoder_path = os.path.join(model_path, filename)
+                        elif 'decoder' in filename_lower:
+                            decoder_path = os.path.join(model_path, filename)
+                
+                if encoder_path and decoder_path:
+                    return SAMProcessor(encoder_path, decoder_path)
+            
+            return None
         # 未来可以添加更多模型类型
-        # elif model_type.lower() == 'other_model':
-        #     return OtherModelProcessor(model_path)
         else:
             return None
     
@@ -373,12 +398,26 @@ class AIProcessorFactory:
             模型类型字符串，如果无法识别则返回 None
         """
         import os
-        filename = os.path.basename(model_path).upper()
         
-        if filename.startswith('RMBG'):
-            return 'rmbg'
-        # 未来可以添加更多模型类型的检测
-        # elif filename.startswith('OTHER'):
-        #     return 'other_model'
+        if os.path.isdir(model_path):
+            # 检查目录中是否有 SAM 模型文件
+            has_encoder = False
+            has_decoder = False
+            
+            for filename in os.listdir(model_path):
+                if 'encoder' in filename.lower() and filename.endswith('.onnx'):
+                    has_encoder = True
+                elif 'decoder' in filename.lower() and filename.endswith('.onnx'):
+                    has_decoder = True
+            
+            if has_encoder and has_decoder:
+                return 'sam'
+        else:
+            filename = os.path.basename(model_path).upper()
+            
+            if filename.startswith('RMBG'):
+                return 'rmbg'
+            elif 'SAM' in filename or 'SEGMENT' in filename:
+                return 'sam'
         
         return None

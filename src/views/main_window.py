@@ -75,6 +75,10 @@ class MainWindow(QMainWindow):
         
         # 保存上一次的参数值（用于非根图层时恢复）
         self.last_valid_params: dict | None = None
+        
+        # SAM 模型管理
+        self.sam_processor = None  # SAM 处理器实例
+        self.sam_model_loaded = False  # SAM 模型是否已加载
 
         # 异步二值化
         self.binarization_worker: BinarizationWorker | None = None
@@ -601,6 +605,9 @@ class MainWindow(QMainWindow):
         
         # AI 处理请求
         self.binarization_panel.ai_process_requested.connect(self._on_ai_process_requested)
+        
+        # 智能选择请求
+        self.binarization_panel.smart_selection_requested.connect(self._on_smart_selection_requested)
 
         # Canvas 图片修改
         self.canvas.image_modified.connect(self._on_image_modified)
@@ -2522,6 +2529,10 @@ class MainWindow(QMainWindow):
         self.properties_panel.selection_method_group.buttonClicked.connect(
             self._on_selection_method_changed_panel
         )
+        # 智能选择开关
+        self.properties_panel.smart_selection_switch.toggled.connect(
+            self._on_smart_selection_toggled
+        )
         # 填充按钮
         self.properties_panel.fill_black_button.clicked.connect(
             lambda: self._fill_selection(0)
@@ -2632,6 +2643,15 @@ class MainWindow(QMainWindow):
         
         # 更新图像变换按钮的显示状态
         self._update_transform_buttons_visibility()
+        
+        # 更新智能选择AI标识的显示
+        self._update_smart_selection_ai_label()
+        
+        # 如果切换到预处理/原图视图且智能选择已开启，重新编码图像
+        if mode in ['original', 'preprocessed'] and self.sam_model_loaded:
+            if hasattr(self.properties_panel, 'smart_selection_switch'):
+                if self.properties_panel.smart_selection_switch.isChecked():
+                    self._update_sam_image_encoding()
         
         # 更新保存按钮的tooltip
         self._update_save_button_tooltip(mode)
@@ -2881,6 +2901,50 @@ class MainWindow(QMainWindow):
             worker.start()
         
         QTimer.singleShot(100, start_worker)  # 延迟 100ms 启动
+    
+    def _on_smart_selection_requested(self):
+        """
+        处理智能选择请求
+        
+        切换到选择工具并开启智能选择开关
+        """
+        if self.image_data is None:
+            self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
+            return
+        
+        # 确保在预处理/原图视图
+        if self.image_data.view_mode not in ['original', 'preprocessed']:
+            # 切换到预处理视图（这会触发_on_view_mode_changed）
+            self._on_view_mode_changed('preprocessed')
+            self.binarization_panel.view_mode_switcher.set_mode('preprocessed')
+        
+        # 切换到选择工具
+        self.canvas.set_tool(self.canvas.selection_tool)
+        self.selection_tool_button.setChecked(True)
+        
+        # 取消其他工具的选中状态
+        self.pan_button.setChecked(False)
+        self.brush_button.setChecked(False)
+        self.crop_button.setChecked(False)
+        self.measure_button.setChecked(False)
+        
+        # 更新当前工具标签
+        self.current_tool_label.setText(
+            self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.selection'))
+        )
+        
+        # 显示选择工具设置
+        self.properties_panel.show_selection_settings()
+        
+        # 开启智能选择开关
+        if hasattr(self.properties_panel, 'smart_selection_switch'):
+            self.properties_panel.smart_selection_switch.setChecked(True)
+        
+        # 加载 SAM 模型
+        self._ensure_sam_model_loaded()
+        
+        # 提示用户
+        self.statusbar.showMessage("已切换到智能选择模式")
     
     def _show_ai_result(self, original: 'np.ndarray', processed: 'np.ndarray', 
                         model_type: str, processor=None):
@@ -3408,6 +3472,141 @@ class MainWindow(QMainWindow):
         
         should_show = is_root_layer and is_binary_mode
         self.binarization_panel.set_transform_buttons_visible(should_show)
+    
+    def _update_smart_selection_ai_label(self):
+        """更新智能选择AI标识的显示"""
+        if self.image_data is None:
+            self.properties_panel.update_smart_selection_ai_label('binary', False)
+            return
+        
+        # 获取当前视图模式和智能选择状态
+        view_mode = self.image_data.view_mode
+        smart_enabled = self.properties_panel.smart_selection_switch.isChecked()
+        
+        # 更新AI标识显示
+        self.properties_panel.update_smart_selection_ai_label(view_mode, smart_enabled)
+    
+    def _on_smart_selection_toggled(self, checked: bool):
+        """智能选择开关切换事件"""
+        # 更新AI标识显示
+        self._update_smart_selection_ai_label()
+        
+        # 如果开启智能选择且在预处理/原图视图，尝试加载 SAM 模型
+        if checked and self.image_data is not None:
+            view_mode = self.image_data.view_mode
+            if view_mode in ['original', 'preprocessed']:
+                self._ensure_sam_model_loaded()
+    
+    def _ensure_sam_model_loaded(self):
+        """确保 SAM 模型已加载"""
+        if self.sam_model_loaded:
+            return True
+        
+        # 查找 SAM 模型文件
+        import os
+        from ..utils.ai_processor import AIProcessorFactory
+        
+        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
+        
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir, exist_ok=True)
+        
+        # 创建 SAM 处理器
+        self.sam_processor = AIProcessorFactory.create_processor('sam', model_dir)
+        
+        if self.sam_processor is None:
+            # 未找到模型，提示下载
+            reply = QMessageBox.question(
+                self,
+                self.tr.tr('dialog.download_model'),
+                "未找到 SAM2 模型文件。\n\n是否现在下载？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            
+            if reply == QMessageBox.Yes:
+                # 下载模型
+                if self._download_sam_model(model_dir):
+                    # 重新尝试创建处理器
+                    self.sam_processor = AIProcessorFactory.create_processor('sam', model_dir)
+                    if self.sam_processor is None:
+                        self.statusbar.showMessage("SAM 模型下载后仍无法加载")
+                        return False
+                else:
+                    return False
+            else:
+                return False
+        
+        # 加载模型
+        self.statusbar.showMessage(self.tr.tr('binarization_panel.sam_loading'))
+        
+        if self.sam_processor.load_model():
+            self.sam_model_loaded = True
+            self.statusbar.showMessage(self.tr.tr('binarization_panel.sam_loaded'), 3000)
+            
+            # 将 SAM 处理器传递给选择工具
+            if hasattr(self.canvas, 'selection_tool'):
+                self.canvas.selection_tool.set_sam_processor(self.sam_processor)
+            
+            # 设置当前图像
+            if self.image_data is not None:
+                self._update_sam_image_encoding()
+            
+            return True
+        else:
+            self.statusbar.showMessage("SAM 模型加载失败")
+            return False
+    
+    def _download_sam_model(self, target_dir: str) -> bool:
+        """
+        下载 SAM2 模型
+        
+        Args:
+            target_dir: 目标目录
+            
+        Returns:
+            True 如果下载成功
+        """
+        from .model_download_dialog import ModelDownloadDialog
+        
+        # 创建下载对话框
+        dialog = ModelDownloadDialog(
+            model_type='sam2',
+            target_dir=target_dir,
+            model_variant='small',  # 使用small变体，平衡性能和大小
+            parent=self
+        )
+        
+        # 显示对话框
+        dialog.exec()
+        
+        # 返回下载结果
+        return dialog.is_download_success()
+    
+    def _update_sam_image_encoding(self):
+        """更新 SAM 图像编码"""
+        if not self.sam_model_loaded or self.sam_processor is None or self.image_data is None:
+            return
+        
+        # 根据视图模式选择图像
+        if self.image_data.view_mode == 'preprocessed' and self.image_data.preprocessed_pixels is not None:
+            image = self.image_data.preprocessed_pixels
+        else:
+            image = self.image_data.original_pixels
+        
+        # 重置 SAM 提示点
+        if hasattr(self.canvas, 'selection_tool'):
+            self.canvas.selection_tool.reset_sam_points()
+        
+        self.statusbar.showMessage(self.tr.tr('binarization_panel.sam_encoding'))
+        if self.sam_processor.set_image(image):
+            # 显示提示信息
+            hint_msg = self.tr.tr('binarization_panel.sam_ready') + " - " + self.tr.tr('binarization_panel.sam_hint')
+            self.statusbar.showMessage(hint_msg, 5000)
+        else:
+            self.statusbar.showMessage("图像编码失败")
+            self.statusbar.showMessage("SAM 模型加载失败")
+            return False
 
     def _get_mode_display_name(self, mode: str) -> str:
         """获取模式的显示名称"""

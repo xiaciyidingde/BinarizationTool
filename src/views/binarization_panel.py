@@ -42,6 +42,9 @@ class BinarizationPanel(QWidget):
     
     # 信号：请求 AI 处理 (model_type: str)
     ai_process_requested = Signal(str)
+    
+    # 信号：请求智能选择
+    smart_selection_requested = Signal()
 
     def __init__(self, parent=None, panel_width=300):
         """
@@ -189,11 +192,23 @@ class BinarizationPanel(QWidget):
         ai_tools_layout = QVBoxLayout()
         ai_tools_layout.setSpacing(6)
         
-        # 始终显示"去除背景"按钮
+        # 第一行：去除背景和智能选择按钮（左右布局）
+        first_row = QHBoxLayout()
+        first_row.setSpacing(6)
+        
+        # 去除背景按钮
         self.remove_bg_button = QPushButton(self.tr.tr('binarization_panel.remove_background'))
         self.remove_bg_button.setEnabled(False)  # 初始禁用，加载图片后启用
         self.remove_bg_button.clicked.connect(self._on_remove_bg_clicked)
-        ai_tools_layout.addWidget(self.remove_bg_button)
+        first_row.addWidget(self.remove_bg_button)
+        
+        # 智能选择按钮
+        self.smart_selection_button = QPushButton(self.tr.tr('binarization_panel.smart_selection'))
+        self.smart_selection_button.setEnabled(False)  # 初始禁用，加载图片后启用
+        self.smart_selection_button.clicked.connect(self._on_smart_selection_clicked)
+        first_row.addWidget(self.smart_selection_button)
+        
+        ai_tools_layout.addLayout(first_row)
         
         # 保存模型状态
         self.has_rmbg_model = has_rmbg_model
@@ -1239,9 +1254,11 @@ class BinarizationPanel(QWidget):
         self.flip_horizontal_checkbox.setEnabled(enabled)
         self.flip_vertical_checkbox.setEnabled(enabled)
         self.flip_vertical_checkbox.setEnabled(enabled)
-        # 启用/禁用去除背景按钮
+        # 启用/禁用 AI 工具按钮
         if hasattr(self, 'remove_bg_button') and self.remove_bg_button is not None:
             self.remove_bg_button.setEnabled(enabled)
+        if hasattr(self, 'smart_selection_button') and self.smart_selection_button is not None:
+            self.smart_selection_button.setEnabled(enabled)
 
     def set_current_layer(self, layer_name: str):
         """
@@ -1401,12 +1418,11 @@ class BinarizationPanel(QWidget):
         # 如果没有模型，询问用户是否下载
         if not self.has_rmbg_model:
             from PySide6.QtWidgets import QMessageBox
-            from ..utils.window_utils import message_box_warning, message_box_question, message_box_information
             import os
             
             # 检查是否安装了 onnxruntime
             if not self.has_onnxruntime:
-                message_box_warning(
+                QMessageBox.warning(
                     self,
                     self.tr.tr('dialog.warning'),
                     self.tr.tr('binarization_panel.onnxruntime_required')
@@ -1414,7 +1430,7 @@ class BinarizationPanel(QWidget):
                 return
             
             # 询问用户是否下载模型
-            reply = message_box_question(
+            reply = QMessageBox.question(
                 self,
                 self.tr.tr('binarization_panel.download_model_title'),
                 self.tr.tr('binarization_panel.download_model_prompt'),
@@ -1427,13 +1443,18 @@ class BinarizationPanel(QWidget):
                 from ..views.model_download_dialog import ModelDownloadDialog
                 
                 model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
-                dialog = ModelDownloadDialog(model_dir, "RMBG-2.0-q4f16.onnx", self)
+                dialog = ModelDownloadDialog(
+                    model_type='rmbg',
+                    target_dir=model_dir,
+                    target_filename="RMBG-2.0-q4f16.onnx",
+                    parent=self
+                )
                 dialog.exec()
                 
                 # 如果下载成功，更新状态并执行去除背景
                 if dialog.is_download_success():
                     self.has_rmbg_model = True
-                    message_box_information(
+                    QMessageBox.information(
                         self,
                         self.tr.tr('dialog.info'),
                         self.tr.tr('binarization_panel.model_download_success')
@@ -1443,3 +1464,8 @@ class BinarizationPanel(QWidget):
         else:
             # 有模型，直接执行去除背景
             self.ai_process_requested.emit('rmbg')
+    
+    def _on_smart_selection_clicked(self):
+        """智能选择按钮点击事件"""
+        # 发送信号通知主窗口切换到选择工具并开启智能选择
+        self.smart_selection_requested.emit()
