@@ -6,6 +6,10 @@ BinarizationTool - 应用程序入口
 
 import sys
 import os
+
+# 在导入任何科学计算库之前设置环境变量，解决 OpenMP 冲突
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
+
 from PySide6.QtWidgets import QApplication
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon, QPixmap
