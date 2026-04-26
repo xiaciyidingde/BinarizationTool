@@ -79,7 +79,7 @@ class PropertiesPanel(QWidget):
         self.properties_page = self._create_properties_page()
         self.tab_widget.addTab(self.properties_page, self.tr.tr('properties_panel.properties'))
 
-        # 第二页：工具（预留）
+        # 第二页：工具
         self.tools_page = self._create_tools_page()
         self.tab_widget.addTab(self.tools_page, self.tr.tr('properties_panel.tools'))
 
@@ -332,6 +332,23 @@ class PropertiesPanel(QWidget):
         self.smart_selection_switch.setChecked(False)  # 默认关闭
         
         smart_layout.addWidget(self.smart_selection_switch)
+        
+        # AI 标识（仅在预处理/原图视图显示）
+        self.smart_selection_ai_label = QLabel("AI")
+        self.smart_selection_ai_label.setStyleSheet("""
+            QLabel {
+                color: #4CAF50;
+                font-weight: bold;
+                font-size: 11px;
+                padding: 2px 6px;
+                background-color: rgba(76, 175, 80, 0.1);
+                border: 1px solid #4CAF50;
+                border-radius: 3px;
+            }
+        """)
+        self.smart_selection_ai_label.setVisible(False)  # 默认隐藏
+        smart_layout.addWidget(self.smart_selection_ai_label)
+        
         smart_layout.addStretch()
         basic_layout.addLayout(smart_layout)
 
@@ -493,6 +510,19 @@ class PropertiesPanel(QWidget):
         self.brush_settings.setVisible(False)
         self.selection_settings.setVisible(True)
         self.measure_settings.setVisible(False)
+    
+    def update_smart_selection_ai_label(self, view_mode: str, smart_enabled: bool):
+        """
+        更新智能选择AI标识的显示状态
+        
+        Args:
+            view_mode: 当前视图模式 ('original', 'preprocessed', 'binary')
+            smart_enabled: 智能选择是否开启
+        """
+        # 只在预处理或原图视图且智能选择开启时显示AI标识
+        should_show = (view_mode in ['original', 'preprocessed']) and smart_enabled
+        if hasattr(self, 'smart_selection_ai_label'):
+            self.smart_selection_ai_label.setVisible(should_show)
     
     def show_measure_settings(self):
         """显示测量工具设置，隐藏其他"""

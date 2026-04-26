@@ -100,14 +100,15 @@ class SelectionStroke:
         在圆形范围内选择匹配目标颜色的像素（NumPy 向量化）
 
         Args:
-            pixels: 像素数据
+            pixels: 像素数据（RGB 3通道）
             selection_mask: 选区蒙版（输出）
             center_x: 圆心 X 坐标
             center_y: 圆心 Y 坐标
             radius: 半径
             tolerance: 边缘容差
         """
-        height, width = pixels.shape
+        # 所有图像现在都是 RGB 3通道
+        height, width, _ = pixels.shape
 
         # 计算边界框（扩大1像素以包含边缘）
         x_min = max(0, int(center_x - radius - 1))
@@ -178,6 +179,11 @@ class SelectionTool:
         # 矩形框选模式（使用 RectSelector）
         self.rect_select_mode: bool = False  # 是否启用矩形框选模式
         self.rect_selector = RectSelector()
+        
+        # SAM 智能选择
+        self.sam_processor = None  # SAM 处理器实例（由主窗口设置）
+        self.sam_points: list[tuple[int, int]] = []  # SAM 提示点坐标
+        self.sam_labels: list[int] = []  # SAM 提示点标签（1=前景，0=背景）
 
     def has_selection(self) -> bool:
         """
@@ -392,7 +398,8 @@ class SelectionTool:
             color: 目标颜色（0=黑色, 255=白色）
         """
         pixels = image_data.get_current_pixels()
-        height, width = pixels.shape
+        # 所有图像现在都是 RGB 3通道
+        height, width, _ = pixels.shape
 
         # 创建新的选区蒙版
         new_mask = self._global_color_select(pixels,
@@ -401,6 +408,71 @@ class SelectionTool:
 
         # 根据模式合并选区
         self._merge_selection(new_mask, width, height)
+    
+    def smart_select_by_point(
+        self, 
+        image_data: 'ImageData', 
+        x: int, 
+        y: int,
+        is_foreground: bool = True
+    ) -> tuple[bool, float]:
+        """
+        使用 SAM 模型进行智能选择
+        
+        Args:
+            image_data: 图片数据
+            x: 点击的 X 坐标
+            y: 点击的 Y 坐标
+            is_foreground: True=前景点，False=背景点
+            
+        Returns:
+            (成功标志, IoU分数) 元组
+        """
+        if self.sam_processor is None or not self.sam_processor.is_model_loaded():
+            return False, 0.0
+        
+        # 每次点击重置提示点（不累积），实现单点选择
+        self.sam_points = [(x, y)]
+        self.sam_labels = [1 if is_foreground else 0]
+        
+        # 使用 SAM 预测
+        result = self.sam_processor.predict(self.sam_points, self.sam_labels)
+        
+        if result is None or not isinstance(result, tuple):
+            return False, 0.0
+        
+        mask, iou_score = result
+        
+        # 转换为布尔掩码
+        new_mask = (mask > 127).astype(bool)
+        
+        # 根据模式处理选区
+        if self.selection_mode == 'add':
+            # 添加模式：与现有选区合并
+            if self.selection_mask is None or self.selection_mask.shape != new_mask.shape:
+                self.selection_mask = new_mask
+            else:
+                self.selection_mask = self.selection_mask | new_mask
+        elif self.selection_mode == 'subtract':
+            # 减去模式：从现有选区中移除
+            if self.selection_mask is None or self.selection_mask.shape != new_mask.shape:
+                self.selection_mask = np.zeros(new_mask.shape, dtype=bool)
+            else:
+                self.selection_mask = self.selection_mask & ~new_mask
+        else:
+            # 默认：直接替换
+            self.selection_mask = new_mask
+        
+        return True, iou_score
+    
+    def reset_sam_points(self):
+        """重置 SAM 提示点"""
+        self.sam_points = []
+        self.sam_labels = []
+    
+    def set_sam_processor(self, processor):
+        """设置 SAM 处理器"""
+        self.sam_processor = processor
 
     def render_cursor(self, painter: 'QPainter', view_x: float, view_y: float,
                      view_size: float):
@@ -487,15 +559,22 @@ class SelectionTool:
         全局颜色选择
 
         Args:
-            pixels: 像素数据
+            pixels: 像素数据（RGB 3通道）
             mask: 选区蒙版（输出）
             target_color: 目标颜色
 
         Returns:
             更新后的蒙版
         """
+        # 将 RGB 转换为灰度进行颜色比较
+        import cv2
+        if len(pixels.shape) == 3 and pixels.shape[2] == 3:
+            gray = cv2.cvtColor(pixels, cv2.COLOR_RGB2GRAY)
+        else:
+            gray = pixels
+        
         # 选择所有颜色相近的像素
-        color_diff = np.abs(pixels.astype(int) - int(target_color))
+        color_diff = np.abs(gray.astype(int) - int(target_color))
         mask[color_diff <= self.tolerance] = True
         return mask
 
@@ -717,7 +796,16 @@ class SelectionTool:
         threshold1: int,
         threshold2: int
     ) -> np.ndarray:
-        """在选区范围内检测边缘（提高阈值减少噪点）"""
+        """
+        在选区范围内检测边缘（提高阈值减少噪点）
+        
+        Args:
+            image_data: 图片数据
+            mask: 选区蒙版
+            margin: 边缘搜索边距
+            threshold1: Canny 低阈值
+            threshold2: Canny 高阈值
+        """
         import cv2
         
         # 获取选区的包围盒
@@ -730,7 +818,7 @@ class SelectionTool:
         y_min = max(0, y_indices.min() - margin)
         y_max = min(mask.shape[0], y_indices.max() + margin + 1)
         
-        # 提取区域图像
+        # 提取区域图像（使用当前视图）
         pixels = image_data.get_current_pixels()
         region = pixels[y_min:y_max, x_min:x_max]
         

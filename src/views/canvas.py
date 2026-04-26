@@ -283,13 +283,48 @@ class Canvas(QWidget):
 
         # 渲染选择工具光标（只在非矩形框选模式下显示）
         if isinstance(self.current_tool, SelectionTool) and self.mouse_pos is not None and not self.current_tool.rect_select_mode:
-            view_size = self.view_transform.get_brush_view_size(self.current_tool.size)
-            self.current_tool.render_cursor(
-                painter,
-                self.mouse_pos.x(),
-                self.mouse_pos.y(),
-                view_size
-            )
+            # 检查是否应该使用智能选择模式
+            use_sam_mode = False
+            if self.current_tool.sam_processor is not None and self.image_data is not None:
+                # 检查智能选择开关是否打开
+                smart_enabled = False
+                if hasattr(self, 'main_window') and self.main_window is not None:
+                    if hasattr(self.main_window, 'properties_panel'):
+                        panel = self.main_window.properties_panel
+                        if hasattr(panel, 'smart_selection_switch'):
+                            smart_enabled = panel.smart_selection_switch.isChecked()
+                
+                # 只在原图/预处理视图且智能选择开启时使用SAM模式
+                if smart_enabled:
+                    view_mode = self.image_data.view_mode
+                    if view_mode in ['original', 'preprocessed']:
+                        use_sam_mode = True
+            
+            if use_sam_mode:
+                # 智能选择模式：显示十字光标
+                # 根据模式选择颜色
+                if self.current_tool.selection_mode == 'add':
+                    crosshair_color = QColor(0, 255, 0)  # 绿色 - 添加
+                else:
+                    crosshair_color = QColor(255, 0, 0)  # 红色 - 减去
+                
+                from ..utils.cursor_renderer import CursorRenderer
+                CursorRenderer.render_crosshair_cursor(
+                    painter,
+                    self.mouse_pos.x(),
+                    self.mouse_pos.y(),
+                    color=crosshair_color,
+                    size=20
+                )
+            else:
+                # 普通选择模式：显示圆形光标
+                view_size = self.view_transform.get_brush_view_size(self.current_tool.size)
+                self.current_tool.render_cursor(
+                    painter,
+                    self.mouse_pos.x(),
+                    self.mouse_pos.y(),
+                    view_size
+                )
         
         # 渲染测量工具的测量线和信息
         if isinstance(self.current_tool, MeasureTool) and self.current_tool.start_point is not None:
@@ -479,22 +514,78 @@ class Canvas(QWidget):
                         self.current_tool.start_rect_select(pixel_x, pixel_y)
                         self.update()
                     else:
-                        # 开始拖动选择
-                        dirty_rect = self.current_tool.start_drag_select(self.image_data, pixel_x, pixel_y)
-                        # 将选区同步到 image_data
-                        self.image_data.selection_mask = self.current_tool.selection_mask
-                        # 直接更新 tile_cache 的选区引用（避免复制整个图像）
-                        self.tile_cache.selection_mask = self.current_tool.selection_mask
-                        # 请求更新选区边框（节流）
-                        self._request_contour_update(self.current_tool.selection_mask)
-                        # 使脏区域失效
-                        if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
-                            self.tile_cache.invalidate_region(
-                                dirty_rect[0], dirty_rect[1],
-                                dirty_rect[2] - dirty_rect[0],
-                                dirty_rect[3] - dirty_rect[1]
+                        # 检查是否启用智能选择且在预处理/原图视图
+                        smart_enabled = False
+                        use_sam = False
+                        if hasattr(self, 'main_window') and self.main_window is not None:
+                            if hasattr(self.main_window, 'properties_panel'):
+                                panel = self.main_window.properties_panel
+                                if hasattr(panel, 'smart_selection_switch'):
+                                    smart_enabled = panel.smart_selection_switch.isChecked()
+                            
+                            # 只在预处理/原图视图且智能选择开启时使用 SAM
+                            if smart_enabled and self.image_data is not None:
+                                view_mode = self.image_data.view_mode
+                                if view_mode in ['original', 'preprocessed']:
+                                    use_sam = True
+                        
+                        if use_sam:
+                            # 使用 SAM 智能选择（单点点击）
+                            # 始终使用前景点（label=1），通过selection_mode控制选区合并方式
+                            is_foreground = True
+                            
+                            result = self.current_tool.smart_select_by_point(
+                                self.image_data, pixel_x, pixel_y, is_foreground
                             )
-                        self.update()
+                            
+                            if result and result[0]:  # 检查是否成功
+                                success, iou_score = result
+                                
+                                # 将选区同步到 image_data
+                                self.image_data.selection_mask = self.current_tool.selection_mask
+                                # 更新 tile_cache 的选区引用
+                                self.tile_cache.selection_mask = self.current_tool.selection_mask
+                                # 请求更新选区边框（立即更新）
+                                self._request_contour_update(self.current_tool.selection_mask, dirty_rect=None, immediate=True)
+                                # 使整个选区失效
+                                if self.current_tool.selection_mask is not None and self.current_tool.selection_mask.any():
+                                    rows, cols = np.where(self.current_tool.selection_mask)
+                                    if len(rows) > 0:
+                                        self.tile_cache.invalidate_region(
+                                            cols.min(), rows.min(),
+                                            cols.max() - cols.min() + 1,
+                                            rows.max() - rows.min() + 1
+                                        )
+                                # 显示IoU分数到状态栏
+                                if hasattr(self, 'main_window') and self.main_window is not None:
+                                    self.main_window.statusbar.showMessage(
+                                        f"智能选择完成 (置信度: {iou_score:.1%})", 
+                                        3000
+                                    )
+                                # 通知选区已修改
+                                self.image_modified.emit()
+                                self.update()
+                            else:
+                                # SAM选择失败，显示提示
+                                if hasattr(self, 'main_window') and self.main_window is not None:
+                                    self.main_window.statusbar.showMessage("智能选择失败，请重试", 2000)
+                        else:
+                            # 开始拖动选择（传统方式）
+                            dirty_rect = self.current_tool.start_drag_select(self.image_data, pixel_x, pixel_y)
+                            # 将选区同步到 image_data
+                            self.image_data.selection_mask = self.current_tool.selection_mask
+                            # 直接更新 tile_cache 的选区引用（避免复制整个图像）
+                            self.tile_cache.selection_mask = self.current_tool.selection_mask
+                            # 请求更新选区边框（节流）
+                            self._request_contour_update(self.current_tool.selection_mask)
+                            # 使脏区域失效
+                            if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
+                                self.tile_cache.invalidate_region(
+                                    dirty_rect[0], dirty_rect[1],
+                                    dirty_rect[2] - dirty_rect[0],
+                                    dirty_rect[3] - dirty_rect[1]
+                                )
+                            self.update()
                 
                 elif isinstance(self.current_tool, MeasureTool):
                     # 检查是否点击在端点上
@@ -584,86 +675,108 @@ class Canvas(QWidget):
                 self.current_tool.update_selection(pixel_x, pixel_y)
                 self.update()
 
-            elif isinstance(self.current_tool, SelectionTool) and self.current_tool.is_dragging:
-                # 检查是否是矩形框选模式
-                if self.current_tool.rect_select_mode:
-                    # 更新矩形框选
-                    self.current_tool.continue_rect_select(pixel_x, pixel_y)
+            elif isinstance(self.current_tool, SelectionTool):
+                # 检查是否应该使用智能选择模式（与paintEvent保持一致）
+                use_sam_mode = False
+                if self.current_tool.sam_processor is not None and self.image_data is not None:
+                    smart_enabled = False
+                    if hasattr(self, 'main_window') and self.main_window is not None:
+                        if hasattr(self.main_window, 'properties_panel'):
+                            panel = self.main_window.properties_panel
+                            if hasattr(panel, 'smart_selection_switch'):
+                                smart_enabled = panel.smart_selection_switch.isChecked()
+                    
+                    if smart_enabled:
+                        view_mode = self.image_data.view_mode
+                        if view_mode in ['original', 'preprocessed']:
+                            use_sam_mode = True
+                
+                if use_sam_mode:
+                    # 智能选择模式：鼠标移动时更新光标显示
                     self.update()
+                elif self.current_tool.is_dragging:
+                    # 检查是否是矩形框选模式
+                    if self.current_tool.rect_select_mode:
+                        # 更新矩形框选
+                        self.current_tool.continue_rect_select(pixel_x, pixel_y)
+                        self.update()
+                    else:
+                        # 继续拖动选择（优化版本）
+                        dirty_rect = self.current_tool.continue_drag_select(self.image_data, pixel_x, pixel_y)
+
+                        # 只在有实际更新时处理
+                        if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
+                            # 将选区同步到 image_data（引用，不复制）
+                            self.image_data.selection_mask = self.current_tool.selection_mask
+                            # 直接更新 tile_cache 的选区引用（避免复制整个图像）
+                            self.tile_cache.selection_mask = self.current_tool.selection_mask
+                            
+                            # 根据图片尺寸和 Cython 可用性决定更新策略
+                            h, w = self.image_data.selection_mask.shape
+                            image_size = max(h, w)
+                            
+                            # 检查是否有 Cython 加速
+                            has_cython = hasattr(self.selection_border_renderer, 'HAS_CYTHON') and \
+                                        self.selection_border_renderer.HAS_CYTHON
+                            
+                            if image_size < 3000:
+                                # 小图片：实时更新
+                                throttle_interval = 10 if has_cython else 16
+                            elif image_size < 5000:
+                                # 中小图片
+                                throttle_interval = 25 if has_cython else 40
+                            elif image_size < 8000:
+                                # 中等图片
+                                throttle_interval = 50 if has_cython else 80
+                            else:
+                                # 大图片
+                                throttle_interval = 70 if has_cython else 100
+                            
+                            # 使用动态节流间隔
+                            if not self.contour_update_timer.isActive():
+                                self.selection_border_renderer.update_contours(
+                                    self.current_tool.selection_mask, 
+                                    dirty_rect=None,
+                                    view_scale=self.view_transform.scale
+                                )
+                                self.contour_update_timer.start(throttle_interval)
+
+                            # 累积脏区域用于批量失效
+                            if self.pending_selection_dirty_rect[2] > self.pending_selection_dirty_rect[0]:
+                                # 合并脏区域
+                                old_rect = self.pending_selection_dirty_rect
+                                self.pending_selection_dirty_rect = (
+                                    min(old_rect[0], dirty_rect[0]),
+                                    min(old_rect[1], dirty_rect[1]),
+                                    max(old_rect[2], dirty_rect[2]),
+                                    max(old_rect[3], dirty_rect[3])
+                                )
+                            else:
+                                self.pending_selection_dirty_rect = dirty_rect
+
+                            # 计算脏区域在视图中的位置（用于局部更新）
+                            x1_view = int(dirty_rect[0] * self.view_transform.scale + self.view_transform.offset_x)
+                            y1_view = int(dirty_rect[1] * self.view_transform.scale + self.view_transform.offset_y)
+                            x2_view = int(dirty_rect[2] * self.view_transform.scale + self.view_transform.offset_x)
+                            y2_view = int(dirty_rect[3] * self.view_transform.scale + self.view_transform.offset_y)
+                            
+                            # 扩展一点边界（考虑笔刷大小和抗锯齿）
+                            margin = int(self.current_tool.size * self.view_transform.scale) + 10
+                            x1_view = max(0, x1_view - margin)
+                            y1_view = max(0, y1_view - margin)
+                            x2_view = min(self.width(), x2_view + margin)
+                            y2_view = min(self.height(), y2_view + margin)
+                            
+                            # 只更新脏区域（局部重绘）
+                            from PySide6.QtCore import QRect
+                            self.update(QRect(x1_view, y1_view, x2_view - x1_view, y2_view - y1_view))
+
+                            # 使用节流来批量失效瓦片
+                            if not self.selection_update_timer.isActive():
+                                self.selection_update_timer.start(self.selection_throttle_interval)
                 else:
-                    # 继续拖动选择（优化版本）
-                    dirty_rect = self.current_tool.continue_drag_select(self.image_data, pixel_x, pixel_y)
-
-                    # 只在有实际更新时处理
-                    if dirty_rect[2] > dirty_rect[0] and dirty_rect[3] > dirty_rect[1]:
-                        # 将选区同步到 image_data（引用，不复制）
-                        self.image_data.selection_mask = self.current_tool.selection_mask
-                        # 直接更新 tile_cache 的选区引用（避免复制整个图像）
-                        self.tile_cache.selection_mask = self.current_tool.selection_mask
-                        
-                        # 根据图片尺寸和 Cython 可用性决定更新策略
-                        h, w = self.image_data.selection_mask.shape
-                        image_size = max(h, w)
-                        
-                        # 检查是否有 Cython 加速
-                        has_cython = hasattr(self.selection_border_renderer, 'HAS_CYTHON') and \
-                                    self.selection_border_renderer.HAS_CYTHON
-                        
-                        if image_size < 3000:
-                            # 小图片：实时更新
-                            throttle_interval = 10 if has_cython else 16
-                        elif image_size < 5000:
-                            # 中小图片
-                            throttle_interval = 25 if has_cython else 40
-                        elif image_size < 8000:
-                            # 中等图片
-                            throttle_interval = 50 if has_cython else 80
-                        else:
-                            # 大图片
-                            throttle_interval = 70 if has_cython else 100
-                        
-                        # 使用动态节流间隔
-                        if not self.contour_update_timer.isActive():
-                            self.selection_border_renderer.update_contours(
-                                self.current_tool.selection_mask, 
-                                dirty_rect=None,
-                                view_scale=self.view_transform.scale
-                            )
-                            self.contour_update_timer.start(throttle_interval)
-
-                        # 累积脏区域用于批量失效
-                        if self.pending_selection_dirty_rect[2] > self.pending_selection_dirty_rect[0]:
-                            # 合并脏区域
-                            old_rect = self.pending_selection_dirty_rect
-                            self.pending_selection_dirty_rect = (
-                                min(old_rect[0], dirty_rect[0]),
-                                min(old_rect[1], dirty_rect[1]),
-                                max(old_rect[2], dirty_rect[2]),
-                                max(old_rect[3], dirty_rect[3])
-                            )
-                        else:
-                            self.pending_selection_dirty_rect = dirty_rect
-
-                        # 计算脏区域在视图中的位置（用于局部更新）
-                        x1_view = int(dirty_rect[0] * self.view_transform.scale + self.view_transform.offset_x)
-                        y1_view = int(dirty_rect[1] * self.view_transform.scale + self.view_transform.offset_y)
-                        x2_view = int(dirty_rect[2] * self.view_transform.scale + self.view_transform.offset_x)
-                        y2_view = int(dirty_rect[3] * self.view_transform.scale + self.view_transform.offset_y)
-                        
-                        # 扩展一点边界（考虑笔刷大小和抗锯齿）
-                        margin = int(self.current_tool.size * self.view_transform.scale) + 10
-                        x1_view = max(0, x1_view - margin)
-                        y1_view = max(0, y1_view - margin)
-                        x2_view = min(self.width(), x2_view + margin)
-                        y2_view = min(self.height(), y2_view + margin)
-                        
-                        # 只更新脏区域（局部重绘）
-                        from PySide6.QtCore import QRect
-                        self.update(QRect(x1_view, y1_view, x2_view - x1_view, y2_view - y1_view))
-
-                        # 使用节流来批量失效瓦片
-                        if not self.selection_update_timer.isActive():
-                            self.selection_update_timer.start(self.selection_throttle_interval)
+                    # 不在拖动状态，只更新光标显示
+                    self.update()
             
             elif isinstance(self.current_tool, MeasureTool):
                 if self.current_tool.is_measuring or self.current_tool.dragging_point:
@@ -829,6 +942,9 @@ class Canvas(QWidget):
                         # 通知选区已修改（用于更新 UI 状态）
                         self.image_modified.emit()
                         self.update()
+                elif isinstance(self.current_tool, SelectionTool) and not self.current_tool.is_dragging:
+                    # SAM 智能选择模式下，鼠标释放不需要特殊处理（已在 mousePressEvent 中完成）
+                    pass
                 
                 elif isinstance(self.current_tool, MeasureTool):
                     # 结束测量或拖动（保持测量结果显示）

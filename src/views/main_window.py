@@ -75,6 +75,10 @@ class MainWindow(QMainWindow):
         
         # 保存上一次的参数值（用于非根图层时恢复）
         self.last_valid_params: dict | None = None
+        
+        # SAM 模型管理
+        self.sam_processor = None  # SAM 处理器实例
+        self.sam_model_loaded = False  # SAM 模型是否已加载
 
         # 异步二值化
         self.binarization_worker: BinarizationWorker | None = None
@@ -89,6 +93,9 @@ class MainWindow(QMainWindow):
         self.preprocess_debounce_timer = QTimer()
         self.preprocess_debounce_timer.setSingleShot(True)
         self.preprocess_debounce_timer.timeout.connect(self._start_preprocess)
+        
+        # 标记二值化结果是否需要更新（当预处理参数改变时设置）
+        self.binarization_needs_update = False
 
         # 从配置加载防抖延迟
         debounce_delay = self.config_manager.get('performance', 'debounce_delay', 150)
@@ -598,6 +605,9 @@ class MainWindow(QMainWindow):
         
         # AI 处理请求
         self.binarization_panel.ai_process_requested.connect(self._on_ai_process_requested)
+        
+        # 智能选择请求
+        self.binarization_panel.smart_selection_requested.connect(self._on_smart_selection_requested)
 
         # Canvas 图片修改
         self.canvas.image_modified.connect(self._on_image_modified)
@@ -637,6 +647,12 @@ class MainWindow(QMainWindow):
             layer_id: 图层ID
         """
         self.active_layer_id = layer_id
+        
+        # 更新AI按钮状态（只有根图层可以使用AI工具）
+        is_root_layer = (layer_id == "root")
+        if hasattr(self.binarization_panel, 'remove_bg_button') and self.binarization_panel.remove_bg_button is not None:
+            # AI按钮只在根图层且有图像时启用
+            self.binarization_panel.remove_bg_button.setEnabled(is_root_layer and self.image_data is not None)
         
         # 选区只在根图层显示，切换到用户图层时隐藏（但保留数据）
         # 这样切换回根图层时选区会重新显示
@@ -701,6 +717,9 @@ class MainWindow(QMainWindow):
         
         # 更新工具状态（非根图层禁用编辑工具）
         self._update_tool_states()
+        
+        # 更新图像变换按钮的显示状态
+        self._update_transform_buttons_visibility()
         
         # 更新画布显示
         self.canvas.update()
@@ -1006,8 +1025,8 @@ class MainWindow(QMainWindow):
             merged_height = max_y - min_y
             merged_bbox = (min_x, min_y, merged_width, merged_height)
             
-            # 创建合并后的像素和掩码
-            merged_pixels = np.full((merged_height, merged_width), 255, dtype=np.uint8)
+            # 创建合并后的像素和掩码（RGB格式）
+            merged_pixels = np.full((merged_height, merged_width, 3), 255, dtype=np.uint8)
             merged_mask = np.zeros((merged_height, merged_width), dtype=bool)
             
             # 按顺序叠加所有图层
@@ -1017,9 +1036,9 @@ class MainWindow(QMainWindow):
                 rel_x = x - min_x
                 rel_y = y - min_y
                 
-                # 复制黑色像素
-                black_mask = layer.mask & (layer.pixels == 0)
-                merged_pixels[rel_y:rel_y+h, rel_x:rel_x+w][black_mask] = 0
+                # 复制像素（支持RGB）
+                region = merged_pixels[rel_y:rel_y+h, rel_x:rel_x+w]
+                region[layer.mask] = layer.pixels[layer.mask]
                 
                 # 更新掩码
                 merged_mask[rel_y:rel_y+h, rel_x:rel_x+w] |= layer.mask
@@ -1080,18 +1099,75 @@ class MainWindow(QMainWindow):
         只保存选中的像素，未选中的区域不存储（通过mask控制）
         同时保存原图对应区域，用于重新二值化
         
+        如果选区内已有用户图层，则保存合成后的结果（包含所有图层）
+        
         Returns:
             包含 pixels, mask, bbox, original_region 的字典
         """
         # 获取选区掩码
         selection_mask = self.image_data.selection_mask
         
-        # 获取根图层的像素（不包括用户图层，只包括根图层+编辑层）
-        root_pixels = self.image_data.pixels.copy()
-        
-        # 应用编辑层
-        if self.image_data.edit_mask is not None and self.image_data.edit_mask.any():
-            root_pixels[self.image_data.edit_mask] = self.image_data.edit_values[self.image_data.edit_mask]
+        # 根据当前视图模式获取对应的像素数据
+        if self.image_data.view_mode == 'preprocessed':
+            # 预处理视图：使用预处理后的像素，并合成用户图层
+            if self.image_data.preprocessed_pixels is not None:
+                root_pixels = self.image_data.preprocessed_pixels.copy()
+            else:
+                # 预处理像素为空，立即计算当前参数的预处理结果
+                preprocess_params = self.binarization_panel.get_preprocess_params()
+                root_pixels = BinarizationEngine.apply_preprocess(
+                    self.image_data.original_pixels,
+                    **preprocess_params
+                )
+            
+            # 合成所有可见用户图层的预处理结果
+            for i, layer in enumerate(self.image_data.user_layers):
+                if not layer.visible:
+                    continue
+                
+                # 如果图层有原图区域和预处理参数，应用预处理
+                if layer.original_region is not None and layer.binarization_params is not None:
+                    preprocess_params = layer.binarization_params.get('preprocess', {})
+                    preprocessed_region = BinarizationEngine.apply_preprocess(
+                        layer.original_region,
+                        **preprocess_params
+                    )
+                    
+                    # 获取图层的边界框
+                    x, y, w, h = layer.bbox
+                    
+                    # 检查图层是否在当前图像范围内
+                    img_h, img_w = root_pixels.shape[:2]
+                    if x >= img_w or y >= img_h or x + w <= 0 or y + h <= 0:
+                        continue
+                    
+                    # 计算有效的重叠区域
+                    x_start = max(0, x)
+                    y_start = max(0, y)
+                    x_end = min(img_w, x + w)
+                    y_end = min(img_h, y + h)
+                    
+                    # 计算在图层坐标系中的偏移
+                    layer_x_offset = x_start - x
+                    layer_y_offset = y_start - y
+                    layer_w = x_end - x_start
+                    layer_h = y_end - y_start
+                    
+                    # 获取有效部分
+                    preprocessed_region_part = preprocessed_region[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                    layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                    
+                    # 在图层的掩码区域覆盖预处理结果
+                    # 注意：必须先获取区域引用，再应用掩码，避免 NumPy 链式索引问题
+                    region = root_pixels[y_start:y_end, x_start:x_end]
+                    region[layer_mask_region] = preprocessed_region_part[layer_mask_region]
+        elif self.image_data.view_mode == 'original':
+            # 原图视图：使用原图像素（不合成用户图层，因为原图视图只显示原图）
+            root_pixels = self.image_data.original_pixels.copy()
+        else:
+            # 二值化视图：使用完整合成结果（根图层+用户图层+编辑层）
+            # 这样如果选区内已有用户图层，会保存合成后的结果
+            root_pixels = self._composite_layers()
         
         # 计算边界框
         y_indices, x_indices = np.where(selection_mask)
@@ -1107,8 +1183,11 @@ class MainWindow(QMainWindow):
         
         # 只复制选中区域的像素，未选中区域填充白色（255，表示透明）
         # 合成时白色像素不会覆盖底层
-        layer_pixels = np.full((y_max - y_min + 1, x_max - x_min + 1), 255, dtype=np.uint8)
-        layer_pixels[layer_mask] = root_pixels[y_min:y_max+1, x_min:x_max+1][layer_mask]
+        # 所有图像现在都是 RGB 3通道
+        layer_pixels = np.full((y_max - y_min + 1, x_max - x_min + 1, 3), 255, dtype=np.uint8)
+        # 使用布尔索引复制选中区域
+        region_pixels = root_pixels[y_min:y_max+1, x_min:x_max+1]
+        layer_pixels[layer_mask] = region_pixels[layer_mask]
         
         # 提取原图对应区域（用于重新二值化）
         original_region = self.image_data.original_pixels[y_min:y_max+1, x_min:x_max+1].copy()
@@ -1134,7 +1213,7 @@ class MainWindow(QMainWindow):
         composited = self.image_data.pixels.copy()
         
         # 按顺序叠加所有用户图层
-        for layer in self.image_data.user_layers:
+        for i, layer in enumerate(self.image_data.user_layers):
             # 跳过不可见的图层
             if not layer.visible:
                 continue
@@ -1166,8 +1245,7 @@ class MainWindow(QMainWindow):
             
             # 只覆盖mask为True的像素（选中的区域）
             # 未选中的区域（mask为False）保持透明，不覆盖底层
-            region = composited[y_start:y_end, x_start:x_end]
-            region[layer_mask] = layer_pixels[layer_mask]
+            composited[y_start:y_end, x_start:x_end][layer_mask] = layer_pixels[layer_mask]
         
         # 最后应用编辑层（画笔痕迹），确保画笔在最上层
         if self.image_data.edit_mask is not None and self.image_data.edit_mask.any():
@@ -1883,6 +1961,9 @@ class MainWindow(QMainWindow):
         elif mode == 'preprocessed':
             # 预处理模式：使用防抖 + 异步处理
             self.image_data.invalidate_preprocessed_cache()
+            
+            # 标记二值化结果需要更新
+            self.binarization_needs_update = True
 
             # 保存待处理的参数
             self.pending_preprocess_params = preprocess_params
@@ -1897,6 +1978,9 @@ class MainWindow(QMainWindow):
         elif mode == 'binary':
             # 二值化模式：使缓存失效并重新计算二值化结果
             self.image_data.invalidate_preprocessed_cache()
+            
+            # 清除标志（因为我们马上就要计算了）
+            self.binarization_needs_update = False
 
             # 获取方法特定参数
             method_params = self.binarization_panel.get_method_params()
@@ -1955,14 +2039,17 @@ class MainWindow(QMainWindow):
             )
             
             # 3. 更新图层的像素数据（只更新mask为True的部分）
+            # 对于RGB图像，使用布尔索引正确更新
             current_layer.pixels[current_layer.mask] = binarized_region[current_layer.mask]
             
-            # 4. 更新图层的二值化参数
+            # 4. 更新图层的二值化参数（使用正确的结构）
             current_layer.binarization_params = {
                 'preprocess': preprocess_params.copy(),
-                'method': method,
-                'threshold': threshold,
-                **method_params
+                'threshold': {
+                    'method': method,
+                    'threshold': threshold,
+                    **method_params
+                }
             }
             
             # 5. 更新显示（根据当前视图模式）
@@ -2288,11 +2375,13 @@ class MainWindow(QMainWindow):
         # 初始化编辑掩码（如果不存在）
         if self.image_data.edit_mask is None:
             self.image_data.edit_mask = np.zeros((self.image_data.height, self.image_data.width), dtype=bool)
-            self.image_data.edit_values = np.zeros((self.image_data.height, self.image_data.width), dtype=np.uint8)
+            self.image_data.edit_values = np.zeros((self.image_data.height, self.image_data.width, 3), dtype=np.uint8)
 
-        # 批量填充：直接设置编辑掩码和值
+        # 批量填充：直接设置编辑掩码和值（RGB格式）
         self.image_data.edit_mask[selection_mask] = True
-        self.image_data.edit_values[selection_mask] = color
+        # 将单通道颜色值扩展为RGB
+        color_rgb = np.array([color, color, color], dtype=np.uint8)
+        self.image_data.edit_values[selection_mask] = color_rgb
 
         # 清除选区（这样才能看到填充效果）
         self.canvas.selection_tool.clear_selection()
@@ -2440,6 +2529,10 @@ class MainWindow(QMainWindow):
         self.properties_panel.selection_method_group.buttonClicked.connect(
             self._on_selection_method_changed_panel
         )
+        # 智能选择开关
+        self.properties_panel.smart_selection_switch.toggled.connect(
+            self._on_smart_selection_toggled
+        )
         # 填充按钮
         self.properties_panel.fill_black_button.clicked.connect(
             lambda: self._fill_selection(0)
@@ -2521,10 +2614,44 @@ class MainWindow(QMainWindow):
 
         elif mode == 'binary':
             # 显示二值化结果
-            self._update_canvas_display()
+            # 检查是否需要更新二值化结果
+            if self.binarization_needs_update or self.image_data.preprocessed_pixels is None:
+                # 需要重新计算二值化结果
+                preprocess_params = self.binarization_panel.get_preprocess_params()
+                method = self.binarization_panel.get_method()
+                threshold = self.binarization_panel.get_threshold()
+                method_params = self.binarization_panel.get_method_params()
+                
+                # 设置待处理参数并启动二值化
+                self.pending_binarization_params = (preprocess_params, method, threshold, method_params)
+                
+                # 清除标志
+                self.binarization_needs_update = False
+                
+                # 显示处理中状态
+                self.canvas.set_processing(True)
+                self.statusbar.showMessage(self.tr.tr('app.processing'))
+                
+                # 启动二值化
+                self._start_binarization()
+            else:
+                # 预处理缓存有效且不需要更新，直接更新显示
+                self._update_canvas_display()
 
         # 更新工具状态
         self._update_tool_states()
+        
+        # 更新图像变换按钮的显示状态
+        self._update_transform_buttons_visibility()
+        
+        # 更新智能选择AI标识的显示
+        self._update_smart_selection_ai_label()
+        
+        # 如果切换到预处理/原图视图且智能选择已开启，重新编码图像
+        if mode in ['original', 'preprocessed'] and self.sam_model_loaded:
+            if hasattr(self.properties_panel, 'smart_selection_switch'):
+                if self.properties_panel.smart_selection_switch.isChecked():
+                    self._update_sam_image_encoding()
         
         # 更新保存按钮的tooltip
         self._update_save_button_tooltip(mode)
@@ -2620,6 +2747,16 @@ class MainWindow(QMainWindow):
             self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
             return
         
+        # 检查当前是否在根图层
+        if self.active_layer_id != 'root':
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.warning(
+                self,
+                self.tr.tr('dialog.warning'),
+                "AI工具只能应用于根图层，请先切换到根图层。"
+            )
+            return
+        
         # 获取原始图像
         original_image = self.image_data.original_pixels
         if original_image is None:
@@ -2660,20 +2797,23 @@ class MainWindow(QMainWindow):
             )
             return
         
-        # 显示进度对话框
+        # 显示进度对话框（无取消按钮）
+        # 注意：模型加载是阻塞操作，无法中断，因此不提供取消按钮
         from PySide6.QtWidgets import QProgressDialog, QApplication
         from PySide6.QtCore import QTimer
         from ..utils.window_utils import apply_dark_titlebar_after_show
         
         progress = QProgressDialog(
             self.tr.tr('ai_process.loading_model'),
-            self.tr.tr('ai_process.cancel'),
+            "",  # 空字符串表示没有取消按钮
             0, 100, self
         )
         progress.setWindowTitle(self.tr.tr('ai_process.title'))
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(0)
         progress.setValue(0)
+        progress.setCancelButton(None)  # 明确移除取消按钮
+        progress.setAutoClose(False)  # 防止自动关闭
         
         # 设置进度对话框的最小尺寸，确保标题和内容完整显示
         progress.setMinimumWidth(400)
@@ -2749,14 +2889,11 @@ class MainWindow(QMainWindow):
             # 清理
             cleanup()
         
-        def on_canceled():
-            worker.stop()
-            cleanup()
-        
         worker.progress_updated.connect(on_progress)
         worker.processing_finished.connect(on_finished)
         worker.processing_failed.connect(on_failed)
-        progress.canceled.connect(on_canceled)
+        # 移除取消信号连接，因为没有取消按钮
+        # progress.canceled.connect(on_canceled)
         
         # 使用 QTimer.singleShot 延迟启动工作线程
         # 这样可以让进度对话框先完全显示出来
@@ -2764,6 +2901,50 @@ class MainWindow(QMainWindow):
             worker.start()
         
         QTimer.singleShot(100, start_worker)  # 延迟 100ms 启动
+    
+    def _on_smart_selection_requested(self):
+        """
+        处理智能选择请求
+        
+        切换到选择工具并开启智能选择开关
+        """
+        if self.image_data is None:
+            self.statusbar.showMessage(self.tr.tr('message.load_image_first'))
+            return
+        
+        # 确保在预处理/原图视图
+        if self.image_data.view_mode not in ['original', 'preprocessed']:
+            # 切换到预处理视图（这会触发_on_view_mode_changed）
+            self._on_view_mode_changed('preprocessed')
+            self.binarization_panel.view_mode_switcher.set_mode('preprocessed')
+        
+        # 切换到选择工具
+        self.canvas.set_tool(self.canvas.selection_tool)
+        self.selection_tool_button.setChecked(True)
+        
+        # 取消其他工具的选中状态
+        self.pan_button.setChecked(False)
+        self.brush_button.setChecked(False)
+        self.crop_button.setChecked(False)
+        self.measure_button.setChecked(False)
+        
+        # 更新当前工具标签
+        self.current_tool_label.setText(
+            self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.selection'))
+        )
+        
+        # 显示选择工具设置
+        self.properties_panel.show_selection_settings()
+        
+        # 开启智能选择开关
+        if hasattr(self.properties_panel, 'smart_selection_switch'):
+            self.properties_panel.smart_selection_switch.setChecked(True)
+        
+        # 加载 SAM 模型
+        self._ensure_sam_model_loaded()
+        
+        # 提示用户
+        self.statusbar.showMessage("已切换到智能选择模式")
     
     def _show_ai_result(self, original: 'np.ndarray', processed: 'np.ndarray', 
                         model_type: str, processor=None):
@@ -2814,10 +2995,10 @@ class MainWindow(QMainWindow):
         # 保存到历史记录
         self.history_manager.push_state(self.image_data)
         
-        # 更新原始图像
+        # 更新原始图像（只更新根图层）
         self.image_data.original_pixels = result
         
-        # 使缓存失效
+        # 使预处理缓存失效
         self.image_data.invalidate_preprocessed_cache()
         
         # 获取当前参数
@@ -2841,7 +3022,7 @@ class MainWindow(QMainWindow):
         )
         
         def on_finished(binary_pixels):
-            # 更新二值化图像
+            # 更新二值化图像（根图层）
             self.image_data.pixels = binary_pixels
             
             # 根据当前视图模式更新显示
@@ -2859,10 +3040,10 @@ class MainWindow(QMainWindow):
                 except Exception as e:
                     print(f"预处理失败: {e}")
             
-            # 更新 tile cache（关键！）
-            self.canvas._update_tile_cache()
+            # 更新分块缓存（关键！这会触发图层合成）
+            self._safe_update_tile_cache()
             
-            # 更新画布（会根据当前视图模式显示相应的图像）
+            # 更新画布显示
             self.canvas.update()
             self.canvas.set_processing(False)
             self.statusbar.showMessage(self.tr.tr('ai_process.applied'))
@@ -2944,11 +3125,60 @@ class MainWindow(QMainWindow):
                 # 原图模式：显示原图
                 pixels = self.image_data.original_pixels
             elif self.image_data.view_mode == 'preprocessed':
-                # 预处理模式：显示预处理结果
+                # 预处理模式：显示预处理结果，并合成用户图层的预处理结果
+                from ..utils.binarization_engine import BinarizationEngine
+                
                 if self.image_data.preprocessed_pixels is not None:
-                    pixels = self.image_data.preprocessed_pixels
+                    pixels = self.image_data.preprocessed_pixels.copy()
                 else:
-                    pixels = self.image_data.original_pixels
+                    # 预处理像素为空，立即计算当前参数的预处理结果
+                    preprocess_params = self.binarization_panel.get_preprocess_params()
+                    pixels = BinarizationEngine.apply_preprocess(
+                        self.image_data.original_pixels,
+                        **preprocess_params
+                    )
+                
+                # 合成所有可见用户图层的预处理结果
+                for i, layer in enumerate(self.image_data.user_layers):
+                    if not layer.visible:
+                        continue
+                    
+                    # 如果图层有原图区域和预处理参数，应用预处理
+                    if layer.original_region is not None and layer.binarization_params is not None:
+                        preprocess_params = layer.binarization_params.get('preprocess', {})
+                        preprocessed_region = BinarizationEngine.apply_preprocess(
+                            layer.original_region,
+                            **preprocess_params
+                        )
+                        
+                        # 获取图层的边界框
+                        x, y, w, h = layer.bbox
+                        
+                        # 检查图层是否在当前图像范围内
+                        img_h, img_w = pixels.shape[:2]
+                        if x >= img_w or y >= img_h or x + w <= 0 or y + h <= 0:
+                            continue
+                        
+                        # 计算有效的重叠区域
+                        x_start = max(0, x)
+                        y_start = max(0, y)
+                        x_end = min(img_w, x + w)
+                        y_end = min(img_h, y + h)
+                        
+                        # 计算在图层坐标系中的偏移
+                        layer_x_offset = x_start - x
+                        layer_y_offset = y_start - y
+                        layer_w = x_end - x_start
+                        layer_h = y_end - y_start
+                        
+                        # 获取有效部分
+                        preprocessed_region_part = preprocessed_region[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                        layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                        
+                        # 在图层的掩码区域覆盖预处理结果
+                        # 注意：必须先获取区域引用，再应用掩码，避免 NumPy 链式索引问题
+                        region = pixels[y_start:y_end, x_start:x_end]
+                        region[layer_mask_region] = preprocessed_region_part[layer_mask_region]
             else:  # 'binary'
                 # 二值化模式：合成显示所有层
                 pixels = self._composite_layers()
@@ -2960,9 +3190,9 @@ class MainWindow(QMainWindow):
                     # 检查图层是否在图像范围内
                     image_shape = (self.image_data.height, self.image_data.width)
                     if not layer.is_in_bounds(image_shape):
-                        # 图层超出范围，显示灰色背景
+                        # 图层超出范围，显示灰色背景（RGB格式）
                         pixels = np.full(
-                            (self.image_data.height, self.image_data.width),
+                            (self.image_data.height, self.image_data.width, 3),
                             128,
                             dtype=np.uint8
                         )
@@ -2971,9 +3201,9 @@ class MainWindow(QMainWindow):
                     if self.image_data.view_mode == 'original':
                         # 原图模式：显示原图对应区域，未选择区域为灰色
                         if layer.original_region is not None:
-                            # 创建灰色背景（128表示未选择区域）
+                            # 创建灰色背景（RGB格式）
                             pixels = np.full(
-                                (self.image_data.height, self.image_data.width),
+                                (self.image_data.height, self.image_data.width, 3),
                                 128,  # 灰色背景
                                 dtype=np.uint8
                             )
@@ -2993,24 +3223,23 @@ class MainWindow(QMainWindow):
                             layer_w = x_end - x_start
                             layer_h = y_end - y_start
                             
-                            # 将原图区域转换为灰度图
-                            if len(layer.original_region.shape) == 3:
+                            # 确保原图区域是RGB格式
+                            original_rgb = layer.original_region
+                            if len(original_rgb.shape) == 2:
                                 from ..utils.binarization_engine import BinarizationEngine
-                                original_gray = BinarizationEngine.convert_to_grayscale(layer.original_region)
-                            else:
-                                original_gray = layer.original_region
+                                original_rgb = BinarizationEngine.ensure_rgb(original_rgb)
                             
                             # 获取有效部分
-                            original_gray_region = original_gray[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            original_rgb_region = original_rgb[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
                             layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
                             
                             # 在图层的掩码区域显示原图
                             region = pixels[y_start:y_end, x_start:x_end]
-                            region[layer_mask_region] = original_gray_region[layer_mask_region]
+                            region[layer_mask_region] = original_rgb_region[layer_mask_region]
                         else:
                             # 没有原图区域，显示灰色
                             pixels = np.full(
-                                (self.image_data.height, self.image_data.width),
+                                (self.image_data.height, self.image_data.width, 3),
                                 128,
                                 dtype=np.uint8
                             )
@@ -3018,9 +3247,9 @@ class MainWindow(QMainWindow):
                     elif self.image_data.view_mode == 'preprocessed':
                         # 预处理模式：对原图区域应用预处理，未选择区域为灰色
                         if layer.original_region is not None and layer.binarization_params is not None:
-                            # 创建灰色背景
+                            # 创建灰色背景（RGB格式）
                             pixels = np.full(
-                                (self.image_data.height, self.image_data.width),
+                                (self.image_data.height, self.image_data.width, 3),
                                 128,  # 灰色背景
                                 dtype=np.uint8
                             )
@@ -3034,9 +3263,7 @@ class MainWindow(QMainWindow):
                                 **preprocess_params
                             )
                             
-                            # 转换为灰度图（如果是彩色）
-                            if len(preprocessed_region.shape) == 3:
-                                preprocessed_region = BinarizationEngine.convert_to_grayscale(preprocessed_region)
+                            # 保持RGB格式，不转换为灰度图
                             
                             # 计算有效的重叠区域
                             x, y, w, h = layer.bbox
@@ -3063,42 +3290,106 @@ class MainWindow(QMainWindow):
                         else:
                             # 没有原图区域或参数，显示灰色
                             pixels = np.full(
-                                (self.image_data.height, self.image_data.width),
+                                (self.image_data.height, self.image_data.width, 3),
                                 128,
                                 dtype=np.uint8
                             )
                     
                     else:  # 'binary'
                         # 二值化模式：显示该图层的二值化结果（未选中区域为灰色）
-                        # 创建灰色背景（表示透明/未选中区域）
-                        pixels = np.full(
-                            (self.image_data.height, self.image_data.width),
-                            128,  # 灰色背景
-                            dtype=np.uint8
-                        )
-                        
-                        # 计算有效的重叠区域
-                        x, y, w, h = layer.bbox
-                        img_h, img_w = image_shape
-                        
-                        x_start = max(0, x)
-                        y_start = max(0, y)
-                        x_end = min(img_w, x + w)
-                        y_end = min(img_h, y + h)
-                        
-                        # 计算在图层坐标系中的偏移
-                        layer_x_offset = x_start - x
-                        layer_y_offset = y_start - y
-                        layer_w = x_end - x_start
-                        layer_h = y_end - y_start
-                        
-                        # 获取有效部分
-                        layer_pixels_region = layer.pixels[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
-                        layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
-                        
-                        # 直接显示图层的像素（完全覆盖该区域）
-                        region = pixels[y_start:y_end, x_start:x_end]
-                        region[layer_mask_region] = layer_pixels_region[layer_mask_region]
+                        # 如果图层有原图区域和二值化参数，重新应用二值化
+                        if layer.original_region is not None and layer.binarization_params is not None:
+                            # 创建灰色背景（RGB格式）
+                            pixels = np.full(
+                                (self.image_data.height, self.image_data.width, 3),
+                                128,  # 灰色背景
+                                dtype=np.uint8
+                            )
+                            
+                            # 对原图区域应用预处理和二值化
+                            from ..utils.binarization_engine import BinarizationEngine
+                            
+                            # 预处理
+                            preprocess_params = layer.binarization_params.get('preprocess', {})
+                            preprocessed_region = BinarizationEngine.apply_preprocess(
+                                layer.original_region,
+                                **preprocess_params
+                            )
+                            
+                            # 二值化
+                            threshold_params = layer.binarization_params.get('threshold', {})
+                            # 兼容旧版本：threshold_params 可能是整数而不是字典
+                            if isinstance(threshold_params, dict):
+                                method = threshold_params.get('method', 1)
+                                threshold = threshold_params.get('threshold', 127)
+                                method_params = {k: v for k, v in threshold_params.items() 
+                                               if k not in ['method', 'threshold']}
+                            else:
+                                # 旧版本格式：threshold_params 是整数
+                                method = 1  # 默认使用 Otsu
+                                threshold = 127
+                                method_params = {}
+                            
+                            binary_region = BinarizationEngine.apply_threshold(
+                                preprocessed_region,
+                                method,
+                                threshold,
+                                **method_params
+                            )
+                            
+                            # 计算有效的重叠区域
+                            x, y, w, h = layer.bbox
+                            img_h, img_w = image_shape
+                            
+                            x_start = max(0, x)
+                            y_start = max(0, y)
+                            x_end = min(img_w, x + w)
+                            y_end = min(img_h, y + h)
+                            
+                            # 计算在图层坐标系中的偏移
+                            layer_x_offset = x_start - x
+                            layer_y_offset = y_start - y
+                            layer_w = x_end - x_start
+                            layer_h = y_end - y_start
+                            
+                            # 获取有效部分
+                            binary_region_part = binary_region[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            
+                            # 在图层的掩码区域显示二值化结果
+                            region = pixels[y_start:y_end, x_start:x_end]
+                            region[layer_mask_region] = binary_region_part[layer_mask_region]
+                        else:
+                            # 没有原图区域或参数，直接显示保存的像素
+                            # 创建灰色背景（RGB格式）
+                            pixels = np.full(
+                                (self.image_data.height, self.image_data.width, 3),
+                                128,  # 灰色背景
+                                dtype=np.uint8
+                            )
+                            
+                            # 计算有效的重叠区域
+                            x, y, w, h = layer.bbox
+                            img_h, img_w = image_shape
+                            
+                            x_start = max(0, x)
+                            y_start = max(0, y)
+                            x_end = min(img_w, x + w)
+                            y_end = min(img_h, y + h)
+                            
+                            # 计算在图层坐标系中的偏移
+                            layer_x_offset = x_start - x
+                            layer_y_offset = y_start - y
+                            layer_w = x_end - x_start
+                            layer_h = y_end - y_start
+                            
+                            # 获取有效部分
+                            layer_pixels_region = layer.pixels[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            layer_mask_region = layer.mask[layer_y_offset:layer_y_offset+layer_h, layer_x_offset:layer_x_offset+layer_w]
+                            
+                            # 直接显示图层的像素
+                            region = pixels[y_start:y_end, x_start:x_end]
+                            region[layer_mask_region] = layer_pixels_region[layer_mask_region]
                     
                     break
             
@@ -3120,6 +3411,9 @@ class MainWindow(QMainWindow):
             self.crop_button.setEnabled(False)
             self.selection_tool_button.setEnabled(False)
             self.measure_button.setEnabled(False)
+            # 填充按钮也不可用
+            self.properties_panel.fill_black_button.setEnabled(False)
+            self.properties_panel.fill_white_button.setEnabled(False)
             return
 
         mode = self.image_data.view_mode
@@ -3150,8 +3444,8 @@ class MainWindow(QMainWindow):
             # 隐藏工具设置
             self.properties_panel.hide_all_tool_settings()
 
-        # 选择工具：仅在二值化模式且根图层可用
-        selection_enabled = (mode == 'binary' and is_root_layer)
+        # 选择工具：在所有模式下可用（但仅在根图层）
+        selection_enabled = is_root_layer
         self.selection_tool_button.setEnabled(selection_enabled)
         if not selection_enabled and self.canvas.current_tool == self.canvas.selection_tool:
             self.canvas.set_tool(None)
@@ -3159,6 +3453,160 @@ class MainWindow(QMainWindow):
             self.current_tool_label.setText(self.tr.tr('toolbar.current_tool', tool=self.tr.tr('tool.none')))
             # 隐藏工具设置
             self.properties_panel.hide_all_tool_settings()
+        
+        # 填充按钮：仅在二值化模式且根图层可用
+        fill_enabled = (mode == 'binary' and is_root_layer)
+        self.properties_panel.fill_black_button.setEnabled(fill_enabled)
+        self.properties_panel.fill_white_button.setEnabled(fill_enabled)
+
+    def _update_transform_buttons_visibility(self):
+        """更新图像变换按钮的可见性"""
+        if self.image_data is None:
+            # 没有图像时隐藏按钮
+            self.binarization_panel.set_transform_buttons_visible(False)
+            return
+        
+        # 只在根图层且二值化视图模式下显示按钮
+        is_root_layer = self.active_layer_id == "root"
+        is_binary_mode = self.image_data.view_mode == 'binary'
+        
+        should_show = is_root_layer and is_binary_mode
+        self.binarization_panel.set_transform_buttons_visible(should_show)
+    
+    def _update_smart_selection_ai_label(self):
+        """更新智能选择AI标识的显示"""
+        if self.image_data is None:
+            self.properties_panel.update_smart_selection_ai_label('binary', False)
+            return
+        
+        # 获取当前视图模式和智能选择状态
+        view_mode = self.image_data.view_mode
+        smart_enabled = self.properties_panel.smart_selection_switch.isChecked()
+        
+        # 更新AI标识显示
+        self.properties_panel.update_smart_selection_ai_label(view_mode, smart_enabled)
+    
+    def _on_smart_selection_toggled(self, checked: bool):
+        """智能选择开关切换事件"""
+        # 更新AI标识显示
+        self._update_smart_selection_ai_label()
+        
+        # 如果开启智能选择且在预处理/原图视图，尝试加载 SAM 模型
+        if checked and self.image_data is not None:
+            view_mode = self.image_data.view_mode
+            if view_mode in ['original', 'preprocessed']:
+                self._ensure_sam_model_loaded()
+    
+    def _ensure_sam_model_loaded(self):
+        """确保 SAM 模型已加载"""
+        if self.sam_model_loaded:
+            return True
+        
+        # 查找 SAM 模型文件
+        import os
+        from ..utils.ai_processor import AIProcessorFactory
+        
+        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
+        
+        if not os.path.exists(model_dir):
+            os.makedirs(model_dir, exist_ok=True)
+        
+        # 创建 SAM 处理器
+        self.sam_processor = AIProcessorFactory.create_processor('sam', model_dir)
+        
+        if self.sam_processor is None:
+            # 未找到模型，提示下载
+            reply = QMessageBox.question(
+                self,
+                self.tr.tr('dialog.download_model'),
+                "未找到 SAM2 模型文件。\n\n是否现在下载？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            
+            if reply == QMessageBox.Yes:
+                # 下载模型
+                if self._download_sam_model(model_dir):
+                    # 重新尝试创建处理器
+                    self.sam_processor = AIProcessorFactory.create_processor('sam', model_dir)
+                    if self.sam_processor is None:
+                        self.statusbar.showMessage("SAM 模型下载后仍无法加载")
+                        return False
+                else:
+                    return False
+            else:
+                return False
+        
+        # 加载模型
+        self.statusbar.showMessage(self.tr.tr('binarization_panel.sam_loading'))
+        
+        if self.sam_processor.load_model():
+            self.sam_model_loaded = True
+            self.statusbar.showMessage(self.tr.tr('binarization_panel.sam_loaded'), 3000)
+            
+            # 将 SAM 处理器传递给选择工具
+            if hasattr(self.canvas, 'selection_tool'):
+                self.canvas.selection_tool.set_sam_processor(self.sam_processor)
+            
+            # 设置当前图像
+            if self.image_data is not None:
+                self._update_sam_image_encoding()
+            
+            return True
+        else:
+            self.statusbar.showMessage("SAM 模型加载失败")
+            return False
+    
+    def _download_sam_model(self, target_dir: str) -> bool:
+        """
+        下载 SAM2 模型
+        
+        Args:
+            target_dir: 目标目录
+            
+        Returns:
+            True 如果下载成功
+        """
+        from .model_download_dialog import ModelDownloadDialog
+        
+        # 创建下载对话框
+        dialog = ModelDownloadDialog(
+            model_type='sam2',
+            target_dir=target_dir,
+            model_variant='small',  # 使用small变体，平衡性能和大小
+            parent=self
+        )
+        
+        # 显示对话框
+        dialog.exec()
+        
+        # 返回下载结果
+        return dialog.is_download_success()
+    
+    def _update_sam_image_encoding(self):
+        """更新 SAM 图像编码"""
+        if not self.sam_model_loaded or self.sam_processor is None or self.image_data is None:
+            return
+        
+        # 根据视图模式选择图像
+        if self.image_data.view_mode == 'preprocessed' and self.image_data.preprocessed_pixels is not None:
+            image = self.image_data.preprocessed_pixels
+        else:
+            image = self.image_data.original_pixels
+        
+        # 重置 SAM 提示点
+        if hasattr(self.canvas, 'selection_tool'):
+            self.canvas.selection_tool.reset_sam_points()
+        
+        self.statusbar.showMessage(self.tr.tr('binarization_panel.sam_encoding'))
+        if self.sam_processor.set_image(image):
+            # 显示提示信息
+            hint_msg = self.tr.tr('binarization_panel.sam_ready') + " - " + self.tr.tr('binarization_panel.sam_hint')
+            self.statusbar.showMessage(hint_msg, 5000)
+        else:
+            self.statusbar.showMessage("图像编码失败")
+            self.statusbar.showMessage("SAM 模型加载失败")
+            return False
 
     def _get_mode_display_name(self, mode: str) -> str:
         """获取模式的显示名称"""

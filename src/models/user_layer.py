@@ -99,15 +99,17 @@ class UserLayer:
             image_shape: 图像尺寸 (height, width)
             
         Returns:
-            与图像相同尺寸的像素数组，非图层区域为 255（白色）
+            与图像相同尺寸的像素数组，非图层区域为 255（白色），RGB格式
         """
         h, w = image_shape
-        full_pixels = np.full((h, w), 255, dtype=np.uint8)
+        full_pixels = np.full((h, w, 3), 255, dtype=np.uint8)
         
         x, y, bw, bh = self.bbox
         
         # 只复制掩码为 True 的像素
-        full_pixels[y:y+bh, x:x+bw][self.mask] = self.pixels[self.mask]
+        # 注意：必须先获取区域引用，再应用掩码，避免 NumPy 链式索引问题
+        region = full_pixels[y:y+bh, x:x+bw]
+        region[self.mask] = self.pixels[self.mask]
         
         return full_pixels
     

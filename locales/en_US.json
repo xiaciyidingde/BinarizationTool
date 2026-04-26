@@ -121,6 +121,7 @@
     "warning": "Warning",
     "confirm": "Confirm",
     "info": "Information",
+    "download_model": "Download Model",
     "load_error": "Cannot load image:\n{error}",
     "save_error": "Cannot save image:\n{error}",
     "reset_confirm": "Are you sure you want to reset to initial state?\n\nThis will clear all brush edits and crop operations, restoring to the binarization result when the image was first opened.\nThis operation cannot be undone.",
@@ -271,8 +272,18 @@
     "flip_vertical": "Flip Vertical",
     "ai_tools": "AI Tools",
     "remove_background": "Remove Background",
+    "smart_selection": "Smart Selection",
     "download_model": "Download Model",
-    "install_onnxruntime_hint": "Hint: Install onnxruntime first"
+    "install_onnxruntime_hint": "Hint: Install onnxruntime first",
+    "sam_loading": "Loading SAM model...",
+    "sam_loaded": "SAM model loaded successfully",
+    "sam_encoding": "Encoding image...",
+    "sam_ready": "Image encoded, ready for smart selection",
+    "sam_hint": "Tip: Left-click to add foreground points, Shift+Left-click for background points",
+    "onnxruntime_required": "AI features require onnxruntime library.\n\nPlease run: pip install onnxruntime",
+    "download_model_title": "Download Model",
+    "download_model_prompt": "Background removal requires downloading the RMBG-2.0 model (~223 MB).\n\nDownload now?",
+    "model_download_success": "Model downloaded successfully! You can now use the background removal feature."
   },
   "properties_panel": {
     "properties": "Properties",
@@ -302,6 +313,7 @@
     "method_paint": "Paint",
     "method_rect": "Rectangle",
     "smart_selection": "Smart Selection:",
+    "use_source_image": "Use Source:",
     "fill_selection": "Fill:",
     "fill_white": "White",
     "fill_black": "Black",
@@ -375,6 +387,7 @@
   },
   "model_download": {
     "title": "Download RMBG-2.0 Model",
+    "title_sam2": "Download SAM2 Smart Selection Model",
     "description": "RMBG-2.0 is a deep learning model for background removal.",
     "model_size": "• Model Size: ~223 MB",
     "license": "• License: CC BY-NC 4.0 (Non-Commercial Use Only)",
@@ -393,6 +406,23 @@
     "canceling": "Canceling download...",
     "download_success": "\n✓ Download successful!",
     "download_failed": "\n✗ Download failed",
-    "download_failed_message": "Model download failed. Please check your network connection.\n\nYou can also download manually:\nhttps://huggingface.co/briaai/RMBG-2.0/tree/main/onnx"
+    "download_failed_message": "Model download failed. Please check your network connection.\n\nYou can also download manually:\nhttps://huggingface.co/briaai/RMBG-2.0/tree/main/onnx",
+    "sam2_info_title": "SAM2 Smart Selection Model",
+    "sam2_variant": "Model Variant: {variant}",
+    "sam2_size": "Model Size: {size}",
+    "sam2_license": "License: Apache 2.0",
+    "sam2_description": "SAM2 (Segment Anything Model 2) is an image segmentation model developed by Meta, which can automatically identify and select target objects by clicking.",
+    "sam2_download_source": "Download Source: HuggingFace",
+    "sam2_model_link": "Model Link:",
+    "sam2_download_hint": "Click \"Start Download\" to download the model file from HuggingFace.",
+    "sam2_save_location": "After download completes, the model will be automatically saved to the data/model directory.",
+    "sam2_variant_tiny": "tiny",
+    "sam2_variant_small": "small",
+    "sam2_variant_base_plus": "base_plus",
+    "sam2_variant_large": "large",
+    "sam2_size_tiny": "~80MB",
+    "sam2_size_small": "~180MB",
+    "sam2_size_base_plus": "~320MB",
+    "sam2_size_large": "~900MB"
   }
 }

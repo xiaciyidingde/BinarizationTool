@@ -50,15 +50,12 @@ class TileCache:
         设置图片数据
 
         Args:
-            pixels: 图片像素数据，形状为 (H, W) 或 (H, W, C)，dtype=uint8
+            pixels: 图片像素数据，形状为 (H, W, 3)，dtype=uint8
             selection_mask: 选区蒙版，形状为 (H, W)，dtype=bool（可选）
         """
         self.pixels = pixels
-        # 支持灰度图 (H, W) 和彩色图 (H, W, C)
-        if len(pixels.shape) == 2:
-            self.image_height, self.image_width = pixels.shape
-        else:
-            self.image_height, self.image_width = pixels.shape[:2]
+        # 所有图像现在都是 RGB 3通道
+        self.image_height, self.image_width = pixels.shape[:2]
         self.selection_mask = selection_mask
         self.clear()
 
@@ -69,15 +66,12 @@ class TileCache:
         用于绘制过程中的增量更新。
 
         Args:
-            pixels: 图片像素数据，形状为 (H, W) 或 (H, W, C)，dtype=uint8
+            pixels: 图片像素数据，形状为 (H, W, 3)，dtype=uint8
             selection_mask: 选区蒙版，形状为 (H, W)，dtype=bool（可选）
         """
         self.pixels = pixels
-        # 支持灰度图 (H, W) 和彩色图 (H, W, C)
-        if len(pixels.shape) == 2:
-            self.image_height, self.image_width = pixels.shape
-        else:
-            self.image_height, self.image_width = pixels.shape[:2]
+        # 所有图像现在都是 RGB 3通道
+        self.image_height, self.image_width = pixels.shape[:2]
         self.selection_mask = selection_mask
 
     def set_scale(self, scale: float):

@@ -16,12 +16,39 @@ class ImageEnhancer:
 
     @staticmethod
     def apply_histogram_enhancement(img, equalize=False, clahe=False):
-        """直方图增强"""
-        if equalize:
-            img = cv2.equalizeHist(img.astype(np.uint8)).astype(np.float32)
-        if clahe:
-            clahe_obj = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-            img = clahe_obj.apply(img.astype(np.uint8)).astype(np.float32)
+        """
+        直方图增强
+        
+        支持灰度图和 RGB 图像
+        """
+        if not equalize and not clahe:
+            return img
+        
+        # 检查是否为 RGB 图像
+        is_rgb = len(img.shape) == 3 and img.shape[2] == 3
+        
+        if is_rgb:
+            # RGB 图像：在 YCrCb 色彩空间的 Y 通道上进行直方图增强
+            img_uint8 = img.astype(np.uint8)
+            ycrcb = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2YCrCb)
+            y_channel = ycrcb[:, :, 0]
+            
+            if equalize:
+                y_channel = cv2.equalizeHist(y_channel)
+            if clahe:
+                clahe_obj = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                y_channel = clahe_obj.apply(y_channel)
+            
+            ycrcb[:, :, 0] = y_channel
+            img = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2RGB).astype(np.float32)
+        else:
+            # 灰度图：直接处理
+            if equalize:
+                img = cv2.equalizeHist(img.astype(np.uint8)).astype(np.float32)
+            if clahe:
+                clahe_obj = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+                img = clahe_obj.apply(img.astype(np.uint8)).astype(np.float32)
+        
         return img
 
     @staticmethod
@@ -83,10 +110,22 @@ class ImageEnhancer:
             return cv2.bilateralFilter(img.astype(np.uint8), d, 75, 75).astype(np.float32)
         elif method == 3:  # NLMeans降噪
             h = strength * 2
-            return cv2.fastNlMeansDenoising(img.astype(np.uint8),
-                                          h=h,
-                                          templateWindowSize=7,
-                                          searchWindowSize=21).astype(np.float32)
+            img_uint8 = img.astype(np.uint8)
+            # 检查是否为 RGB 图像
+            if len(img.shape) == 3 and img.shape[2] == 3:
+                # RGB 图像使用彩色降噪
+                return cv2.fastNlMeansDenoisingColored(img_uint8,
+                                                      None,
+                                                      h=h,
+                                                      hColor=h,
+                                                      templateWindowSize=7,
+                                                      searchWindowSize=21).astype(np.float32)
+            else:
+                # 灰度图使用普通降噪
+                return cv2.fastNlMeansDenoising(img_uint8,
+                                              h=h,
+                                              templateWindowSize=7,
+                                              searchWindowSize=21).astype(np.float32)
         elif method == 4:  # 形态学降噪 - 开运算（去除小的孤立点）
             kernel_size = int(strength / 20) + 1
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
@@ -240,6 +279,31 @@ class BinarizationEngine:
                 # RGBA 图片
                 return cv2.cvtColor(image, cv2.COLOR_RGBA2GRAY)
 
+        # 默认返回原图
+        return image
+    
+    @staticmethod
+    def ensure_rgb(image: np.ndarray) -> np.ndarray:
+        """
+        确保图像是 RGB 格式（3通道）
+        
+        Args:
+            image: 输入图片，可以是灰度图 (H, W) 或彩色图 (H, W, 3/4)
+            
+        Returns:
+            RGB 图片，形状为 (H, W, 3)，dtype=uint8
+        """
+        if len(image.shape) == 2:
+            # 灰度图转 RGB
+            return cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
+        elif len(image.shape) == 3:
+            if image.shape[2] == 4:
+                # RGBA 转 RGB
+                return cv2.cvtColor(image, cv2.COLOR_RGBA2RGB)
+            elif image.shape[2] == 3:
+                # 已经是 RGB
+                return image
+        
         # 默认返回原图
         return image
 
@@ -466,7 +530,10 @@ class BinarizationEngine:
 
         # 裁剪到有效范围
         img = np.clip(img, 0, 255)
-        return img.astype(np.uint8)
+        result = img.astype(np.uint8)
+        
+        # 确保返回 RGB 格式
+        return BinarizationEngine.ensure_rgb(result)
 
     @staticmethod
     def apply_threshold(image: np.ndarray, threshold_method: int = 1,
@@ -508,19 +575,23 @@ class BinarizationEngine:
         # 抖动算法 (7-9)
         if threshold_method == 7:  # Floyd-Steinberg 抖动
             strength = kwargs.get('dither_strength', 100) / 100.0
-            return BinarizationEngine.apply_floyd_steinberg(img, strength)
+            binary = BinarizationEngine.apply_floyd_steinberg(img, strength)
+            return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 8:  # Ordered 抖动
             matrix_size = kwargs.get('dither_matrix_size', 8)
-            return BinarizationEngine.apply_ordered_dithering(img, matrix_size)
+            binary = BinarizationEngine.apply_ordered_dithering(img, matrix_size)
+            return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 9:  # Atkinson 抖动
             strength = kwargs.get('dither_strength', 100) / 100.0
-            return BinarizationEngine.apply_atkinson(img, strength)
+            binary = BinarizationEngine.apply_atkinson(img, strength)
+            return BinarizationEngine.ensure_rgb(binary)
 
         # 传统二值化方法 (0-6)
         if threshold_method == 0:  # 固定阈值
-            return cv2.threshold(img, threshold_value, 255, cv2.THRESH_BINARY)[1]
+            binary = cv2.threshold(img, threshold_value, 255, cv2.THRESH_BINARY)[1]
+            return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 1:  # 自适应阈值
             # 验证块大小参数
@@ -531,14 +602,16 @@ class BinarizationEngine:
 
             # 优化自适应阈值参数
             C = max(0, threshold_value / 10 - 10)
-            return cv2.adaptiveThreshold(img, 255,
+            binary = cv2.adaptiveThreshold(img, 255,
                                        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
                                        cv2.THRESH_BINARY,
                                        block_size, C)
+            return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 2:  # Otsu阈值
-            return cv2.threshold(img, 0, 255,
+            binary = cv2.threshold(img, 0, 255,
                                cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 3:  # Sauvola阈值
             # 验证窗口大小参数
@@ -559,7 +632,8 @@ class BinarizationEngine:
             R = kwargs.get('sauvola_r', 128)
             threshold = mean * (1 + k * ((std / R) - 1))
 
-            return np.where(img >= threshold, 255, 0).astype(np.uint8)
+            binary = np.where(img >= threshold, 255, 0).astype(np.uint8)
+            return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 4:  # Wolf阈值
             # 验证窗口大小参数
@@ -581,7 +655,8 @@ class BinarizationEngine:
             min_std = 2
             threshold = mean - k * std * (1 - std/(R * np.clip(std, min_std, None)))
 
-            return np.where(img >= threshold, 255, 0).astype(np.uint8)
+            binary = np.where(img >= threshold, 255, 0).astype(np.uint8)
+            return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 5:  # Nick阈值
             # 验证窗口大小参数
@@ -601,7 +676,8 @@ class BinarizationEngine:
             k = kwargs.get('nick_k', -0.1)
             threshold = mean + k * std
 
-            return np.where(img >= threshold, 255, 0).astype(np.uint8)
+            binary = np.where(img >= threshold, 255, 0).astype(np.uint8)
+            return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 6:  # Bernsen阈值
             # 验证窗口大小参数
@@ -625,10 +701,12 @@ class BinarizationEngine:
             mask = local_contrast < contrast_threshold
             threshold = np.where(mask, global_threshold, local_mean)
 
-            return np.where(img >= threshold, 255, 0).astype(np.uint8)
+            binary = np.where(img >= threshold, 255, 0).astype(np.uint8)
+            return BinarizationEngine.ensure_rgb(binary)
 
         else:  # 默认使用固定阈值
-            return cv2.threshold(img, threshold_value, 255, cv2.THRESH_BINARY)[1]
+            binary = cv2.threshold(img, threshold_value, 255, cv2.THRESH_BINARY)[1]
+            return BinarizationEngine.ensure_rgb(binary)
 
     # 保留旧的方法以保持兼容性
     @staticmethod

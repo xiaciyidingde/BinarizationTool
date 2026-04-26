@@ -42,6 +42,9 @@ class BinarizationPanel(QWidget):
     
     # 信号：请求 AI 处理 (model_type: str)
     ai_process_requested = Signal(str)
+    
+    # 信号：请求智能选择
+    smart_selection_requested = Signal()
 
     def __init__(self, parent=None, panel_width=300):
         """
@@ -184,31 +187,39 @@ class BinarizationPanel(QWidget):
                     has_rmbg_model = True
                     break
         
-        # 始终显示 AI 工具组（即使没有模型）
+        # 始终显示 AI 工具组
         ai_tools_group = QGroupBox(self.tr.tr('binarization_panel.ai_tools'))
         ai_tools_layout = QVBoxLayout()
         ai_tools_layout.setSpacing(6)
         
-        if has_rmbg_model:
-            # 有模型：显示"去除背景"按钮
-            self.remove_bg_button = QPushButton(self.tr.tr('binarization_panel.remove_background'))
-            self.remove_bg_button.setEnabled(False)  # 初始禁用，加载图片后启用
-            self.remove_bg_button.clicked.connect(lambda: self.ai_process_requested.emit('rmbg'))
-            ai_tools_layout.addWidget(self.remove_bg_button)
-            self.download_model_button = None
-        else:
-            # 没有模型：显示"下载模型"按钮
-            self.remove_bg_button = None
-            self.download_model_button = QPushButton(self.tr.tr('binarization_panel.download_model'))
-            self.download_model_button.clicked.connect(self._on_download_model_clicked)
-            ai_tools_layout.addWidget(self.download_model_button)
-            
-            # 如果没有 onnxruntime，显示提示
-            if not has_onnxruntime:
-                hint_label = QLabel(self.tr.tr('binarization_panel.install_onnxruntime_hint'))
-                hint_label.setWordWrap(True)
-                hint_label.setStyleSheet("QLabel { color: #666; font-size: 10px; }")
-                ai_tools_layout.addWidget(hint_label)
+        # 第一行：去除背景和智能选择按钮（左右布局）
+        first_row = QHBoxLayout()
+        first_row.setSpacing(6)
+        
+        # 去除背景按钮
+        self.remove_bg_button = QPushButton(self.tr.tr('binarization_panel.remove_background'))
+        self.remove_bg_button.setEnabled(False)  # 初始禁用，加载图片后启用
+        self.remove_bg_button.clicked.connect(self._on_remove_bg_clicked)
+        first_row.addWidget(self.remove_bg_button)
+        
+        # 智能选择按钮
+        self.smart_selection_button = QPushButton(self.tr.tr('binarization_panel.smart_selection'))
+        self.smart_selection_button.setEnabled(False)  # 初始禁用，加载图片后启用
+        self.smart_selection_button.clicked.connect(self._on_smart_selection_clicked)
+        first_row.addWidget(self.smart_selection_button)
+        
+        ai_tools_layout.addLayout(first_row)
+        
+        # 保存模型状态
+        self.has_rmbg_model = has_rmbg_model
+        self.has_onnxruntime = has_onnxruntime
+        
+        # 如果没有 onnxruntime，显示提示
+        if not has_onnxruntime:
+            hint_label = QLabel(self.tr.tr('binarization_panel.install_onnxruntime_hint'))
+            hint_label.setWordWrap(True)
+            hint_label.setStyleSheet("QLabel { color: #666; font-size: 10px; }")
+            ai_tools_layout.addWidget(hint_label)
         
         ai_tools_group.setLayout(ai_tools_layout)
         settings_layout.addWidget(ai_tools_group)
@@ -893,6 +904,12 @@ class BinarizationPanel(QWidget):
         # 导入图标资源
         from ..utils.resources import CHECKED, UNCHECKED
 
+        # 创建容器来包装所有变换按钮，方便控制显示/隐藏
+        self.transform_buttons_container = QWidget()
+        transform_buttons_layout = QVBoxLayout(self.transform_buttons_container)
+        transform_buttons_layout.setContentsMargins(0, 0, 0, 0)
+        transform_buttons_layout.setSpacing(8)
+
         # 反相
         invert_row = QHBoxLayout()
         invert_row.setSpacing(8)
@@ -909,7 +926,7 @@ class BinarizationPanel(QWidget):
         invert_label.setMinimumHeight(32)
         invert_row.addWidget(self.invert_checkbox)
         invert_row.addWidget(invert_label, 1)
-        transform_layout.addLayout(invert_row)
+        transform_buttons_layout.addLayout(invert_row)
 
         # 水平翻转
         flip_h_row = QHBoxLayout()
@@ -927,7 +944,7 @@ class BinarizationPanel(QWidget):
         flip_h_label.setMinimumHeight(32)
         flip_h_row.addWidget(self.flip_horizontal_checkbox)
         flip_h_row.addWidget(flip_h_label, 1)
-        transform_layout.addLayout(flip_h_row)
+        transform_buttons_layout.addLayout(flip_h_row)
 
         # 垂直翻转
         flip_v_row = QHBoxLayout()
@@ -945,7 +962,10 @@ class BinarizationPanel(QWidget):
         flip_v_label.setMinimumHeight(32)
         flip_v_row.addWidget(self.flip_vertical_checkbox)
         flip_v_row.addWidget(flip_v_label, 1)
-        transform_layout.addLayout(flip_v_row)
+        transform_buttons_layout.addLayout(flip_v_row)
+
+        # 将按钮容器添加到分组布局
+        transform_layout.addWidget(self.transform_buttons_container)
 
         transform_group.setLayout(transform_layout)
         settings_layout.addWidget(transform_group)
@@ -1234,9 +1254,11 @@ class BinarizationPanel(QWidget):
         self.flip_horizontal_checkbox.setEnabled(enabled)
         self.flip_vertical_checkbox.setEnabled(enabled)
         self.flip_vertical_checkbox.setEnabled(enabled)
-        # 启用/禁用去除背景按钮（如果存在）
+        # 启用/禁用 AI 工具按钮
         if hasattr(self, 'remove_bg_button') and self.remove_bg_button is not None:
             self.remove_bg_button.setEnabled(enabled)
+        if hasattr(self, 'smart_selection_button') and self.smart_selection_button is not None:
+            self.smart_selection_button.setEnabled(enabled)
 
     def set_current_layer(self, layer_name: str):
         """
@@ -1249,24 +1271,37 @@ class BinarizationPanel(QWidget):
             self.tr.tr('binarization_panel.current_layer', layer=layer_name)
         )
     
+    def set_transform_buttons_visible(self, visible: bool):
+        """
+        设置图像变换按钮的可见性
+        
+        Args:
+            visible: 是否显示按钮
+        """
+        if hasattr(self, 'transform_buttons_container'):
+            self.transform_buttons_container.setVisible(visible)
+    
     def get_all_params(self) -> dict:
         """
         获取所有参数（预处理 + 二值化）
         
         Returns:
-            包含所有参数的字典
+            包含所有参数的字典（嵌套格式）
+            格式: {'preprocess': {...}, 'threshold': {'method': ..., 'threshold': ..., ...}}
         """
         return {
             'preprocess': self.get_preprocess_params(),
-            'method': self.get_method(),
-            'threshold': self.get_threshold(),
-            'block_size': self.block_size_slider.value() if hasattr(self, 'block_size_slider') else 11,
-            'window_size': self.window_size_slider.value() if hasattr(self, 'window_size_slider') else 15,
-            'k_param': self.k_param_slider.value() * 0.01 if hasattr(self, 'k_param_slider') else 0.2,
-            'r_param': self.r_param_slider.value() if hasattr(self, 'r_param_slider') else 128,
-            'contrast_threshold': self.contrast_threshold_slider.value() if hasattr(self, 'contrast_threshold_slider') else 15,
-            'dither_strength': self.dither_strength_slider.value() * 0.01 if hasattr(self, 'dither_strength_slider') else 1.0,
-            'matrix_size': self.matrix_size_slider.value() if hasattr(self, 'matrix_size_slider') else 8,
+            'threshold': {
+                'method': self.get_method(),
+                'threshold': self.get_threshold(),
+                'block_size': self.block_size_slider.value() if hasattr(self, 'block_size_slider') else 11,
+                'window_size': self.window_size_slider.value() if hasattr(self, 'window_size_slider') else 15,
+                'k_param': self.k_param_slider.value() * 0.01 if hasattr(self, 'k_param_slider') else 0.2,
+                'r_param': self.r_param_slider.value() if hasattr(self, 'r_param_slider') else 128,
+                'contrast_threshold': self.contrast_threshold_slider.value() if hasattr(self, 'contrast_threshold_slider') else 15,
+                'dither_strength': self.dither_strength_slider.value() * 0.01 if hasattr(self, 'dither_strength_slider') else 1.0,
+                'matrix_size': self.matrix_size_slider.value() if hasattr(self, 'matrix_size_slider') else 8,
+            }
         }
     
     def load_params(self, params: dict):
@@ -1274,7 +1309,9 @@ class BinarizationPanel(QWidget):
         加载参数到控件
         
         Args:
-            params: 参数字典
+            params: 参数字典（支持新旧两种格式）
+                新格式: {'preprocess': {...}, 'threshold': {'method': ..., 'threshold': ..., ...}}
+                旧格式: {'method': ..., 'threshold': ..., ...}
         """
         # 阻止信号，避免触发参数变化
         self.blockSignals(True)
@@ -1316,27 +1353,54 @@ class BinarizationPanel(QWidget):
                 if 'denoise' in preprocess:
                     self.denoise_slider.setValue(preprocess['denoise'])
             
-            # 加载二值化参数
-            if 'method' in params:
-                self.set_method(params['method'])
-            if 'threshold' in params:
-                self.set_threshold(params['threshold'])
+            # 加载二值化参数（支持新旧格式）
+            threshold_params = params.get('threshold', {})
             
-            # 加载其他二值化参数（如果存在）
-            if 'block_size' in params and hasattr(self, 'block_size_slider'):
-                self.block_size_slider.setValue(params['block_size'])
-            if 'window_size' in params and hasattr(self, 'window_size_slider'):
-                self.window_size_slider.setValue(params['window_size'])
-            if 'k_param' in params and hasattr(self, 'k_param_slider'):
-                self.k_param_slider.setValue(int(params['k_param'] * 100))
-            if 'r_param' in params and hasattr(self, 'r_param_slider'):
-                self.r_param_slider.setValue(params['r_param'])
-            if 'contrast_threshold' in params and hasattr(self, 'contrast_threshold_slider'):
-                self.contrast_threshold_slider.setValue(params['contrast_threshold'])
-            if 'dither_strength' in params and hasattr(self, 'dither_strength_slider'):
-                self.dither_strength_slider.setValue(int(params['dither_strength'] * 100))
-            if 'matrix_size' in params and hasattr(self, 'matrix_size_slider'):
-                self.matrix_size_slider.setValue(params['matrix_size'])
+            # 判断是新格式还是旧格式
+            if isinstance(threshold_params, dict):
+                # 新格式：threshold 是字典
+                if 'method' in threshold_params:
+                    self.set_method(threshold_params['method'])
+                if 'threshold' in threshold_params:
+                    self.set_threshold(threshold_params['threshold'])
+                
+                # 加载其他二值化参数
+                if 'block_size' in threshold_params and hasattr(self, 'block_size_slider'):
+                    self.block_size_slider.setValue(threshold_params['block_size'])
+                if 'window_size' in threshold_params and hasattr(self, 'window_size_slider'):
+                    self.window_size_slider.setValue(threshold_params['window_size'])
+                if 'k_param' in threshold_params and hasattr(self, 'k_param_slider'):
+                    self.k_param_slider.setValue(int(threshold_params['k_param'] * 100))
+                if 'r_param' in threshold_params and hasattr(self, 'r_param_slider'):
+                    self.r_param_slider.setValue(threshold_params['r_param'])
+                if 'contrast_threshold' in threshold_params and hasattr(self, 'contrast_threshold_slider'):
+                    self.contrast_threshold_slider.setValue(threshold_params['contrast_threshold'])
+                if 'dither_strength' in threshold_params and hasattr(self, 'dither_strength_slider'):
+                    self.dither_strength_slider.setValue(int(threshold_params['dither_strength'] * 100))
+                if 'matrix_size' in threshold_params and hasattr(self, 'matrix_size_slider'):
+                    self.matrix_size_slider.setValue(threshold_params['matrix_size'])
+            else:
+                # 旧格式：threshold 是整数，method 在顶层
+                if 'method' in params:
+                    self.set_method(params['method'])
+                if isinstance(threshold_params, int):
+                    self.set_threshold(threshold_params)
+                
+                # 加载其他二值化参数（旧格式在顶层）
+                if 'block_size' in params and hasattr(self, 'block_size_slider'):
+                    self.block_size_slider.setValue(params['block_size'])
+                if 'window_size' in params and hasattr(self, 'window_size_slider'):
+                    self.window_size_slider.setValue(params['window_size'])
+                if 'k_param' in params and hasattr(self, 'k_param_slider'):
+                    self.k_param_slider.setValue(int(params['k_param'] * 100))
+                if 'r_param' in params and hasattr(self, 'r_param_slider'):
+                    self.r_param_slider.setValue(params['r_param'])
+                if 'contrast_threshold' in params and hasattr(self, 'contrast_threshold_slider'):
+                    self.contrast_threshold_slider.setValue(params['contrast_threshold'])
+                if 'dither_strength' in params and hasattr(self, 'dither_strength_slider'):
+                    self.dither_strength_slider.setValue(int(params['dither_strength'] * 100))
+                if 'matrix_size' in params and hasattr(self, 'matrix_size_slider'):
+                    self.matrix_size_slider.setValue(params['matrix_size'])
                 
         finally:
             # 恢复信号
@@ -1349,38 +1413,59 @@ class BinarizationPanel(QWidget):
         # 这里只是示例，实际需要保存对 QGroupBox 的引用
         pass
 
-    def _on_download_model_clicked(self):
-        """下载模型按钮点击事件"""
-        from ..views.model_download_dialog import ModelDownloadDialog
-        import os
-        
-        # 获取目标目录
-        model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
-        
-        # 直接显示下载对话框
-        dialog = ModelDownloadDialog(model_dir, "RMBG-2.0-q4f16.onnx", self)
-        dialog.exec()
-        
-        # 如果下载成功，刷新 UI
-        if dialog.is_download_success():
+    def _on_remove_bg_clicked(self):
+        """去除背景按钮点击事件"""
+        # 如果没有模型，询问用户是否下载
+        if not self.has_rmbg_model:
             from PySide6.QtWidgets import QMessageBox
+            import os
             
-            # 隐藏下载按钮，显示去除背景按钮
-            if self.download_model_button:
-                self.download_model_button.setVisible(False)
+            # 检查是否安装了 onnxruntime
+            if not self.has_onnxruntime:
+                QMessageBox.warning(
+                    self,
+                    self.tr.tr('dialog.warning'),
+                    self.tr.tr('binarization_panel.onnxruntime_required')
+                )
+                return
             
-            # 创建去除背景按钮
-            self.remove_bg_button = QPushButton(self.tr.tr('binarization_panel.remove_background'))
-            self.remove_bg_button.setEnabled(False)  # 初始禁用，加载图片后启用
-            self.remove_bg_button.clicked.connect(lambda: self.ai_process_requested.emit('rmbg'))
-            
-            # 添加到布局
-            ai_tools_group = self.download_model_button.parent()
-            layout = ai_tools_group.layout()
-            layout.addWidget(self.remove_bg_button)
-            
-            QMessageBox.information(
+            # 询问用户是否下载模型
+            reply = QMessageBox.question(
                 self,
-                "下载完成",
-                "模型下载成功！现在可以使用背景去除功能了。"
+                self.tr.tr('binarization_panel.download_model_title'),
+                self.tr.tr('binarization_panel.download_model_prompt'),
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
             )
+            
+            if reply == QMessageBox.Yes:
+                # 显示下载对话框
+                from ..views.model_download_dialog import ModelDownloadDialog
+                
+                model_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'model')
+                dialog = ModelDownloadDialog(
+                    model_type='rmbg',
+                    target_dir=model_dir,
+                    target_filename="RMBG-2.0-q4f16.onnx",
+                    parent=self
+                )
+                dialog.exec()
+                
+                # 如果下载成功，更新状态并执行去除背景
+                if dialog.is_download_success():
+                    self.has_rmbg_model = True
+                    QMessageBox.information(
+                        self,
+                        self.tr.tr('dialog.info'),
+                        self.tr.tr('binarization_panel.model_download_success')
+                    )
+                    # 执行去除背景
+                    self.ai_process_requested.emit('rmbg')
+        else:
+            # 有模型，直接执行去除背景
+            self.ai_process_requested.emit('rmbg')
+    
+    def _on_smart_selection_clicked(self):
+        """智能选择按钮点击事件"""
+        # 发送信号通知主窗口切换到选择工具并开启智能选择
+        self.smart_selection_requested.emit()

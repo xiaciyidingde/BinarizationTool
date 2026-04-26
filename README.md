@@ -4,17 +4,23 @@
 
 **专业的二值化图片编辑工具，让黑白图像处理变得简单高效**
 
-版本: v1.6.0.0 | 许可证: CC BY-NC-SA 4.0 | 语言: 🇨🇳 中文 / 🇺🇸 English
+<p align="center">
+  <img src="https://img.shields.io/badge/版本-1.6.2.1-blue.svg" alt="版本">
+  <img src="https://img.shields.io/badge/平台-多平台支持-green.svg" alt="平台">
+  <img src="https://img.shields.io/badge/Python-3.8+-yellow.svg" alt="Python">
+  <img src="https://img.shields.io/badge/许可证-CC%20BY--NC--SA%204.0-orange.svg" alt="许可证">
+</p>
 
 </div>
 
 ---
 
-## 📖 项目简介
+## 项目简介
 
 BinarizationTool 是一款基于 PySide6 开发的专业二值化图片编辑器，专注于将彩色或灰度图像转换为黑白二值图像。它提供了类似 Photoshop 的编辑体验，集成了多种先进的二值化算法、丰富的预处理选项和强大的编辑工具。
+本项目高度依赖AI，我已经尽力审查并优化架构，确保可维护性与扩展性。
 
-### ✨ 核心特色
+### 核心特色
 
 - **7种专业二值化算法** + **3种抖动算法**：从简单到复杂，满足各种需求
 - **实时预览**：所有参数调整立即生效，所见即所得
@@ -24,9 +30,9 @@ BinarizationTool 是一款基于 PySide6 开发的专业二值化图片编辑器
 
 ---
 
-## 🚀 功能特性
+## 功能特性
 
-### 🖼️ 图片处理
+### 图片处理
 
 #### 支持格式
 - 输入/输出：`PNG`, `JPG`, `JPEG`, `BMP`, `WebP`
@@ -61,7 +67,7 @@ BinarizationTool 是一款基于 PySide6 开发的专业二值化图片编辑器
 - **Atkinson**：Mac 风格轻量级扩散，适合艺术效果
 - **Ordered**：Bayer 矩阵网点效果，适合打印优化
 
-### 🛠️ 编辑工具
+### 编辑工具
 
 #### 抓取工具
 - **快捷键**：`H` 或者 `Space + 拖动` `鼠标中键拖动`
@@ -113,7 +119,7 @@ BinarizationTool 是一款基于 PySide6 开发的专业二值化图片编辑器
   - ΔX: X 方向差值
   - ΔY: Y 方向差值
 
-### 🤖 AI 功能（可选）
+### AI 功能（可选）
 
 #### 背景去除
 - **模型**：RMBG-2.0
@@ -161,7 +167,7 @@ pip install modelscope huggingface-hub
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/yourusername/BinarizationTool.git
+git clone https://github.com/xiaciyidingde/BinarizationTool.git
 cd BinarizationTool
 ```
 
@@ -350,11 +356,11 @@ BinarizationTool/
 
 ## 🔧 技术栈
 
-- **GUI 框架**：PySide6 (Qt 6)
+- **GUI 框架**：PySide6
 - **图像处理**：NumPy, Pillow, OpenCV
-- **性能优化**：Cython（C 级优化）
+- **性能优化**：Cython
 - **测试框架**：pytest, Hypothesis
-- **代码质量**：Ruff (linter + formatter), Pylint
+- **代码质量**：Ruff, Pylint
 - **打包工具**：Nuitka
 
 ---
