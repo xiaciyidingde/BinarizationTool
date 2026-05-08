@@ -1,0 +1,249 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install nuitka
+        env:
+          PYTHONIOENCODING: utf-8
+      
+      - name: Compile Cython modules
+        run: python setup.py build_ext --inplace
+        continue-on-error: true
+        env:
+          PYTHONIOENCODING: utf-8
+      
+      - name: Build with Nuitka
+        run: python build.py
+        env:
+          PYTHONIOENCODING: utf-8
+      
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+      - name: Find build output
+        id: find_output
+        shell: bash
+        run: |
+          OUTPUT_DIR=$(ls -d BinarizationToolv* 2>/dev/null | head -n 1)
+          if [ -z "$OUTPUT_DIR" ]; then
+            echo "Error: Build output directory not found"
+            exit 1
+          fi
+          echo "OUTPUT_DIR=$OUTPUT_DIR" >> $GITHUB_OUTPUT
+          echo "Found build output: $OUTPUT_DIR"
+      
+      - name: Create build archive
+        shell: bash
+        run: |
+          OUTPUT_DIR="${{ steps.find_output.outputs.OUTPUT_DIR }}"
+          ARCHIVE_NAME="BinarizationTool-v${{ steps.version.outputs.VERSION }}-windows.zip"
+          7z a "$ARCHIVE_NAME" "./$OUTPUT_DIR/*"
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+      
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: ${{ env.ARCHIVE_NAME }}
+          retention-days: 30
+  
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+      
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libglib2.0-0 \
+            libxcb-xinerama0 \
+            libxcb-icccm4 \
+            libxcb-image0 \
+            libxcb-keysyms1 \
+            libxcb-randr0 \
+            libxcb-render-util0 \
+            libxcb-shape0 \
+            libxkbcommon-x11-0 \
+            libdbus-1-3 \
+            libegl1 \
+            libxcb-cursor0 \
+            patchelf
+      
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install nuitka
+      
+      - name: Compile Cython modules
+        run: python setup.py build_ext --inplace
+        continue-on-error: true
+      
+      - name: Build with Nuitka
+        run: python build.py
+      
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+      - name: Find build output
+        id: find_output
+        run: |
+          OUTPUT_DIR=$(ls -d BinarizationToolv* 2>/dev/null | head -n 1)
+          if [ -z "$OUTPUT_DIR" ]; then
+            echo "Error: Build output directory not found"
+            exit 1
+          fi
+          echo "OUTPUT_DIR=$OUTPUT_DIR" >> $GITHUB_OUTPUT
+          echo "Found build output: $OUTPUT_DIR"
+      
+      - name: Create build archive
+        run: |
+          OUTPUT_DIR="${{ steps.find_output.outputs.OUTPUT_DIR }}"
+          ARCHIVE_NAME="BinarizationTool-v${{ steps.version.outputs.VERSION }}-linux-x64.tar.gz"
+          tar -czf "$ARCHIVE_NAME" -C "$OUTPUT_DIR" .
+          echo "ARCHIVE_NAME=$ARCHIVE_NAME" >> $GITHUB_ENV
+      
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: ${{ env.ARCHIVE_NAME }}
+          retention-days: 30
+  
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+      
+      - name: Extract changelog
+        id: changelog
+        uses: mathiasvr/command-output@v2.0.0
+        with:
+          run: |
+            VERSION="${{ steps.version.outputs.VERSION }}"
+            
+            # 使用 GitHub API 获取上一次发布的 Release 标签
+            PREV_TAG=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/${{ github.repository }}/releases?per_page=100" | \
+              grep -o '"tag_name": *"[^"]*"' | \
+              grep -o 'v[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*' | \
+              grep -v "^v$VERSION$" | \
+              head -n 1 || echo "")
+            
+            if [ -z "$PREV_TAG" ]; then
+              # 如果没有上一个 Release，提取当前版本的更新日志
+              CHANGELOG=$(awk -v version="v$VERSION" '
+                /^## \[v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\]/ {
+                  if (found) exit
+                  if ($0 ~ "\\[" version "\\]") {
+                    found=1
+                    next
+                  }
+                }
+                found && /^---$/ { next }
+                found && /^## \[v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\]/ { exit }
+                found { print }
+              ' CHANGELOG.md)
+            else
+              # 提取从上一个发布标签到当前标签之间的所有版本更新日志
+              PREV_VERSION="${PREV_TAG#v}"
+              CHANGELOG=$(awk -v current="v$VERSION" -v prev="v$PREV_VERSION" '
+                BEGIN { in_range=0 }
+                /^## \[v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\]/ {
+                  # 找到当前版本，开始记录
+                  if ($0 ~ "\\[" current "\\]") {
+                    in_range=1
+                    next
+                  }
+                  # 找到上一个发布版本，停止记录
+                  if (in_range && $0 ~ "\\[" prev "\\]") {
+                    exit
+                  }
+                  # 在范围内遇到其他版本标题，保留标题但跳过 ## 标记
+                  if (in_range) {
+                    print ""
+                    print $0
+                    next
+                  }
+                }
+                # 跳过分隔线
+                in_range && /^---$/ { next }
+                # 记录内容
+                in_range { print }
+              ' CHANGELOG.md)
+            fi
+            
+            if [ -z "$CHANGELOG" ]; then
+              echo "自动构建发布"
+            else
+              echo "$CHANGELOG"
+            fi
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release v${{ steps.version.outputs.VERSION }}
+          body: |
+            ## 版本 v${{ steps.version.outputs.VERSION }}
+            
+            ${{ steps.changelog.outputs.stdout }}
+            
+            ### 下载
+            - **Windows**: BinarizationTool-v${{ steps.version.outputs.VERSION }}-windows.zip
+            - **Linux x64**: BinarizationTool-v${{ steps.version.outputs.VERSION }}-linux-x64.tar.gz
+          files: |
+            artifacts/windows-build/*.zip
+            artifacts/linux-build/*.tar.gz
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
