@@ -179,6 +179,11 @@ jobs:
               grep -v "^v$VERSION$" | \
               head -n 1 || echo "")
             
+            # 版本比较函数
+            version_gt() {
+              test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"
+            }
+            
             if [ -z "$PREV_TAG" ]; then
               # 如果没有上一个 Release，提取当前版本的更新日志
               CHANGELOG=$(awk -v version="v$VERSION" '
@@ -194,32 +199,50 @@ jobs:
                 found { print }
               ' CHANGELOG.md)
             else
-              # 提取从上一个发布标签到当前标签之间的所有版本更新日志
+              # 比较版本号
               PREV_VERSION="${PREV_TAG#v}"
-              CHANGELOG=$(awk -v current="v$VERSION" -v prev="v$PREV_VERSION" '
-                BEGIN { in_range=0 }
-                /^## \[v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\]/ {
-                  # 找到当前版本，开始记录
-                  if ($0 ~ "\\[" current "\\]") {
-                    in_range=1
-                    next
+              
+              if version_gt "$VERSION" "$PREV_VERSION"; then
+                # 当前版本更新：提取从上一个发布标签到当前标签之间的所有版本更新日志
+                CHANGELOG=$(awk -v current="v$VERSION" -v prev="v$PREV_VERSION" '
+                  BEGIN { in_range=0 }
+                  /^## \[v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\]/ {
+                    # 找到当前版本，开始记录
+                    if ($0 ~ "\\[" current "\\]") {
+                      in_range=1
+                      next
+                    }
+                    # 找到上一个发布版本，停止记录
+                    if (in_range && $0 ~ "\\[" prev "\\]") {
+                      exit
+                    }
+                    # 在范围内遇到其他版本标题，保留标题但跳过 ## 标记
+                    if (in_range) {
+                      print ""
+                      print $0
+                      next
+                    }
                   }
-                  # 找到上一个发布版本，停止记录
-                  if (in_range && $0 ~ "\\[" prev "\\]") {
-                    exit
+                  # 跳过分隔线
+                  in_range && /^---$/ { next }
+                  # 记录内容
+                  in_range { print }
+                ' CHANGELOG.md)
+              else
+                # 当前版本更旧或相同：只提取当前版本的更新日志（补发旧版本）
+                CHANGELOG=$(awk -v version="v$VERSION" '
+                  /^## \[v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\]/ {
+                    if (found) exit
+                    if ($0 ~ "\\[" version "\\]") {
+                      found=1
+                      next
+                    }
                   }
-                  # 在范围内遇到其他版本标题，保留标题但跳过 ## 标记
-                  if (in_range) {
-                    print ""
-                    print $0
-                    next
-                  }
-                }
-                # 跳过分隔线
-                in_range && /^---$/ { next }
-                # 记录内容
-                in_range { print }
-              ' CHANGELOG.md)
+                  found && /^---$/ { next }
+                  found && /^## \[v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+\]/ { exit }
+                  found { print }
+                ' CHANGELOG.md)
+              fi
             fi
             
             if [ -z "$CHANGELOG" ]; then
@@ -238,8 +261,8 @@ jobs:
             ${{ steps.changelog.outputs.stdout }}
             
             ### 下载
-            - **Windows**: BinarizationTool-v${{ steps.version.outputs.VERSION }}-windows.zip
-            - **Linux x64**: BinarizationTool-v${{ steps.version.outputs.VERSION }}-linux-x64.tar.gz
+            - **Windows**: [BinarizationTool-v${{ steps.version.outputs.VERSION }}-windows.zip](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/BinarizationTool-v${{ steps.version.outputs.VERSION }}-windows.zip)
+            - **Linux x64**: [BinarizationTool-v${{ steps.version.outputs.VERSION }}-linux-x64.tar.gz](https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.VERSION }}/BinarizationTool-v${{ steps.version.outputs.VERSION }}-linux-x64.tar.gz)
           files: |
             artifacts/windows-build/*.zip
             artifacts/linux-build/*.tar.gz
