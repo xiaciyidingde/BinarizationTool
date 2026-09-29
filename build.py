@@ -13,6 +13,16 @@ import sys
 import platform
 from pathlib import Path
 
+# 修复 Windows 控制台编码问题
+if sys.platform == "win32":
+    try:
+        # 尝试设置 UTF-8 编码
+        import io
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 # 导入版本号
 try:
     from src.__version__ import __version__, __app_name__
@@ -20,7 +30,7 @@ try:
     APP_NAME = __app_name__
 except ImportError:
     print("❌ 无法导入版本信息，使用默认值")
-    APP_VERSION = "1.4.0.1"
+    APP_VERSION = "1.6.2.1"
     APP_NAME = "BinarizationTool"
 
 
@@ -39,7 +49,6 @@ def check_nuitka():
     except (subprocess.CalledProcessError, FileNotFoundError):
         pass
 
-    # 尝试 nuitka3 命令
     try:
         result = subprocess.run(
             ["nuitka3", "--version"], capture_output=True, check=True, text=True
@@ -49,7 +58,6 @@ def check_nuitka():
     except (subprocess.CalledProcessError, FileNotFoundError):
         pass
 
-    # 尝试 nuitka 命令
     try:
         result = subprocess.run(
             ["nuitka", "--version"], capture_output=True, check=True, text=True
@@ -223,7 +231,7 @@ def compile_project():
     base_params = [
         "--show-progress",  # 显示进度
         "--show-memory",  # 显示内存使用
-        "--lto=yes",  # 启用链接时优化
+        "--lto=yes",  # 开启链接时优化
         "--plugin-enable=pyside6",  # 启用 PySide6 插件
         "--follow-imports",  # 跟踪导入
         "--include-package=src",  # 包含整个 src 包
@@ -281,10 +289,8 @@ def compile_project():
             f"--windows-file-description=二值化图片编辑器",  # 文件描述
         ])
     elif system == "Linux":
-        # Linux 特定参数
-        base_params.extend([
-            "--linux-icon=icon.png",  # Linux 图标（如果存在）
-        ])
+        # Linux 特定参数 - 移除图标参数，因为可能导致编译失败
+        pass
     else:
         print(f"⚠️  不支持的操作系统: {system}")
         print("   本脚本仅支持 Windows 和 Linux")
@@ -310,17 +316,31 @@ def compile_project():
 
     # 如果图标文件存在，添加图标参数
     if system == "Windows":
+        icon_found = False
         if (current_dir / "icon" / "icon.ico").exists():
             compile_cmd.insert(-1, "--windows-icon-from-ico=icon/icon.ico")
+            icon_found = True
         elif (current_dir / "icon.ico").exists():
             compile_cmd.insert(-1, "--windows-icon-from-ico=icon.ico")
+            icon_found = True
         elif (current_dir / "1.ico").exists():
             compile_cmd.insert(-1, "--windows-icon-from-ico=1.ico")
+            icon_found = True
+        
+        if not icon_found:
+            print("⚠️  警告：未找到 Windows 图标文件 (.ico)")
+    
     elif system == "Linux":
+        icon_found = False
         if (current_dir / "icon" / "icon.png").exists():
             compile_cmd.insert(-1, "--linux-icon=icon/icon.png")
+            icon_found = True
         elif (current_dir / "icon.png").exists():
             compile_cmd.insert(-1, "--linux-icon=icon.png")
+            icon_found = True
+        
+        if not icon_found:
+            print("⚠️  警告：未找到 Linux 图标文件 (.png)")
 
     # 包含 themes 目录
     if (current_dir / "themes").exists():
@@ -547,7 +567,9 @@ def main():
         print(f"\n❌ 发生未预期的错误：{e}")
         return 1
 
-    input("\n按回车键退出...")
+    # 只在交互式环境下等待用户输入
+    if sys.stdin.isatty():
+        input("\n按回车键退出...")
     return 0
 
 
