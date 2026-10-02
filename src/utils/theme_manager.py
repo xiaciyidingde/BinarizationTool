@@ -42,11 +42,12 @@ class ThemeManager:
             icon_path = os.path.join(temp_dir, "kiro_three_bars_icon.png")
 
             # 写入图标数据
-            with open(icon_path, 'wb') as f:
+            with open(icon_path, "wb") as f:
                 f.write(THREE_BARS_BYTES)
 
             # 保存路径（使用 Path 对象转换为 URL 格式，跨平台兼容）
             from pathlib import Path
+
             self._icon_temp_path = Path(icon_path).as_posix()
 
         except Exception as e:
@@ -74,7 +75,7 @@ class ThemeManager:
             theme_file = self.THEMES_DIR / self.AVAILABLE_THEMES[theme_name]
 
             try:
-                with open(theme_file, encoding='utf-8') as f:
+                with open(theme_file, encoding="utf-8") as f:
                     stylesheet = f.read()
 
                 # 缓存样式表
@@ -86,10 +87,7 @@ class ThemeManager:
 
         # 注入图标路径
         if self._icon_temp_path:
-            stylesheet = stylesheet.replace(
-                '{{THREE_BARS_ICON_PATH}}',
-                self._icon_temp_path
-            )
+            stylesheet = stylesheet.replace("{{THREE_BARS_ICON_PATH}}", self._icon_temp_path)
 
         return stylesheet
 
@@ -107,7 +105,7 @@ class ThemeManager:
         # 如果是 system 主题，检测系统主题
         if theme_name == "system":
             theme_name = self._detect_system_theme()
-        
+
         stylesheet = self.load_theme(theme_name)
 
         if stylesheet is None:
@@ -116,31 +114,32 @@ class ThemeManager:
         app.setStyleSheet(stylesheet)
         self.current_theme = theme_name
         return True
-    
+
     def _detect_system_theme(self) -> str:
         """
         检测系统主题
-        
+
         Returns:
             'dark' 或 'light'
         """
         import sys
-        
-        if sys.platform == 'win32':
+
+        if sys.platform == "win32":
             try:
                 import winreg
+
                 # 读取 Windows 注册表中的主题设置
                 registry = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
-                key = winreg.OpenKey(registry, r'Software\Microsoft\Windows\CurrentVersion\Themes\Personalize')
-                value, _ = winreg.QueryValueEx(key, 'AppsUseLightTheme')
+                key = winreg.OpenKey(registry, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+                value, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
                 winreg.CloseKey(key)
                 # 0 = 深色, 1 = 浅色
-                return 'light' if value == 1 else 'dark'
+                return "light" if value == 1 else "dark"
             except Exception:
-                return 'light'  # 默认浅色
+                return "light"  # 默认浅色
         else:
             # 其他系统暂时返回浅色
-            return 'light'
+            return "light"
 
     def get_current_theme(self) -> str:
         """

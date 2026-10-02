@@ -77,10 +77,7 @@ class BrushTool:
 
         # 使用 StrokeInterpolator 计算插值点
         interpolated_points = StrokeInterpolator.interpolate_points(
-            self.last_draw_pos,
-            (pixel_x, pixel_y),
-            self.size,
-            self.spacing
+            self.last_draw_pos, (pixel_x, pixel_y), self.size, self.spacing
         )
 
         # 添加所有插值点
@@ -90,10 +87,7 @@ class BrushTool:
         # 更新最后绘制位置为最后一个插值点（保持精确间距）
         if len(interpolated_points) > 0:
             self.last_draw_pos = StrokeInterpolator.calculate_last_interpolated_position(
-                self.last_draw_pos,
-                (pixel_x, pixel_y),
-                self.size,
-                self.spacing
+                self.last_draw_pos, (pixel_x, pixel_y), self.size, self.spacing
             )
 
     def end_stroke(self) -> BrushStroke | None:
@@ -112,8 +106,7 @@ class BrushTool:
         self.last_draw_pos = None
         return stroke
 
-    def render_cursor(self, painter: 'QPainter', view_x: float, view_y: float,
-                     view_size: float):
+    def render_cursor(self, painter: "QPainter", view_x: float, view_y: float, view_size: float):
         """
         渲染画笔光标
 
@@ -146,5 +139,5 @@ class BrushTool:
             ring_color,
             center_color=None,  # 画笔工具不显示中心点
             show_crosshair=True,
-            crosshair_threshold=self.crosshair_threshold
+            crosshair_threshold=self.crosshair_threshold,
         )

@@ -49,10 +49,11 @@ class PropertiesPanel(QWidget):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(6)
-        
+
         # ========== 上半部分：属性和工具 ==========
         # 创建滚动区域
         from PySide6.QtWidgets import QScrollArea
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
@@ -77,40 +78,40 @@ class PropertiesPanel(QWidget):
 
         # 第一页：属性
         self.properties_page = self._create_properties_page()
-        self.tab_widget.addTab(self.properties_page, self.tr.tr('properties_panel.properties'))
+        self.tab_widget.addTab(self.properties_page, self.tr.tr("properties_panel.properties"))
 
         # 第二页：工具
         self.tools_page = self._create_tools_page()
-        self.tab_widget.addTab(self.tools_page, self.tr.tr('properties_panel.tools'))
+        self.tab_widget.addTab(self.tools_page, self.tr.tr("properties_panel.tools"))
 
         # 将内容容器添加到外层布局
         outer_layout.addWidget(content)
 
         # 设置滚动区域
         scroll.setWidget(outer_container)
-        
+
         # 添加到主布局
         main_layout.addWidget(scroll, stretch=38)
-        
+
         # ========== 下半部分：图层面板 ==========
         # 创建图层面板容器（带背景和圆角）
         layers_outer = QWidget()
         layers_outer_layout = QVBoxLayout(layers_outer)
         layers_outer_layout.setContentsMargins(6, 0, 6, 6)
-        
+
         layers_container = QWidget()
         layers_container.setObjectName("propertiesPanelContent")
         # 移除最大高度限制，让比例自动调整
         layers_container_layout = QVBoxLayout(layers_container)
         layers_container_layout.setContentsMargins(8, 8, 8, 8)  # 添加内边距让框线居中
         layers_container_layout.setSpacing(0)
-        
+
         # 图层面板
         self.layers_panel = LayersPanel()
         layers_container_layout.addWidget(self.layers_panel)
-        
+
         layers_outer_layout.addWidget(layers_container)
-        
+
         # 添加到主布局
         main_layout.addWidget(layers_outer, stretch=34)
 
@@ -126,7 +127,7 @@ class PropertiesPanel(QWidget):
         layout.setSpacing(8)
 
         # 图片属性分组
-        image_group = QGroupBox(self.tr.tr('properties_panel.properties'))
+        image_group = QGroupBox(self.tr.tr("properties_panel.properties"))
         image_layout = QFormLayout()
         image_layout.setSpacing(8)
 
@@ -136,7 +137,7 @@ class PropertiesPanel(QWidget):
         filename_container_layout.setContentsMargins(0, 0, 0, 0)
         filename_container_layout.setSpacing(0)
 
-        self.filename_label = QLabel(self.tr.tr('properties_panel.no_image'))
+        self.filename_label = QLabel(self.tr.tr("properties_panel.no_image"))
         self.filename_label.setWordWrap(False)  # 禁用自动换行
         self.filename_label.setObjectName("propertyValue")
         self.filename_label.setMaximumWidth(180)  # 限制最大宽度（从 160 增加到 180）
@@ -144,31 +145,32 @@ class PropertiesPanel(QWidget):
         self.filename_label.setTextInteractionFlags(Qt.TextSelectableByMouse)  # 允许选择复制
         # 使用省略号模式
         from PySide6.QtWidgets import QSizePolicy
+
         self.filename_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
         filename_container_layout.addWidget(self.filename_label)
 
-        image_layout.addRow(self.tr.tr('properties_panel.filename'), filename_container)
+        image_layout.addRow(self.tr.tr("properties_panel.filename"), filename_container)
 
         # 图层信息
         self.layer_label = QLabel("-")
         self.layer_label.setObjectName("propertyValue")
-        image_layout.addRow(self.tr.tr('properties_panel.layer'), self.layer_label)
+        image_layout.addRow(self.tr.tr("properties_panel.layer"), self.layer_label)
 
         # 图片尺寸
         self.size_label = QLabel("-")
         self.size_label.setObjectName("propertyValue")
-        image_layout.addRow(self.tr.tr('properties_panel.size'), self.size_label)
+        image_layout.addRow(self.tr.tr("properties_panel.size"), self.size_label)
 
         # 文件大小
         self.filesize_label = QLabel("-")
         self.filesize_label.setObjectName("propertyValue")
-        image_layout.addRow(self.tr.tr('properties_panel.filesize'), self.filesize_label)
+        image_layout.addRow(self.tr.tr("properties_panel.filesize"), self.filesize_label)
 
         # 缩放比例
         self.zoom_label = QLabel("-")
         self.zoom_label.setObjectName("propertyValue")
-        image_layout.addRow(self.tr.tr('properties_panel.zoom'), self.zoom_label)
+        image_layout.addRow(self.tr.tr("properties_panel.zoom"), self.zoom_label)
 
         image_group.setLayout(image_layout)
         layout.addWidget(image_group)
@@ -186,7 +188,7 @@ class PropertiesPanel(QWidget):
         layout.setSpacing(8)
 
         # 提示信息（默认显示）
-        self.tool_hint_label = QLabel(self.tr.tr('properties_panel.no_tool'))
+        self.tool_hint_label = QLabel(self.tr.tr("properties_panel.no_tool"))
         self.tool_hint_label.setAlignment(Qt.AlignCenter)
         self.tool_hint_label.setObjectName("toolHint")
         layout.addWidget(self.tool_hint_label)
@@ -200,7 +202,7 @@ class PropertiesPanel(QWidget):
         self.selection_settings = self._create_selection_settings()
         self.selection_settings.setVisible(False)  # 默认隐藏
         layout.addWidget(self.selection_settings)
-        
+
         # 测量工具设置
         self.measure_settings = self._create_measure_settings()
         self.measure_settings.setVisible(False)  # 默认隐藏
@@ -215,14 +217,14 @@ class PropertiesPanel(QWidget):
         """创建画笔工具设置"""
         from PySide6.QtWidgets import QHBoxLayout
 
-        group = QGroupBox(self.tr.tr('properties_panel.basic_settings'))
+        group = QGroupBox(self.tr.tr("properties_panel.basic_settings"))
         layout = QVBoxLayout()
         layout.setSpacing(12)
 
         # 大小设置
         size_layout = QHBoxLayout()
         size_layout.setSpacing(8)
-        size_label = QLabel(self.tr.tr('properties_panel.brush_size', value='').split(':')[0] + ':')
+        size_label = QLabel(self.tr.tr("properties_panel.brush_size", value="").split(":")[0] + ":")
         size_label.setMinimumWidth(40)
         self.brush_size_spinbox = QSpinBox()
         self.brush_size_spinbox.setRange(1, 500)
@@ -235,13 +237,13 @@ class PropertiesPanel(QWidget):
         # 颜色设置
         color_layout = QHBoxLayout()
         color_layout.setSpacing(12)
-        color_label = QLabel(self.tr.tr('properties_panel.brush_color'))
+        color_label = QLabel(self.tr.tr("properties_panel.brush_color"))
         color_label.setMinimumWidth(40)
         color_layout.addWidget(color_label)
 
         self.brush_color_group = QButtonGroup(self)
-        self.brush_black_radio = QRadioButton(self.tr.tr('properties_panel.color_black'))
-        self.brush_white_radio = QRadioButton(self.tr.tr('properties_panel.color_white'))
+        self.brush_black_radio = QRadioButton(self.tr.tr("properties_panel.color_black"))
+        self.brush_white_radio = QRadioButton(self.tr.tr("properties_panel.color_white"))
         self.brush_color_group.addButton(self.brush_black_radio, 0)
         self.brush_color_group.addButton(self.brush_white_radio, 255)
         self.brush_black_radio.setChecked(True)
@@ -265,14 +267,14 @@ class PropertiesPanel(QWidget):
         container_layout.setSpacing(8)
 
         # 基础设置组
-        basic_group = QGroupBox(self.tr.tr('properties_panel.basic_settings'))
+        basic_group = QGroupBox(self.tr.tr("properties_panel.basic_settings"))
         basic_layout = QVBoxLayout()
         basic_layout.setSpacing(12)
 
         # 范围设置
         size_layout = QHBoxLayout()
         size_layout.setSpacing(8)
-        size_label = QLabel(self.tr.tr('properties_panel.selection_size', value='').split(':')[0] + ':')
+        size_label = QLabel(self.tr.tr("properties_panel.selection_size", value="").split(":")[0] + ":")
         size_label.setMinimumWidth(40)
         self.selection_size_spinbox = QSpinBox()
         self.selection_size_spinbox.setRange(1, 500)
@@ -285,13 +287,13 @@ class PropertiesPanel(QWidget):
         # 模式设置
         mode_layout = QHBoxLayout()
         mode_layout.setSpacing(12)
-        mode_label = QLabel(self.tr.tr('properties_panel.selection_mode'))
+        mode_label = QLabel(self.tr.tr("properties_panel.selection_mode"))
         mode_label.setMinimumWidth(40)
         mode_layout.addWidget(mode_label)
 
         self.selection_mode_group = QButtonGroup(self)
-        self.add_mode_radio = QRadioButton(self.tr.tr('properties_panel.mode_add'))
-        self.subtract_mode_radio = QRadioButton(self.tr.tr('properties_panel.mode_subtract'))
+        self.add_mode_radio = QRadioButton(self.tr.tr("properties_panel.mode_add"))
+        self.subtract_mode_radio = QRadioButton(self.tr.tr("properties_panel.mode_subtract"))
         self.selection_mode_group.addButton(self.add_mode_radio, 0)
         self.selection_mode_group.addButton(self.subtract_mode_radio, 1)
         self.add_mode_radio.setChecked(True)
@@ -304,13 +306,13 @@ class PropertiesPanel(QWidget):
         # 选择方式设置
         method_layout = QHBoxLayout()
         method_layout.setSpacing(12)
-        method_label = QLabel(self.tr.tr('properties_panel.selection_method'))
+        method_label = QLabel(self.tr.tr("properties_panel.selection_method"))
         method_label.setMinimumWidth(40)
         method_layout.addWidget(method_label)
 
         self.selection_method_group = QButtonGroup(self)
-        self.brush_method_radio = QRadioButton(self.tr.tr('properties_panel.method_paint'))
-        self.rect_method_radio = QRadioButton(self.tr.tr('properties_panel.method_rect'))
+        self.brush_method_radio = QRadioButton(self.tr.tr("properties_panel.method_paint"))
+        self.rect_method_radio = QRadioButton(self.tr.tr("properties_panel.method_rect"))
         self.selection_method_group.addButton(self.brush_method_radio, 0)
         self.selection_method_group.addButton(self.rect_method_radio, 1)
         self.brush_method_radio.setChecked(True)
@@ -323,16 +325,17 @@ class PropertiesPanel(QWidget):
         # 智能选择设置
         smart_layout = QHBoxLayout()
         smart_layout.setSpacing(8)
-        smart_label = QLabel(self.tr.tr('properties_panel.smart_selection'))
+        smart_label = QLabel(self.tr.tr("properties_panel.smart_selection"))
         smart_label.setMinimumWidth(40)
         smart_layout.addWidget(smart_label)
-        
+
         from ..widgets.toggle_switch import ToggleSwitch
+
         self.smart_selection_switch = ToggleSwitch()
         self.smart_selection_switch.setChecked(False)  # 默认关闭
-        
+
         smart_layout.addWidget(self.smart_selection_switch)
-        
+
         # AI 标识（仅在预处理/原图视图显示）
         self.smart_selection_ai_label = QLabel("AI")
         self.smart_selection_ai_label.setStyleSheet("""
@@ -348,19 +351,19 @@ class PropertiesPanel(QWidget):
         """)
         self.smart_selection_ai_label.setVisible(False)  # 默认隐藏
         smart_layout.addWidget(self.smart_selection_ai_label)
-        
+
         smart_layout.addStretch()
         basic_layout.addLayout(smart_layout)
 
         # 填充选区（两个按钮：黑色和白色）
         fill_layout = QHBoxLayout()
         fill_layout.setSpacing(8)
-        fill_label = QLabel(self.tr.tr('properties_panel.fill_selection'))
+        fill_label = QLabel(self.tr.tr("properties_panel.fill_selection"))
         fill_label.setMinimumWidth(40)
         fill_layout.addWidget(fill_label)
 
-        self.fill_black_button = QPushButton(self.tr.tr('properties_panel.fill_black'))
-        self.fill_white_button = QPushButton(self.tr.tr('properties_panel.fill_white'))
+        self.fill_black_button = QPushButton(self.tr.tr("properties_panel.fill_black"))
+        self.fill_white_button = QPushButton(self.tr.tr("properties_panel.fill_white"))
         self.fill_black_button.setFixedWidth(60)
         self.fill_white_button.setFixedWidth(60)
         fill_layout.addWidget(self.fill_black_button)
@@ -372,15 +375,15 @@ class PropertiesPanel(QWidget):
         container_layout.addWidget(basic_group)
 
         # 快捷操作组
-        actions_group = QGroupBox(self.tr.tr('properties_panel.quick_actions'))
+        actions_group = QGroupBox(self.tr.tr("properties_panel.quick_actions"))
         actions_layout = QVBoxLayout()
         actions_layout.setSpacing(8)
 
         # 第一行按钮
         row1_layout = QHBoxLayout()
         row1_layout.setSpacing(8)
-        self.deselect_button = QPushButton(self.tr.tr('properties_panel.deselect'))
-        self.invert_button = QPushButton(self.tr.tr('properties_panel.invert'))
+        self.deselect_button = QPushButton(self.tr.tr("properties_panel.deselect"))
+        self.invert_button = QPushButton(self.tr.tr("properties_panel.invert"))
         row1_layout.addWidget(self.deselect_button)
         row1_layout.addWidget(self.invert_button)
         actions_layout.addLayout(row1_layout)
@@ -388,8 +391,8 @@ class PropertiesPanel(QWidget):
         # 第二行按钮：填充选区空洞
         row2_layout = QHBoxLayout()
         row2_layout.setSpacing(8)
-        self.fill_selection_holes_button = QPushButton(self.tr.tr('properties_panel.fill_selection_holes'))
-        self.fill_selection_holes_button.setToolTip(self.tr.tr('properties_panel.fill_selection_holes_tooltip'))
+        self.fill_selection_holes_button = QPushButton(self.tr.tr("properties_panel.fill_selection_holes"))
+        self.fill_selection_holes_button.setToolTip(self.tr.tr("properties_panel.fill_selection_holes_tooltip"))
         row2_layout.addWidget(self.fill_selection_holes_button)
         row2_layout.addStretch()  # 右侧留空
         actions_layout.addLayout(row2_layout)
@@ -398,18 +401,18 @@ class PropertiesPanel(QWidget):
         container_layout.addWidget(actions_group)
 
         return container
-    
+
     def _create_measure_settings(self) -> QGroupBox:
         """创建测量工具设置"""
-        group = QGroupBox(self.tr.tr('properties_panel.quick_actions'))
+        group = QGroupBox(self.tr.tr("properties_panel.quick_actions"))
         layout = QVBoxLayout()
         layout.setSpacing(8)
-        
+
         # 清除测量按钮
-        self.clear_measure_button = QPushButton(self.tr.tr('properties_panel.clear_measure'))
-        self.clear_measure_button.setToolTip(self.tr.tr('properties_panel.clear_measure_tooltip'))
+        self.clear_measure_button = QPushButton(self.tr.tr("properties_panel.clear_measure"))
+        self.clear_measure_button.setToolTip(self.tr.tr("properties_panel.clear_measure_tooltip"))
         layout.addWidget(self.clear_measure_button)
-        
+
         group.setLayout(layout)
         return group
 
@@ -441,11 +444,11 @@ class PropertiesPanel(QWidget):
             self.filename_label.setText(display_name)
             self.filename_label.setToolTip(filename)  # 完整文件名显示在工具提示中
         else:
-            self.filename_label.setText(self.tr.tr('properties_panel.unsaved'))
+            self.filename_label.setText(self.tr.tr("properties_panel.unsaved"))
             self.filename_label.setToolTip("")
 
         # 图层信息（默认显示根图层）
-        self.layer_label.setText(self.tr.tr('properties_panel.root_layer'))
+        self.layer_label.setText(self.tr.tr("properties_panel.root_layer"))
 
         # 图片尺寸
         size_text = f"{image_data.width} x {image_data.height} {self.tr.tr('properties_panel.pixels')}"
@@ -489,7 +492,7 @@ class PropertiesPanel(QWidget):
 
     def clear_info(self):
         """清除信息（未加载图片时）"""
-        self.filename_label.setText(self.tr.tr('properties_panel.no_image'))
+        self.filename_label.setText(self.tr.tr("properties_panel.no_image"))
         self.layer_label.setText("-")
         self.size_label.setText("-")
         self.filesize_label.setText("-")
@@ -510,20 +513,20 @@ class PropertiesPanel(QWidget):
         self.brush_settings.setVisible(False)
         self.selection_settings.setVisible(True)
         self.measure_settings.setVisible(False)
-    
+
     def update_smart_selection_ai_label(self, view_mode: str, smart_enabled: bool):
         """
         更新智能选择AI标识的显示状态
-        
+
         Args:
             view_mode: 当前视图模式 ('original', 'preprocessed', 'binary')
             smart_enabled: 智能选择是否开启
         """
         # 只在预处理或原图视图且智能选择开启时显示AI标识
-        should_show = (view_mode in ['original', 'preprocessed']) and smart_enabled
-        if hasattr(self, 'smart_selection_ai_label'):
+        should_show = (view_mode in ["original", "preprocessed"]) and smart_enabled
+        if hasattr(self, "smart_selection_ai_label"):
             self.smart_selection_ai_label.setVisible(should_show)
-    
+
     def show_measure_settings(self):
         """显示测量工具设置，隐藏其他"""
         self.tab_widget.setCurrentIndex(1)  # 切换到"工具"页
@@ -537,7 +540,7 @@ class PropertiesPanel(QWidget):
         # 切换回"属性"页
         self.tab_widget.setCurrentIndex(0)
         # 隐藏所有工具设置
-        self.tool_hint_label.setText(self.tr.tr('properties_panel.no_settings'))
+        self.tool_hint_label.setText(self.tr.tr("properties_panel.no_settings"))
         self.tool_hint_label.setVisible(True)
         self.brush_settings.setVisible(False)
         self.selection_settings.setVisible(False)
@@ -559,4 +562,3 @@ class PropertiesPanel(QWidget):
             return f"{size_bytes / 1024:.1f} KB"
         else:
             return f"{size_bytes / (1024 * 1024):.1f} MB"
-

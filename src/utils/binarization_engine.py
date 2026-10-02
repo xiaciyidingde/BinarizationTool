@@ -4,7 +4,6 @@
 提供图像预处理和多种二值化算法。
 """
 
-
 import cv2
 import numpy as np
 
@@ -18,27 +17,27 @@ class ImageEnhancer:
     def apply_histogram_enhancement(img, equalize=False, clahe=False):
         """
         直方图增强
-        
+
         支持灰度图和 RGB 图像
         """
         if not equalize and not clahe:
             return img
-        
+
         # 检查是否为 RGB 图像
         is_rgb = len(img.shape) == 3 and img.shape[2] == 3
-        
+
         if is_rgb:
             # RGB 图像：在 YCrCb 色彩空间的 Y 通道上进行直方图增强
             img_uint8 = img.astype(np.uint8)
             ycrcb = cv2.cvtColor(img_uint8, cv2.COLOR_RGB2YCrCb)
             y_channel = ycrcb[:, :, 0]
-            
+
             if equalize:
                 y_channel = cv2.equalizeHist(y_channel)
             if clahe:
                 clahe_obj = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
                 y_channel = clahe_obj.apply(y_channel)
-            
+
             ycrcb[:, :, 0] = y_channel
             img = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2RGB).astype(np.float32)
         else:
@@ -48,7 +47,7 @@ class ImageEnhancer:
             if clahe:
                 clahe_obj = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
                 img = clahe_obj.apply(img.astype(np.uint8)).astype(np.float32)
-        
+
         return img
 
     @staticmethod
@@ -58,12 +57,12 @@ class ImageEnhancer:
         if local_contrast > 0:
             sigma = local_contrast * 0.5
             gaussian = cv2.GaussianBlur(img, (0, 0), sigma)
-            img = cv2.addWeighted(img, 1 + local_contrast/50, gaussian, -local_contrast/50, 0)
+            img = cv2.addWeighted(img, 1 + local_contrast / 50, gaussian, -local_contrast / 50, 0)
 
         # 细节增强
         if detail_enhance > 0:
             blur = cv2.GaussianBlur(img, (0, 0), 3)
-            detail = cv2.addWeighted(img, 1.0 + detail_enhance/50, blur, -detail_enhance/50, 0)
+            detail = cv2.addWeighted(img, 1.0 + detail_enhance / 50, blur, -detail_enhance / 50, 0)
             img = cv2.addWeighted(img, 0.7, detail, 0.3, 0)
 
         # 边缘增强
@@ -72,7 +71,7 @@ class ImageEnhancer:
             sobely = cv2.Sobel(img, cv2.CV_32F, 0, 1, ksize=3)
             gradient = cv2.magnitude(sobelx, sobely)
             gradient = cv2.normalize(gradient, None, 0, 255, cv2.NORM_MINMAX)
-            img = cv2.addWeighted(img, 1.0, gradient, edge_enhance/100.0, 0)
+            img = cv2.addWeighted(img, 1.0, gradient, edge_enhance / 100.0, 0)
 
         return img
 
@@ -114,18 +113,14 @@ class ImageEnhancer:
             # 检查是否为 RGB 图像
             if len(img.shape) == 3 and img.shape[2] == 3:
                 # RGB 图像使用彩色降噪
-                return cv2.fastNlMeansDenoisingColored(img_uint8,
-                                                      None,
-                                                      h=h,
-                                                      hColor=h,
-                                                      templateWindowSize=7,
-                                                      searchWindowSize=21).astype(np.float32)
+                return cv2.fastNlMeansDenoisingColored(
+                    img_uint8, None, h=h, hColor=h, templateWindowSize=7, searchWindowSize=21
+                ).astype(np.float32)
             else:
                 # 灰度图使用普通降噪
-                return cv2.fastNlMeansDenoising(img_uint8,
-                                              h=h,
-                                              templateWindowSize=7,
-                                              searchWindowSize=21).astype(np.float32)
+                return cv2.fastNlMeansDenoising(img_uint8, h=h, templateWindowSize=7, searchWindowSize=21).astype(
+                    np.float32
+                )
         elif method == 4:  # 形态学降噪 - 开运算（去除小的孤立点）
             kernel_size = int(strength / 20) + 1
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
@@ -166,17 +161,11 @@ class ImageEnhancer:
 
         # 根据锐化强度选择不同的核
         if sharpen < 33:
-            kernel = np.array([[-1, -1, -1],
-                             [-1, 9, -1],
-                             [-1, -1, -1]]) * (sharpen / 100.0)
+            kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]]) * (sharpen / 100.0)
         elif sharpen < 66:
-            kernel = np.array([[-2, -2, -2],
-                             [-2, 17, -2],
-                             [-2, -2, -2]]) * (sharpen / 100.0)
+            kernel = np.array([[-2, -2, -2], [-2, 17, -2], [-2, -2, -2]]) * (sharpen / 100.0)
         else:
-            kernel = np.array([[-3, -3, -3],
-                             [-3, 25, -3],
-                             [-3, -3, -3]]) * (sharpen / 100.0)
+            kernel = np.array([[-3, -3, -3], [-3, 25, -3], [-3, -3, -3]]) * (sharpen / 100.0)
 
         return cv2.filter2D(img, -1, kernel)
 
@@ -281,15 +270,15 @@ class BinarizationEngine:
 
         # 默认返回原图
         return image
-    
+
     @staticmethod
     def ensure_rgb(image: np.ndarray) -> np.ndarray:
         """
         确保图像是 RGB 格式（3通道）
-        
+
         Args:
             image: 输入图片，可以是灰度图 (H, W) 或彩色图 (H, W, 3/4)
-            
+
         Returns:
             RGB 图片，形状为 (H, W, 3)，dtype=uint8
         """
@@ -303,7 +292,7 @@ class BinarizationEngine:
             elif image.shape[2] == 3:
                 # 已经是 RGB
                 return image
-        
+
         # 默认返回原图
         return image
 
@@ -386,10 +375,7 @@ class BinarizationEngine:
                 return np.array([[0]])
             else:
                 smaller = generate_bayer_matrix(n // 2)
-                return np.block([
-                    [4 * smaller + 0, 4 * smaller + 2],
-                    [4 * smaller + 3, 4 * smaller + 1]
-                ])
+                return np.block([[4 * smaller + 0, 4 * smaller + 2], [4 * smaller + 3, 4 * smaller + 1]])
 
         # 确保 matrix_size 是 2 的幂
         matrix_size = max(2, min(16, matrix_size))
@@ -461,37 +447,31 @@ class BinarizationEngine:
 
         # 直方图增强
         img = enhancer.apply_histogram_enhancement(
-            img,
-            equalize=kwargs.get('equalize', False),
-            clahe=kwargs.get('clahe', False)
+            img, equalize=kwargs.get("equalize", False), clahe=kwargs.get("clahe", False)
         )
 
         # 局部增强
         img = enhancer.apply_local_enhancement(
             img,
-            local_contrast=kwargs.get('local_contrast', 0),
-            detail_enhance=kwargs.get('detail_enhance', 0),
-            edge_enhance=kwargs.get('edge_enhance', 0)
+            local_contrast=kwargs.get("local_contrast", 0),
+            detail_enhance=kwargs.get("detail_enhance", 0),
+            edge_enhance=kwargs.get("edge_enhance", 0),
         )
 
         # 平滑（简单的高斯模糊）
-        smooth_strength = kwargs.get('smooth', 0)
+        smooth_strength = kwargs.get("smooth", 0)
         if smooth_strength > 0:
             kernel_size = int(smooth_strength / 10) * 2 + 3
             sigma = smooth_strength / 20.0
             img = cv2.GaussianBlur(img, (kernel_size, kernel_size), sigma)
 
         # 降噪（高级降噪方法）
-        img = enhancer.apply_denoise(
-            img,
-            method=kwargs.get('denoise_method', 0),
-            strength=kwargs.get('denoise', 0)
-        )
+        img = enhancer.apply_denoise(img, method=kwargs.get("denoise_method", 0), strength=kwargs.get("denoise", 0))
 
         # RGB 通道调整
-        red_adjust = kwargs.get('red_channel', 0)
-        green_adjust = kwargs.get('green_channel', 0)
-        blue_adjust = kwargs.get('blue_channel', 0)
+        red_adjust = kwargs.get("red_channel", 0)
+        green_adjust = kwargs.get("green_channel", 0)
+        blue_adjust = kwargs.get("blue_channel", 0)
 
         if red_adjust != 0 or green_adjust != 0 or blue_adjust != 0:
             # 确保图像是彩色的（如果是灰度图，转换为 RGB）
@@ -508,36 +488,31 @@ class BinarizationEngine:
 
         # 基础调整
         img = enhancer.apply_basic_adjustments(
-            img,
-            exposure=kwargs.get('exposure', 0),
-            contrast=kwargs.get('contrast', 0),
-            gamma=kwargs.get('gamma', 1.0)
+            img, exposure=kwargs.get("exposure", 0), contrast=kwargs.get("contrast", 0), gamma=kwargs.get("gamma", 1.0)
         )
 
         # 边缘检测
         img = enhancer.apply_edge_detection(
             img,
-            mode=kwargs.get('edge_mode', 0),
-            strength=kwargs.get('edge_strength', 50),
-            threshold2=kwargs.get('edge_threshold', 150)
+            mode=kwargs.get("edge_mode", 0),
+            strength=kwargs.get("edge_strength", 50),
+            threshold2=kwargs.get("edge_threshold", 150),
         )
 
         # 锐化
-        img = enhancer.apply_sharpening(
-            img,
-            sharpen=kwargs.get('sharpen', 0)
-        )
+        img = enhancer.apply_sharpening(img, sharpen=kwargs.get("sharpen", 0))
 
         # 裁剪到有效范围
         img = np.clip(img, 0, 255)
         result = img.astype(np.uint8)
-        
+
         # 确保返回 RGB 格式
         return BinarizationEngine.ensure_rgb(result)
 
     @staticmethod
-    def apply_threshold(image: np.ndarray, threshold_method: int = 1,
-                       threshold_value: int = 150, **kwargs) -> np.ndarray:
+    def apply_threshold(
+        image: np.ndarray, threshold_method: int = 1, threshold_value: int = 150, **kwargs
+    ) -> np.ndarray:
         """
         应用阈值处理（支持多种方法）
 
@@ -574,17 +549,17 @@ class BinarizationEngine:
 
         # 抖动算法 (7-9)
         if threshold_method == 7:  # Floyd-Steinberg 抖动
-            strength = kwargs.get('dither_strength', 100) / 100.0
+            strength = kwargs.get("dither_strength", 100) / 100.0
             binary = BinarizationEngine.apply_floyd_steinberg(img, strength)
             return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 8:  # Ordered 抖动
-            matrix_size = kwargs.get('dither_matrix_size', 8)
+            matrix_size = kwargs.get("dither_matrix_size", 8)
             binary = BinarizationEngine.apply_ordered_dithering(img, matrix_size)
             return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 9:  # Atkinson 抖动
-            strength = kwargs.get('dither_strength', 100) / 100.0
+            strength = kwargs.get("dither_strength", 100) / 100.0
             binary = BinarizationEngine.apply_atkinson(img, strength)
             return BinarizationEngine.ensure_rgb(binary)
 
@@ -595,41 +570,31 @@ class BinarizationEngine:
 
         elif threshold_method == 1:  # 自适应阈值
             # 验证块大小参数
-            block_size = BinarizationEngine._validate_window_size(
-                kwargs.get('block_size'),
-                img.shape
-            )
+            block_size = BinarizationEngine._validate_window_size(kwargs.get("block_size"), img.shape)
 
             # 优化自适应阈值参数
             C = max(0, threshold_value / 10 - 10)
-            binary = cv2.adaptiveThreshold(img, 255,
-                                       cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                       cv2.THRESH_BINARY,
-                                       block_size, C)
+            binary = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block_size, C)
             return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 2:  # Otsu阈值
-            binary = cv2.threshold(img, 0, 255,
-                               cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            binary = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
             return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 3:  # Sauvola阈值
             # 验证窗口大小参数
-            window = BinarizationEngine._validate_window_size(
-                kwargs.get('window_size'),
-                img.shape
-            )
+            window = BinarizationEngine._validate_window_size(kwargs.get("window_size"), img.shape)
 
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
-            mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
+            mean_square = cv2.boxFilter(img.astype(float) ** 2, -1, (window, window))
             # 使用 np.maximum 确保方差非负，避免浮点数精度问题
             variance = np.maximum(mean_square - mean**2, 0)
             std = np.sqrt(variance)
 
             # Sauvola参数（可自定义）
-            k = kwargs.get('sauvola_k', 0.2)
-            R = kwargs.get('sauvola_r', 128)
+            k = kwargs.get("sauvola_k", 0.2)
+            R = kwargs.get("sauvola_r", 128)
             threshold = mean * (1 + k * ((std / R) - 1))
 
             binary = np.where(img >= threshold, 255, 0).astype(np.uint8)
@@ -637,43 +602,37 @@ class BinarizationEngine:
 
         elif threshold_method == 4:  # Wolf阈值
             # 验证窗口大小参数
-            window = BinarizationEngine._validate_window_size(
-                kwargs.get('window_size'),
-                img.shape
-            )
+            window = BinarizationEngine._validate_window_size(kwargs.get("window_size"), img.shape)
 
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
-            mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
+            mean_square = cv2.boxFilter(img.astype(float) ** 2, -1, (window, window))
             # 使用 np.maximum 确保方差非负，避免浮点数精度问题
             variance = np.maximum(mean_square - mean**2, 0)
             std = np.sqrt(variance)
 
             # Wolf参数（可自定义）
-            k = kwargs.get('wolf_k', 0.5)
+            k = kwargs.get("wolf_k", 0.5)
             R = 128
             min_std = 2
-            threshold = mean - k * std * (1 - std/(R * np.clip(std, min_std, None)))
+            threshold = mean - k * std * (1 - std / (R * np.clip(std, min_std, None)))
 
             binary = np.where(img >= threshold, 255, 0).astype(np.uint8)
             return BinarizationEngine.ensure_rgb(binary)
 
         elif threshold_method == 5:  # Nick阈值
             # 验证窗口大小参数
-            window = BinarizationEngine._validate_window_size(
-                kwargs.get('window_size'),
-                img.shape
-            )
+            window = BinarizationEngine._validate_window_size(kwargs.get("window_size"), img.shape)
 
             # 计算局部均值和标准差
             mean = cv2.boxFilter(img.astype(float), -1, (window, window))
-            mean_square = cv2.boxFilter(img.astype(float)**2, -1, (window, window))
+            mean_square = cv2.boxFilter(img.astype(float) ** 2, -1, (window, window))
             # 使用 np.maximum 确保方差非负，避免浮点数精度问题
             variance = np.maximum(mean_square - mean**2, 0)
             std = np.sqrt(variance)
 
             # Nick参数（可自定义）
-            k = kwargs.get('nick_k', -0.1)
+            k = kwargs.get("nick_k", -0.1)
             threshold = mean + k * std
 
             binary = np.where(img >= threshold, 255, 0).astype(np.uint8)
@@ -681,10 +640,7 @@ class BinarizationEngine:
 
         elif threshold_method == 6:  # Bernsen阈值
             # 验证窗口大小参数
-            window = BinarizationEngine._validate_window_size(
-                kwargs.get('window_size'),
-                img.shape
-            )
+            window = BinarizationEngine._validate_window_size(kwargs.get("window_size"), img.shape)
 
             # 计算局部最大值和最小值
             kernel = np.ones((window, window), np.uint8)
@@ -692,7 +648,7 @@ class BinarizationEngine:
             local_min = cv2.erode(img, kernel)
 
             # Bernsen参数（可自定义）
-            contrast_threshold = kwargs.get('bernsen_contrast', 15)
+            contrast_threshold = kwargs.get("bernsen_contrast", 15)
             local_contrast = local_max - local_min
             local_mean = (local_max + local_min) / 2
 

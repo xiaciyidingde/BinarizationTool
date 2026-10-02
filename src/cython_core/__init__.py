@@ -16,10 +16,10 @@ root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 
 # 动态检测 DLL 文件（支持不同 Python 版本和操作系统）
 dll_patterns = [
-    'dithering.cp3*.pyd',      # Windows: Python 3.x
-    'dithering.cp3*.so',       # Linux/Mac: Python 3.x
-    'contour_extractor.cp3*.pyd',  # Windows: contour_extractor
-    'contour_extractor.cp3*.so',   # Linux/Mac: contour_extractor
+    "dithering.cp3*.pyd",  # Windows: Python 3.x
+    "dithering.cp3*.so",  # Linux/Mac: Python 3.x
+    "contour_extractor.cp3*.pyd",  # Windows: contour_extractor
+    "contour_extractor.cp3*.so",  # Linux/Mac: contour_extractor
 ]
 
 # 按优先级查找：当前目录 -> 根目录
@@ -40,15 +40,16 @@ from .dithering import atkinson, floyd_steinberg, ordered_dithering
 # 尝试导入 contour_extractor（可选）
 try:
     from . import contour_extractor
+
     __all__ = [
-        'floyd_steinberg',
-        'atkinson',
-        'ordered_dithering',
-        'contour_extractor',
+        "floyd_steinberg",
+        "atkinson",
+        "ordered_dithering",
+        "contour_extractor",
     ]
 except ImportError:
     __all__ = [
-        'floyd_steinberg',
-        'atkinson',
-        'ordered_dithering',
+        "floyd_steinberg",
+        "atkinson",
+        "ordered_dithering",
     ]

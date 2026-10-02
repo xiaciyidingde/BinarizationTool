@@ -6,7 +6,7 @@ from .binarization_engine import BinarizationEngine
 from .file_io import load_image, save_image
 
 __all__ = [
-    'BinarizationEngine',
-    'load_image',
-    'save_image',
+    "BinarizationEngine",
+    "load_image",
+    "save_image",
 ]

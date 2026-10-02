@@ -12,12 +12,12 @@ from .tile_cache import TileCache
 from .view_transform import ViewTransform
 
 __all__ = [
-    'ViewTransform',
-    'ImageData',
-    'BrushStroke',
-    'BrushTool',
-    'CropTool',
-    'SelectionTool',
-    'HistoryManager',
-    'TileCache',
+    "ViewTransform",
+    "ImageData",
+    "BrushStroke",
+    "BrushTool",
+    "CropTool",
+    "SelectionTool",
+    "HistoryManager",
+    "TileCache",
 ]

@@ -44,10 +44,7 @@ class PreprocessWorker(QThread):
                 return
 
             # 预处理
-            preprocessed = BinarizationEngine.apply_preprocess(
-                self.original_pixels,
-                **self.preprocess_params
-            )
+            preprocessed = BinarizationEngine.apply_preprocess(self.original_pixels, **self.preprocess_params)
 
             # 检查是否已取消
             if self._is_cancelled:

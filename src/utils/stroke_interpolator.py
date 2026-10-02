@@ -30,10 +30,9 @@ class StrokeInterpolator:
         return (dx * dx + dy * dy) ** 0.5
 
     @staticmethod
-    def interpolate_points(start: tuple[int, int],
-                          end: tuple[int, int],
-                          size: float,
-                          spacing: float) -> list[tuple[int, int]]:
+    def interpolate_points(
+        start: tuple[int, int], end: tuple[int, int], size: float, spacing: float
+    ) -> list[tuple[int, int]]:
         """
         在两点之间插值生成中间点
 
@@ -71,10 +70,9 @@ class StrokeInterpolator:
         return points
 
     @staticmethod
-    def calculate_last_interpolated_position(start: tuple[int, int],
-                                            end: tuple[int, int],
-                                            size: float,
-                                            spacing: float) -> tuple[int, int]:
+    def calculate_last_interpolated_position(
+        start: tuple[int, int], end: tuple[int, int], size: float, spacing: float
+    ) -> tuple[int, int]:
         """
         计算最后一个插值点的位置（用于精确间距控制）
 

@@ -4,7 +4,6 @@
 存储和管理二值化图片的像素数据，支持临时图层机制用于实时绘制预览。
 """
 
-
 import numpy as np
 
 
@@ -53,11 +52,11 @@ class ImageData:
         self.selection_mask: np.ndarray | None = None  # shape: (H, W), dtype=bool
 
         # 视图模式：'original', 'preprocessed', 'binary'
-        self.view_mode: str = 'binary'
+        self.view_mode: str = "binary"
 
         # 预处理结果缓存
         self.preprocessed_pixels: np.ndarray | None = None
-        
+
         # 用户图层列表
         self.user_layers: list = []  # list[UserLayer]
 
@@ -144,7 +143,7 @@ class ImageData:
         临时图层基于当前显示的合成结果，用于在绘制过程中提供实时预览。
         临时编辑掩码用于记录本次笔画中实际被编辑的像素。
         这遵循 Photoshop 的行为模式。
-        
+
         Args:
             initial_pixels: 初始像素数据（可选）。如果提供，使用该数据；否则使用当前合成结果。
         """
@@ -187,7 +186,7 @@ class ImageData:
         self.temp_layer = None
         self.temp_edit_mask = None
 
-    def crop(self, x: int, y: int, width: int, height: int) -> 'ImageData':
+    def crop(self, x: int, y: int, width: int, height: int) -> "ImageData":
         """
         裁剪图片（保留选中区域，删除其余部分）
 
@@ -207,8 +206,8 @@ class ImageData:
         height = max(1, min(height, self.height - y))
 
         # 裁剪像素数据
-        cropped_pixels = self.pixels[y:y+height, x:x+width].copy()
-        cropped_original = self.original_pixels[y:y+height, x:x+width].copy()
+        cropped_pixels = self.pixels[y : y + height, x : x + width].copy()
+        cropped_original = self.original_pixels[y : y + height, x : x + width].copy()
 
         return ImageData(cropped_pixels, cropped_original)
 
@@ -231,12 +230,12 @@ class ImageData:
         height = max(1, min(height, self.height - y))
 
         # 裁剪所有图层
-        self.pixels = self.pixels[y:y+height, x:x+width].copy()
-        self.original_pixels = self.original_pixels[y:y+height, x:x+width].copy()
+        self.pixels = self.pixels[y : y + height, x : x + width].copy()
+        self.original_pixels = self.original_pixels[y : y + height, x : x + width].copy()
 
         if self.edit_mask is not None:
-            self.edit_mask = self.edit_mask[y:y+height, x:x+width].copy()
-            self.edit_values = self.edit_values[y:y+height, x:x+width].copy()
+            self.edit_mask = self.edit_mask[y : y + height, x : x + width].copy()
+            self.edit_values = self.edit_values[y : y + height, x : x + width].copy()
 
         # 更新尺寸（支持RGB格式）
         self.height, self.width = self.pixels.shape[:2]
@@ -247,7 +246,7 @@ class ImageData:
         # 清除选区（裁剪后选区不再有效）
         self.selection_mask = None
 
-    def copy(self) -> 'ImageData':
+    def copy(self) -> "ImageData":
         """
         深拷贝图片数据
 
@@ -271,7 +270,6 @@ class ImageData:
         if self.preprocessed_pixels is not None:
             new_image.preprocessed_pixels = self.preprocessed_pixels.copy()
         # 复制用户图层
-        from .user_layer import UserLayer
         new_image.user_layers = [layer.copy() for layer in self.user_layers]
         return new_image
 
@@ -287,9 +285,9 @@ class ImageData:
         Returns:
             当前像素数据（可能是副本）
         """
-        if self.view_mode == 'original':
+        if self.view_mode == "original":
             return self.original_pixels
-        elif self.view_mode == 'preprocessed':
+        elif self.view_mode == "preprocessed":
             if self.preprocessed_pixels is not None:
                 return self.preprocessed_pixels
             else:
@@ -340,7 +338,7 @@ class ImageData:
         Args:
             mode: 'original', 'preprocessed', 或 'binary'
         """
-        if mode not in ['original', 'preprocessed', 'binary']:
+        if mode not in ["original", "preprocessed", "binary"]:
             raise ValueError(f"Invalid view mode: {mode}")
         self.view_mode = mode
 
@@ -356,16 +354,16 @@ class ImageData:
     def invalidate_preprocessed_cache(self):
         """使预处理缓存失效"""
         self.preprocessed_pixels = None
-    
+
     def has_selection(self) -> bool:
         """
         检查是否有选区
-        
+
         Returns:
             True 如果有选区，否则 False
         """
         return self.selection_mask is not None and self.selection_mask.any()
-    
+
     def clear_selection(self):
         """清除选区"""
         self.selection_mask = None

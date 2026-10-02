@@ -15,6 +15,7 @@ class AnimationConfig:
 
     统一管理所有动画的启用/禁用状态
     """
+
     _instance = None
 
     def __new__(cls):
@@ -52,7 +53,7 @@ class RotatableWidget(QObject):
         self._original_pixmap = None
 
         # 保存原始图标
-        if hasattr(widget, 'icon') and not widget.icon().isNull():
+        if hasattr(widget, "icon") and not widget.icon().isNull():
             self._original_pixmap = widget.icon().pixmap(widget.iconSize())
 
     def get_rotation(self):
@@ -153,7 +154,9 @@ class RotationAnimation:
         self.animation.start()
 
 
-def create_rotation_animation(widget: QWidget, duration: int = 300, angle: float = 360.0, enabled: bool = True) -> RotationAnimation:
+def create_rotation_animation(
+    widget: QWidget, duration: int = 300, angle: float = 360.0, enabled: bool = True
+) -> RotationAnimation:
     """
     快速创建旋转动画
 
@@ -197,14 +200,17 @@ def is_global_animation_enabled() -> bool:
 
 class FadeAnimation:
     """淡入淡出动画类（预留，以后实现）"""
+
     pass
 
 
 class ScaleAnimation:
     """缩放动画类（预留，以后实现）"""
+
     pass
 
 
 class SlideAnimation:
     """滑动动画类（预留，以后实现）"""
+
     pass

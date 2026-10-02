@@ -15,7 +15,7 @@ class CustomComboBoxDelegate(QStyledItemDelegate):
     def paint(self, painter, option, index):
         """绘制项目"""
         from PySide6.QtWidgets import QApplication
-        
+
         # 如果是分隔线，绘制一条线
         if index.data(Qt.AccessibleDescriptionRole) == "separator":
             painter.save()
@@ -29,7 +29,7 @@ class CustomComboBoxDelegate(QStyledItemDelegate):
         app = QApplication.instance()
         stylesheet = app.styleSheet() if app else ""
         is_dark = "background-color: #2a2a2a" in stylesheet or "background-color: #1e1e1e" in stylesheet
-        
+
         # 绘制背景
         if option.state & QStyle.State_Selected:
             # 选中时使用蓝色背景
@@ -109,5 +109,3 @@ class CustomComboBox(QComboBox):
 
             # 设置弹出框宽度与下拉框一致
             popup.window().setFixedWidth(self.width())
-
-

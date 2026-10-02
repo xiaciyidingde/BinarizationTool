@@ -1,4 +1,4 @@
-﻿"""
+"""
 快捷键处理模块
 
 统一管理应用程序的快捷键，根据当前工具分发到相应的处理函数。
@@ -61,19 +61,19 @@ class ShortcutHandler:
         # Ctrl+1: 切换到原图模式
         self.view_mode_original = QAction(self.main_window)
         self.view_mode_original.setShortcut("Ctrl+1")
-        self.view_mode_original.triggered.connect(lambda: self._switch_view_mode('original'))
+        self.view_mode_original.triggered.connect(lambda: self._switch_view_mode("original"))
         self.main_window.addAction(self.view_mode_original)
 
         # Ctrl+2: 切换到预处理模式
         self.view_mode_preprocessed = QAction(self.main_window)
         self.view_mode_preprocessed.setShortcut("Ctrl+2")
-        self.view_mode_preprocessed.triggered.connect(lambda: self._switch_view_mode('preprocessed'))
+        self.view_mode_preprocessed.triggered.connect(lambda: self._switch_view_mode("preprocessed"))
         self.main_window.addAction(self.view_mode_preprocessed)
 
         # Ctrl+3: 切换到二值化模式
         self.view_mode_binary = QAction(self.main_window)
         self.view_mode_binary.setShortcut("Ctrl+3")
-        self.view_mode_binary.triggered.connect(lambda: self._switch_view_mode('binary'))
+        self.view_mode_binary.triggered.connect(lambda: self._switch_view_mode("binary"))
         self.main_window.addAction(self.view_mode_binary)
 
         # Tab: 循环切换视图模式
@@ -117,10 +117,8 @@ class ShortcutHandler:
         else:
             self.main_window.properties_panel.brush_white_radio.setChecked(True)
 
-        color_name = self.tr.tr('color.black') if new_color == 0 else self.tr.tr('color.white')
-        self.main_window.statusbar.showMessage(
-            self.tr.tr('message.brush_color', color=color_name)
-        )
+        color_name = self.tr.tr("color.black") if new_color == 0 else self.tr.tr("color.white")
+        self.main_window.statusbar.showMessage(self.tr.tr("message.brush_color", color=color_name))
 
     def _increase_brush_size(self):
         """增大画笔"""
@@ -140,7 +138,7 @@ class ShortcutHandler:
         # 更新属性面板
         self.main_window.properties_panel.brush_size_spinbox.setValue(int(new_size))
 
-        self.main_window.statusbar.showMessage(self.tr.tr('message.brush_size', size=int(new_size)))
+        self.main_window.statusbar.showMessage(self.tr.tr("message.brush_size", size=int(new_size)))
         self.canvas.update()  # 更新光标显示
 
     def _decrease_brush_size(self):
@@ -161,7 +159,7 @@ class ShortcutHandler:
         # 更新属性面板
         self.main_window.properties_panel.brush_size_spinbox.setValue(int(new_size))
 
-        self.main_window.statusbar.showMessage(self.tr.tr('message.brush_size', size=int(new_size)))
+        self.main_window.statusbar.showMessage(self.tr.tr("message.brush_size", size=int(new_size)))
         self.canvas.update()  # 更新光标显示
 
     # ========== 选择工具快捷键 ==========
@@ -181,24 +179,24 @@ class ShortcutHandler:
         else:
             self.main_window.properties_panel.drag_method_radio.setChecked(True)
 
-        method_name = self.tr.tr('selection.rect_select') if new_mode else self.tr.tr('selection.drag_select')
-        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_method', method=method_name))
+        method_name = self.tr.tr("selection.rect_select") if new_mode else self.tr.tr("selection.drag_select")
+        self.main_window.statusbar.showMessage(self.tr.tr("message.selection_method", method=method_name))
         self.canvas.update()  # 更新光标显示
 
     def _toggle_selection_tool_mode(self):
         """切换选择工具模式"""
         current_mode = self.canvas.selection_tool.selection_mode
-        new_mode = 'subtract' if current_mode == 'add' else 'add'
+        new_mode = "subtract" if current_mode == "add" else "add"
         self.canvas.selection_tool.selection_mode = new_mode
 
         # 更新属性面板
-        if new_mode == 'add':
+        if new_mode == "add":
             self.main_window.properties_panel.add_mode_radio.setChecked(True)
         else:
             self.main_window.properties_panel.subtract_mode_radio.setChecked(True)
 
-        mode_name = self.tr.tr('mode.add') if new_mode == 'add' else self.tr.tr('mode.subtract')
-        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_mode', mode=mode_name))
+        mode_name = self.tr.tr("mode.add") if new_mode == "add" else self.tr.tr("mode.subtract")
+        self.main_window.statusbar.showMessage(self.tr.tr("message.selection_mode", mode=mode_name))
         self.canvas.update()  # 更新光标显示
 
     def _increase_selection_tool_size(self):
@@ -219,7 +217,7 @@ class ShortcutHandler:
         # 更新属性面板
         self.main_window.properties_panel.selection_size_spinbox.setValue(int(new_size))
 
-        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_size', size=int(new_size)))
+        self.main_window.statusbar.showMessage(self.tr.tr("message.selection_size", size=int(new_size)))
         self.canvas.update()  # 更新光标显示
 
     def _decrease_selection_tool_size(self):
@@ -240,7 +238,7 @@ class ShortcutHandler:
         # 更新属性面板
         self.main_window.properties_panel.selection_size_spinbox.setValue(int(new_size))
 
-        self.main_window.statusbar.showMessage(self.tr.tr('message.selection_size', size=int(new_size)))
+        self.main_window.statusbar.showMessage(self.tr.tr("message.selection_size", size=int(new_size)))
         self.canvas.update()  # 更新光标显示
 
     # ========== 视图模式切换快捷键 ==========
@@ -270,7 +268,7 @@ class ShortcutHandler:
         current_mode = view_switcher.get_current_mode()
 
         # 定义循环顺序
-        mode_cycle = ['original', 'preprocessed', 'binary']
+        mode_cycle = ["original", "preprocessed", "binary"]
         current_index = mode_cycle.index(current_mode)
         next_index = (current_index + 1) % len(mode_cycle)
         next_mode = mode_cycle[next_index]
