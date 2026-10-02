@@ -7,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/badge/版本-1.6.3.0-blue.svg" alt="版本">
   <img src="https://img.shields.io/badge/平台-多平台支持-green.svg" alt="平台">
-  <img src="https://img.shields.io/badge/Python-3.8+-yellow.svg" alt="Python">
+  <img src="https://img.shields.io/badge/Python-3.12+-yellow.svg" alt="Python">
   <img src="https://img.shields.io/badge/许可证-CC%20BY--NC--SA%204.0-orange.svg" alt="许可证">
 </p>
 
@@ -160,7 +160,7 @@ pip install modelscope huggingface-hub
 
 ### 系统要求
 
-- Python 3.8+
+- Python 3.12+（项目使用 PEP 604 类型语法，`pyproject.toml` 中要求 `>=3.12`）
 - Windows / Linux / macOS
 - C 编译器（用于编译 Cython 扩展）
 

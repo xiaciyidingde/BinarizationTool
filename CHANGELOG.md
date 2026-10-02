@@ -2,6 +2,12 @@
 
 ## [v1.6.3.0] - 2026-10-02
 
+### 新增功能
+- **CI 测试与 lint 门禁**（`.github/workflows/tests.yml`）：
+  - push 到 main/develop 及 PR 时自动运行
+  - `lint` 任务：ruff check + ruff format --check
+  - `test` 任务：Ubuntu + Python 3.12，编译 Cython 扩展后在 offscreen Qt 平台运行完整 pytest 套件
+
 ### 重构
 - **二值化方法/边缘模式常量化**：
   - 新增 `ThresholdMethod`（0-9）与 `EdgeDetectionMode`（0-3）常量类，取代散落在引擎、二值化面板和主窗口中的魔法数字
@@ -9,6 +15,9 @@
 - **图层重叠计算去重**：
   - 新增 `get_layer_overlap()` 辅助函数（`LayerOverlap` 命名元组），统一计算图层边界框与图像的有效重叠区域
   - 替换主窗口中 7 处复制粘贴的 `x_start/layer_x_offset/layer_w/...` 计算块（图层提取、图层合成、缓存更新各视图分支）
+
+### 文档
+- **修正 README 中的 Python 版本要求**：3.8+ → 3.12+（代码使用 PEP 604 类型语法，与 `pyproject.toml` 保持一致，徽章同步更新）
 
 ### 修复
 - **下载进度显示**：
