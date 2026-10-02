@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..utils.binarization_engine import EdgeDetectionMode, ThresholdMethod
 from ..utils.translation_manager import get_translator
 from ..widgets.animated_tab_widget import AnimatedTabWidget
 from ..widgets.custom_combobox import CustomComboBox
@@ -305,10 +306,10 @@ class BinarizationPanel(QWidget):
 
         self.edge_mode_combo = CustomComboBox()
         self.edge_mode_combo.setFixedWidth(130)
-        self.edge_mode_combo.addItem(self.tr.tr("binarization_panel.edge_off"), 0)
-        self.edge_mode_combo.addItem(self.tr.tr("binarization_panel.edge_canny"), 1)
-        self.edge_mode_combo.addItem(self.tr.tr("binarization_panel.edge_enhance"), 2)
-        self.edge_mode_combo.addItem(self.tr.tr("binarization_panel.edge_contour"), 3)
+        self.edge_mode_combo.addItem(self.tr.tr("binarization_panel.edge_off"), EdgeDetectionMode.OFF)
+        self.edge_mode_combo.addItem(self.tr.tr("binarization_panel.edge_canny"), EdgeDetectionMode.CANNY)
+        self.edge_mode_combo.addItem(self.tr.tr("binarization_panel.edge_enhance"), EdgeDetectionMode.ENHANCE)
+        self.edge_mode_combo.addItem(self.tr.tr("binarization_panel.edge_contour"), EdgeDetectionMode.CONTOUR)
 
         edge_mode_row.addWidget(self.edge_mode_combo)
 
@@ -453,19 +454,19 @@ class BinarizationPanel(QWidget):
 
         self.method_combo = CustomComboBox()
         self.method_combo.setFixedWidth(130)
-        self.method_combo.addItem(self.tr.tr("binarization_panel.method_fixed"), 0)
-        self.method_combo.addItem(self.tr.tr("binarization_panel.method_adaptive"), 1)
-        self.method_combo.addItem(self.tr.tr("binarization_panel.method_otsu"), 2)
-        self.method_combo.addItem(self.tr.tr("binarization_panel.method_sauvola"), 3)
-        self.method_combo.addItem(self.tr.tr("binarization_panel.method_wolf"), 4)
-        self.method_combo.addItem(self.tr.tr("binarization_panel.method_nick"), 5)
-        self.method_combo.addItem(self.tr.tr("binarization_panel.method_bernsen"), 6)
+        self.method_combo.addItem(self.tr.tr("binarization_panel.method_fixed"), ThresholdMethod.FIXED)
+        self.method_combo.addItem(self.tr.tr("binarization_panel.method_adaptive"), ThresholdMethod.ADAPTIVE)
+        self.method_combo.addItem(self.tr.tr("binarization_panel.method_otsu"), ThresholdMethod.OTSU)
+        self.method_combo.addItem(self.tr.tr("binarization_panel.method_sauvola"), ThresholdMethod.SAUVOLA)
+        self.method_combo.addItem(self.tr.tr("binarization_panel.method_wolf"), ThresholdMethod.WOLF)
+        self.method_combo.addItem(self.tr.tr("binarization_panel.method_nick"), ThresholdMethod.NICK)
+        self.method_combo.addItem(self.tr.tr("binarization_panel.method_bernsen"), ThresholdMethod.BERNSEN)
         # 添加分隔线
         self.method_combo.insertSeparator(7)
-        self.method_combo.addItem(self.tr.tr("binarization_panel.method_floyd"), 7)
-        self.method_combo.addItem(self.tr.tr("binarization_panel.method_ordered"), 8)
-        self.method_combo.addItem(self.tr.tr("binarization_panel.method_atkinson"), 9)
-        self.method_combo.setCurrentIndex(1)  # 默认自适应阈值
+        self.method_combo.addItem(self.tr.tr("binarization_panel.method_floyd"), ThresholdMethod.DITHER_FLOYD_STEINBERG)
+        self.method_combo.addItem(self.tr.tr("binarization_panel.method_ordered"), ThresholdMethod.DITHER_ORDERED)
+        self.method_combo.addItem(self.tr.tr("binarization_panel.method_atkinson"), ThresholdMethod.DITHER_ATKINSON)
+        self.method_combo.setCurrentIndex(ThresholdMethod.ADAPTIVE)  # 默认自适应阈值
 
         method_row.addWidget(self.method_combo)
 
@@ -1047,30 +1048,30 @@ class BinarizationPanel(QWidget):
         self.dithering_params_container.setVisible(False)
 
         # 根据方法显示对应的参数
-        if method == 0:  # 固定阈值
+        if method == ThresholdMethod.FIXED:
             self.threshold_container.setVisible(True)
-        elif method == 1:  # 自适应阈值
+        elif method == ThresholdMethod.ADAPTIVE:
             self.threshold_container.setVisible(True)
             self.adaptive_params_container.setVisible(True)
-        elif method == 2:  # Otsu - 无参数
+        elif method == ThresholdMethod.OTSU:  # 无参数
             pass
-        elif method == 3:  # Sauvola
+        elif method == ThresholdMethod.SAUVOLA:
             self.sauvola_params_container.setVisible(True)
-        elif method == 4:  # Wolf
+        elif method == ThresholdMethod.WOLF:
             self.wolf_params_container.setVisible(True)
-        elif method == 5:  # Nick
+        elif method == ThresholdMethod.NICK:
             self.nick_params_container.setVisible(True)
-        elif method == 6:  # Bernsen
+        elif method == ThresholdMethod.BERNSEN:
             self.bernsen_params_container.setVisible(True)
-        elif method == 7:  # Floyd-Steinberg 抖动
+        elif method == ThresholdMethod.DITHER_FLOYD_STEINBERG:
             self.dithering_params_container.setVisible(True)
             self.dither_strength_container.setVisible(True)
             self.dither_matrix_size_container.setVisible(False)
-        elif method == 8:  # Ordered 抖动
+        elif method == ThresholdMethod.DITHER_ORDERED:
             self.dithering_params_container.setVisible(True)
             self.dither_strength_container.setVisible(False)
             self.dither_matrix_size_container.setVisible(True)
-        elif method == 9:  # Atkinson 抖动
+        elif method == ThresholdMethod.DITHER_ATKINSON:
             self.dithering_params_container.setVisible(True)
             self.dither_strength_container.setVisible(True)
             self.dither_matrix_size_container.setVisible(False)
@@ -1079,16 +1080,16 @@ class BinarizationPanel(QWidget):
         """更新边缘阈值控件的显示状态"""
         edge_mode = self.edge_mode_combo.currentData()
 
-        # 关闭模式(0)：隐藏强度和阈值
+        # 关闭模式：隐藏强度和阈值
         # 其他模式：显示强度
-        # Canny 模式(1)：显示强度和阈值
-        if edge_mode == 0:
+        # Canny 模式：额外显示阈值
+        if edge_mode == EdgeDetectionMode.OFF:
             self.edge_strength_container.setVisible(False)
             self.edge_threshold_container.setVisible(False)
         else:
             self.edge_strength_container.setVisible(True)
-            # 仅 Canny 模式(1)显示边缘阈值
-            self.edge_threshold_container.setVisible(edge_mode == 1)
+            # 仅 Canny 模式显示边缘阈值
+            self.edge_threshold_container.setVisible(edge_mode == EdgeDetectionMode.CANNY)
 
     def _emit_change(self):
         """发射参数改变信号"""
@@ -1107,24 +1108,24 @@ class BinarizationPanel(QWidget):
         method = self.get_method()
         params = {}
 
-        if method == 1:  # 自适应阈值
+        if method == ThresholdMethod.ADAPTIVE:
             params["block_size"] = self.adaptive_block_size_slider.value()
-        elif method == 3:  # Sauvola
+        elif method == ThresholdMethod.SAUVOLA:
             params["window_size"] = self.sauvola_window_slider.value()
             params["sauvola_k"] = self.sauvola_k_slider.value() * 0.01
             params["sauvola_r"] = self.sauvola_r_slider.value()
-        elif method == 4:  # Wolf
+        elif method == ThresholdMethod.WOLF:
             params["window_size"] = self.wolf_window_slider.value()
             params["wolf_k"] = self.wolf_k_slider.value() * 0.01
-        elif method == 5:  # Nick
+        elif method == ThresholdMethod.NICK:
             params["window_size"] = self.nick_window_slider.value()
             params["nick_k"] = self.nick_k_slider.value() * 0.01
-        elif method == 6:  # Bernsen
+        elif method == ThresholdMethod.BERNSEN:
             params["window_size"] = self.bernsen_window_slider.value()
             params["bernsen_contrast"] = self.bernsen_contrast_slider.value()
-        elif method in [7, 9]:  # Floyd-Steinberg 或 Atkinson 抖动
+        elif method in (ThresholdMethod.DITHER_FLOYD_STEINBERG, ThresholdMethod.DITHER_ATKINSON):
             params["dither_strength"] = self.dither_strength_slider.value()
-        elif method == 8:  # Ordered 抖动
+        elif method == ThresholdMethod.DITHER_ORDERED:
             params["dither_matrix_size"] = self.dither_matrix_size_slider.value()
 
         return params

@@ -10,6 +10,33 @@ import numpy as np
 from ..cython_core import atkinson, floyd_steinberg, ordered_dithering
 
 
+class ThresholdMethod:
+    """二值化方法编号
+
+    这些数值会持久化到图层参数和配置文件中，只能追加，不可更改已有编号。
+    """
+
+    FIXED = 0  # 固定阈值
+    ADAPTIVE = 1  # 自适应阈值
+    OTSU = 2  # Otsu 自动阈值
+    SAUVOLA = 3  # Sauvola 阈值
+    WOLF = 4  # Wolf 阈值
+    NICK = 5  # Nick 阈值
+    BERNSEN = 6  # Bernsen 阈值
+    DITHER_FLOYD_STEINBERG = 7  # Floyd-Steinberg 抖动
+    DITHER_ORDERED = 8  # Ordered 抖动
+    DITHER_ATKINSON = 9  # Atkinson 抖动
+
+
+class EdgeDetectionMode:
+    """边缘检测模式编号"""
+
+    OFF = 0  # 关闭
+    CANNY = 1  # Canny 边缘检测
+    ENHANCE = 2  # 边缘增强
+    CONTOUR = 3  # 轮廓保留
+
+
 class ImageEnhancer:
     """图像增强处理类"""
 
@@ -190,12 +217,12 @@ class ImageEnhancer:
         Returns:
             处理后的图像
         """
-        if mode == 0 or strength <= 0:
+        if mode == EdgeDetectionMode.OFF or strength <= 0:
             return img
 
         img_uint8 = img.astype(np.uint8)
 
-        if mode == 1:  # Canny 边缘检测
+        if mode == EdgeDetectionMode.CANNY:
             # 计算低阈值
             threshold1 = int(strength * 2.55)  # 0-100 映射到 0-255
 
@@ -211,7 +238,8 @@ class ImageEnhancer:
             result[edges > 0] = 255
             return result
 
-        elif mode == 2:  # 边缘增强（叠加到原图）
+        elif mode == EdgeDetectionMode.ENHANCE:
+            # 使用 Sobel 算子检测边缘（增强结果叠加到原图）
             # 使用 Sobel 算子检测边缘
             sobelx = cv2.Sobel(img_uint8, cv2.CV_32F, 1, 0, ksize=3)
             sobely = cv2.Sobel(img_uint8, cv2.CV_32F, 0, 1, ksize=3)
@@ -223,7 +251,7 @@ class ImageEnhancer:
             result = cv2.addWeighted(img, 1.0, gradient, weight, 0)
             return result
 
-        elif mode == 3:  # 轮廓保留（形态学梯度）
+        elif mode == EdgeDetectionMode.CONTOUR:
             # 计算核大小
             kernel_size = max(3, int(strength / 20) * 2 + 1)
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
@@ -547,28 +575,28 @@ class BinarizationEngine:
         # 确保是灰度图
         img = BinarizationEngine.convert_to_grayscale(image)
 
-        # 抖动算法 (7-9)
-        if threshold_method == 7:  # Floyd-Steinberg 抖动
+        # 抖动算法
+        if threshold_method == ThresholdMethod.DITHER_FLOYD_STEINBERG:
             strength = kwargs.get("dither_strength", 100) / 100.0
             binary = BinarizationEngine.apply_floyd_steinberg(img, strength)
             return BinarizationEngine.ensure_rgb(binary)
 
-        elif threshold_method == 8:  # Ordered 抖动
+        elif threshold_method == ThresholdMethod.DITHER_ORDERED:
             matrix_size = kwargs.get("dither_matrix_size", 8)
             binary = BinarizationEngine.apply_ordered_dithering(img, matrix_size)
             return BinarizationEngine.ensure_rgb(binary)
 
-        elif threshold_method == 9:  # Atkinson 抖动
+        elif threshold_method == ThresholdMethod.DITHER_ATKINSON:
             strength = kwargs.get("dither_strength", 100) / 100.0
             binary = BinarizationEngine.apply_atkinson(img, strength)
             return BinarizationEngine.ensure_rgb(binary)
 
-        # 传统二值化方法 (0-6)
-        if threshold_method == 0:  # 固定阈值
+        # 传统二值化方法
+        if threshold_method == ThresholdMethod.FIXED:
             binary = cv2.threshold(img, threshold_value, 255, cv2.THRESH_BINARY)[1]
             return BinarizationEngine.ensure_rgb(binary)
 
-        elif threshold_method == 1:  # 自适应阈值
+        elif threshold_method == ThresholdMethod.ADAPTIVE:
             # 验证块大小参数
             block_size = BinarizationEngine._validate_window_size(kwargs.get("block_size"), img.shape)
 
@@ -577,11 +605,11 @@ class BinarizationEngine:
             binary = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, block_size, C)
             return BinarizationEngine.ensure_rgb(binary)
 
-        elif threshold_method == 2:  # Otsu阈值
+        elif threshold_method == ThresholdMethod.OTSU:
             binary = cv2.threshold(img, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
             return BinarizationEngine.ensure_rgb(binary)
 
-        elif threshold_method == 3:  # Sauvola阈值
+        elif threshold_method == ThresholdMethod.SAUVOLA:
             # 验证窗口大小参数
             window = BinarizationEngine._validate_window_size(kwargs.get("window_size"), img.shape)
 
@@ -600,7 +628,7 @@ class BinarizationEngine:
             binary = np.where(img >= threshold, 255, 0).astype(np.uint8)
             return BinarizationEngine.ensure_rgb(binary)
 
-        elif threshold_method == 4:  # Wolf阈值
+        elif threshold_method == ThresholdMethod.WOLF:
             # 验证窗口大小参数
             window = BinarizationEngine._validate_window_size(kwargs.get("window_size"), img.shape)
 
@@ -620,7 +648,7 @@ class BinarizationEngine:
             binary = np.where(img >= threshold, 255, 0).astype(np.uint8)
             return BinarizationEngine.ensure_rgb(binary)
 
-        elif threshold_method == 5:  # Nick阈值
+        elif threshold_method == ThresholdMethod.NICK:
             # 验证窗口大小参数
             window = BinarizationEngine._validate_window_size(kwargs.get("window_size"), img.shape)
 
@@ -638,7 +666,7 @@ class BinarizationEngine:
             binary = np.where(img >= threshold, 255, 0).astype(np.uint8)
             return BinarizationEngine.ensure_rgb(binary)
 
-        elif threshold_method == 6:  # Bernsen阈值
+        elif threshold_method == ThresholdMethod.BERNSEN:
             # 验证窗口大小参数
             window = BinarizationEngine._validate_window_size(kwargs.get("window_size"), img.shape)
 
@@ -668,14 +696,14 @@ class BinarizationEngine:
     @staticmethod
     def apply_fixed_threshold(image: np.ndarray, threshold: int) -> np.ndarray:
         """固定阈值（兼容方法）"""
-        return BinarizationEngine.apply_threshold(image, 0, threshold)
+        return BinarizationEngine.apply_threshold(image, ThresholdMethod.FIXED, threshold)
 
     @staticmethod
     def apply_otsu(image: np.ndarray) -> np.ndarray:
         """Otsu 阈值（兼容方法）"""
-        return BinarizationEngine.apply_threshold(image, 2, 0)
+        return BinarizationEngine.apply_threshold(image, ThresholdMethod.OTSU, 0)
 
     @staticmethod
     def apply_adaptive(image: np.ndarray, block_size: int = 11, c: int = 2) -> np.ndarray:
         """自适应阈值（兼容方法）"""
-        return BinarizationEngine.apply_threshold(image, 1, c * 10 + 100)
+        return BinarizationEngine.apply_threshold(image, ThresholdMethod.ADAPTIVE, c * 10 + 100)

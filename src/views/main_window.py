@@ -8,6 +8,7 @@ import contextlib
 import os
 import traceback
 from datetime import datetime
+from typing import NamedTuple
 
 import numpy as np
 from PySide6.QtCore import Qt, QTimer
@@ -29,7 +30,7 @@ from PySide6.QtWidgets import (
 
 from ..models.history_manager import HistoryManager
 from ..models.image_data import ImageData
-from ..utils.binarization_engine import BinarizationEngine
+from ..utils.binarization_engine import BinarizationEngine, ThresholdMethod
 from ..utils.binarization_worker import BinarizationWorker
 from ..utils.config_manager import get_config_manager
 from ..utils.file_io import load_image, save_image
@@ -39,6 +40,51 @@ from ..utils.translation_manager import get_translator
 from .binarization_panel import BinarizationPanel
 from .canvas import Canvas
 from .shortcut_handler import ShortcutHandler
+
+
+class LayerOverlap(NamedTuple):
+    """图层与图像的有效重叠区域"""
+
+    x_start: int  # 图像坐标系中的起始 X
+    y_start: int  # 图像坐标系中的起始 Y
+    x_end: int  # 图像坐标系中的结束 X（不含）
+    y_end: int  # 图像坐标系中的结束 Y（不含）
+    layer_x_offset: int  # 重叠区在图层坐标系中的 X 偏移
+    layer_y_offset: int  # 重叠区在图层坐标系中的 Y 偏移
+    layer_w: int  # 重叠区宽度
+    layer_h: int  # 重叠区高度
+
+
+def get_layer_overlap(bbox: tuple[int, int, int, int], image_height: int, image_width: int) -> LayerOverlap | None:
+    """
+    计算图层边界框与图像的有效重叠区域
+
+    Args:
+        bbox: 图层边界框 (x, y, w, h)
+        image_height: 图像高度
+        image_width: 图像宽度
+
+    Returns:
+        LayerOverlap，图层与图像无重叠时返回 None
+    """
+    x, y, w, h = bbox
+    if x >= image_width or y >= image_height or x + w <= 0 or y + h <= 0:
+        return None
+
+    x_start = max(0, x)
+    y_start = max(0, y)
+    x_end = min(image_width, x + w)
+    y_end = min(image_height, y + h)
+    return LayerOverlap(
+        x_start=x_start,
+        y_start=y_start,
+        x_end=x_end,
+        y_end=y_end,
+        layer_x_offset=x_start - x,
+        layer_y_offset=y_start - y,
+        layer_w=x_end - x_start,
+        layer_h=y_end - y_start,
+    )
 
 
 class MainWindow(QMainWindow):
@@ -1115,37 +1161,23 @@ class MainWindow(QMainWindow):
                         layer.original_region, **preprocess_params
                     )
 
-                    # 获取图层的边界框
-                    x, y, w, h = layer.bbox
-
-                    # 检查图层是否在当前图像范围内
-                    img_h, img_w = root_pixels.shape[:2]
-                    if x >= img_w or y >= img_h or x + w <= 0 or y + h <= 0:
+                    overlap = get_layer_overlap(layer.bbox, root_pixels.shape[0], root_pixels.shape[1])
+                    if overlap is None:
                         continue
-
-                    # 计算有效的重叠区域
-                    x_start = max(0, x)
-                    y_start = max(0, y)
-                    x_end = min(img_w, x + w)
-                    y_end = min(img_h, y + h)
-
-                    # 计算在图层坐标系中的偏移
-                    layer_x_offset = x_start - x
-                    layer_y_offset = y_start - y
-                    layer_w = x_end - x_start
-                    layer_h = y_end - y_start
 
                     # 获取有效部分
                     preprocessed_region_part = preprocessed_region[
-                        layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                        overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                        overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                     ]
                     layer_mask_region = layer.mask[
-                        layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                        overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                        overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                     ]
 
                     # 在图层的掩码区域覆盖预处理结果
                     # 注意：必须先获取区域引用，再应用掩码，避免 NumPy 链式索引问题
-                    region = root_pixels[y_start:y_end, x_start:x_end]
+                    region = root_pixels[overlap.y_start : overlap.y_end, overlap.x_start : overlap.x_end]
                     region[layer_mask_region] = preprocessed_region_part[layer_mask_region]
         elif self.image_data.view_mode == "original":
             # 原图视图：使用原图像素（不合成用户图层，因为原图视图只显示原图）
@@ -1204,38 +1236,25 @@ class MainWindow(QMainWindow):
             if not layer.visible:
                 continue
 
-            # 获取图层的边界框
-            x, y, w, h = layer.bbox
-
-            # 检查图层是否在当前图像范围内
-            img_h, img_w = composited.shape[:2]
-            if x >= img_w or y >= img_h or x + w <= 0 or y + h <= 0:
-                # 图层完全在图像外，跳过
+            overlap = get_layer_overlap(layer.bbox, composited.shape[0], composited.shape[1])
+            if overlap is None:
                 continue
-
-            # 计算有效的重叠区域
-            x_start = max(0, x)
-            y_start = max(0, y)
-            x_end = min(img_w, x + w)
-            y_end = min(img_h, y + h)
-
-            # 计算在图层坐标系中的偏移
-            layer_x_offset = x_start - x
-            layer_y_offset = y_start - y
-            layer_w = x_end - x_start
-            layer_h = y_end - y_start
 
             # 获取图层的像素和掩码的有效部分
             layer_pixels = layer.pixels[
-                layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
             ]
             layer_mask = layer.mask[
-                layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
             ]
 
             # 只覆盖mask为True的像素（选中的区域）
             # 未选中的区域（mask为False）保持透明，不覆盖底层
-            composited[y_start:y_end, x_start:x_end][layer_mask] = layer_pixels[layer_mask]
+            composited[overlap.y_start : overlap.y_end, overlap.x_start : overlap.x_end][layer_mask] = layer_pixels[
+                layer_mask
+            ]
 
         # 最后应用编辑层（画笔痕迹），确保画笔在最上层
         if self.image_data.edit_mask is not None and self.image_data.edit_mask.any():
@@ -2064,32 +2083,36 @@ class MainWindow(QMainWindow):
             method = params["method"]
 
             # 根据方法恢复对应的参数
-            if method == 1:  # 自适应阈值
+            if method == ThresholdMethod.ADAPTIVE:
                 if "block_size" in method_params:
                     self.binarization_panel.adaptive_block_size_slider.setValue(method_params["block_size"])
-            elif method == 3:  # Sauvola
+            elif method == ThresholdMethod.SAUVOLA:
                 if "window_size" in method_params:
                     self.binarization_panel.sauvola_window_slider.setValue(method_params["window_size"])
                 if "k" in method_params:
                     self.binarization_panel.sauvola_k_slider.setValue(int(method_params["k"] * 100))
                 if "r" in method_params:
                     self.binarization_panel.sauvola_r_slider.setValue(method_params["r"])
-            elif method == 4:  # Wolf
+            elif method == ThresholdMethod.WOLF:
                 if "window_size" in method_params:
                     self.binarization_panel.wolf_window_slider.setValue(method_params["window_size"])
                 if "k" in method_params:
                     self.binarization_panel.wolf_k_slider.setValue(int(method_params["k"] * 100))
-            elif method == 5:  # Nick
+            elif method == ThresholdMethod.NICK:
                 if "window_size" in method_params:
                     self.binarization_panel.nick_window_slider.setValue(method_params["window_size"])
                 if "k" in method_params:
                     self.binarization_panel.nick_k_slider.setValue(int(method_params["k"] * 100))
-            elif method == 6:  # Bernsen
+            elif method == ThresholdMethod.BERNSEN:
                 if "window_size" in method_params:
                     self.binarization_panel.bernsen_window_slider.setValue(method_params["window_size"])
                 if "contrast_threshold" in method_params:
                     self.binarization_panel.bernsen_contrast_slider.setValue(method_params["contrast_threshold"])
-            elif method in [7, 8, 9]:  # 抖动算法
+            elif method in (
+                ThresholdMethod.DITHER_FLOYD_STEINBERG,
+                ThresholdMethod.DITHER_ORDERED,
+                ThresholdMethod.DITHER_ATKINSON,
+            ):
                 if "strength" in method_params:
                     self.binarization_panel.dither_strength_slider.setValue(method_params["strength"])
                 if "matrix_size" in method_params:
@@ -2415,7 +2438,9 @@ class MainWindow(QMainWindow):
             self.image_data.selection_mask = self.canvas.selection_tool.selection_mask
 
             # 更新轮廓显示
-            self.canvas._request_contour_update(self.canvas.selection_tool.selection_mask, dirty_rect=None, immediate=True)
+            self.canvas._request_contour_update(
+                self.canvas.selection_tool.selection_mask, dirty_rect=None, immediate=True
+            )
 
             # 更新分块缓存
             self._safe_update_tile_cache(self.canvas.selection_tool.selection_mask)
@@ -2440,7 +2465,9 @@ class MainWindow(QMainWindow):
                 self.image_data.selection_mask = filled_mask
 
                 # 更新轮廓显示
-                self.canvas._request_contour_update(self.canvas.selection_tool.selection_mask, dirty_rect=None, immediate=True)
+                self.canvas._request_contour_update(
+                    self.canvas.selection_tool.selection_mask, dirty_rect=None, immediate=True
+                )
 
                 # 更新分块缓存
                 self._safe_update_tile_cache(self.canvas.selection_tool.selection_mask)
@@ -3058,37 +3085,23 @@ class MainWindow(QMainWindow):
                             layer.original_region, **preprocess_params
                         )
 
-                        # 获取图层的边界框
-                        x, y, w, h = layer.bbox
-
-                        # 检查图层是否在当前图像范围内
-                        img_h, img_w = pixels.shape[:2]
-                        if x >= img_w or y >= img_h or x + w <= 0 or y + h <= 0:
+                        overlap = get_layer_overlap(layer.bbox, pixels.shape[0], pixels.shape[1])
+                        if overlap is None:
                             continue
-
-                        # 计算有效的重叠区域
-                        x_start = max(0, x)
-                        y_start = max(0, y)
-                        x_end = min(img_w, x + w)
-                        y_end = min(img_h, y + h)
-
-                        # 计算在图层坐标系中的偏移
-                        layer_x_offset = x_start - x
-                        layer_y_offset = y_start - y
-                        layer_w = x_end - x_start
-                        layer_h = y_end - y_start
 
                         # 获取有效部分
                         preprocessed_region_part = preprocessed_region[
-                            layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                            overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                            overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                         ]
                         layer_mask_region = layer.mask[
-                            layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                            overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                            overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                         ]
 
                         # 在图层的掩码区域覆盖预处理结果
                         # 注意：必须先获取区域引用，再应用掩码，避免 NumPy 链式索引问题
-                        region = pixels[y_start:y_end, x_start:x_end]
+                        region = pixels[overlap.y_start : overlap.y_end, overlap.x_start : overlap.x_end]
                         region[layer_mask_region] = preprocessed_region_part[layer_mask_region]
             else:  # 'binary'
                 # 二值化模式：合成显示所有层
@@ -3115,20 +3128,7 @@ class MainWindow(QMainWindow):
                                 dtype=np.uint8,
                             )
 
-                            # 计算有效的重叠区域
-                            x, y, w, h = layer.bbox
-                            img_h, img_w = image_shape
-
-                            x_start = max(0, x)
-                            y_start = max(0, y)
-                            x_end = min(img_w, x + w)
-                            y_end = min(img_h, y + h)
-
-                            # 计算在图层坐标系中的偏移
-                            layer_x_offset = x_start - x
-                            layer_y_offset = y_start - y
-                            layer_w = x_end - x_start
-                            layer_h = y_end - y_start
+                            overlap = get_layer_overlap(layer.bbox, image_shape[0], image_shape[1])
 
                             # 确保原图区域是RGB格式
                             original_rgb = layer.original_region
@@ -3139,14 +3139,16 @@ class MainWindow(QMainWindow):
 
                             # 获取有效部分
                             original_rgb_region = original_rgb[
-                                layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                                overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                                overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                             ]
                             layer_mask_region = layer.mask[
-                                layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                                overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                                overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                             ]
 
                             # 在图层的掩码区域显示原图
-                            region = pixels[y_start:y_end, x_start:x_end]
+                            region = pixels[overlap.y_start : overlap.y_end, overlap.x_start : overlap.x_end]
                             region[layer_mask_region] = original_rgb_region[layer_mask_region]
                         else:
                             # 没有原图区域，显示灰色
@@ -3173,31 +3175,20 @@ class MainWindow(QMainWindow):
 
                             # 保持RGB格式，不转换为灰度图
 
-                            # 计算有效的重叠区域
-                            x, y, w, h = layer.bbox
-                            img_h, img_w = image_shape
-
-                            x_start = max(0, x)
-                            y_start = max(0, y)
-                            x_end = min(img_w, x + w)
-                            y_end = min(img_h, y + h)
-
-                            # 计算在图层坐标系中的偏移
-                            layer_x_offset = x_start - x
-                            layer_y_offset = y_start - y
-                            layer_w = x_end - x_start
-                            layer_h = y_end - y_start
+                            overlap = get_layer_overlap(layer.bbox, image_shape[0], image_shape[1])
 
                             # 获取有效部分
                             preprocessed_region_part = preprocessed_region[
-                                layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                                overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                                overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                             ]
                             layer_mask_region = layer.mask[
-                                layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                                overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                                overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                             ]
 
                             # 在图层的掩码区域显示预处理结果
-                            region = pixels[y_start:y_end, x_start:x_end]
+                            region = pixels[overlap.y_start : overlap.y_end, overlap.x_start : overlap.x_end]
                             region[layer_mask_region] = preprocessed_region_part[layer_mask_region]
                         else:
                             # 没有原图区域或参数，显示灰色
@@ -3242,31 +3233,20 @@ class MainWindow(QMainWindow):
                                 preprocessed_region, method, threshold, **method_params
                             )
 
-                            # 计算有效的重叠区域
-                            x, y, w, h = layer.bbox
-                            img_h, img_w = image_shape
-
-                            x_start = max(0, x)
-                            y_start = max(0, y)
-                            x_end = min(img_w, x + w)
-                            y_end = min(img_h, y + h)
-
-                            # 计算在图层坐标系中的偏移
-                            layer_x_offset = x_start - x
-                            layer_y_offset = y_start - y
-                            layer_w = x_end - x_start
-                            layer_h = y_end - y_start
+                            overlap = get_layer_overlap(layer.bbox, image_shape[0], image_shape[1])
 
                             # 获取有效部分
                             binary_region_part = binary_region[
-                                layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                                overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                                overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                             ]
                             layer_mask_region = layer.mask[
-                                layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                                overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                                overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                             ]
 
                             # 在图层的掩码区域显示二值化结果
-                            region = pixels[y_start:y_end, x_start:x_end]
+                            region = pixels[overlap.y_start : overlap.y_end, overlap.x_start : overlap.x_end]
                             region[layer_mask_region] = binary_region_part[layer_mask_region]
                         else:
                             # 没有原图区域或参数，直接显示保存的像素
@@ -3277,31 +3257,20 @@ class MainWindow(QMainWindow):
                                 dtype=np.uint8,
                             )
 
-                            # 计算有效的重叠区域
-                            x, y, w, h = layer.bbox
-                            img_h, img_w = image_shape
-
-                            x_start = max(0, x)
-                            y_start = max(0, y)
-                            x_end = min(img_w, x + w)
-                            y_end = min(img_h, y + h)
-
-                            # 计算在图层坐标系中的偏移
-                            layer_x_offset = x_start - x
-                            layer_y_offset = y_start - y
-                            layer_w = x_end - x_start
-                            layer_h = y_end - y_start
+                            overlap = get_layer_overlap(layer.bbox, image_shape[0], image_shape[1])
 
                             # 获取有效部分
                             layer_pixels_region = layer.pixels[
-                                layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                                overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                                overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                             ]
                             layer_mask_region = layer.mask[
-                                layer_y_offset : layer_y_offset + layer_h, layer_x_offset : layer_x_offset + layer_w
+                                overlap.layer_y_offset : overlap.layer_y_offset + overlap.layer_h,
+                                overlap.layer_x_offset : overlap.layer_x_offset + overlap.layer_w,
                             ]
 
                             # 直接显示图层的像素
-                            region = pixels[y_start:y_end, x_start:x_end]
+                            region = pixels[overlap.y_start : overlap.y_end, overlap.x_start : overlap.x_end]
                             region[layer_mask_region] = layer_pixels_region[layer_mask_region]
 
                     break
