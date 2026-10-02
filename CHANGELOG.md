@@ -2,6 +2,15 @@
 
 ## [v1.6.3.0] - 2026-10-02
 
+### 测试
+- **新增 29 个单元测试**（总数 167 → 196）：
+  - `test_layer_overlap.py`：`get_layer_overlap()` 的 8 种边界情况（完全在内、负偏移、右下溢出、零尺寸、完全在外、边缘相接、bbox 大于图像、偏移恒等关系）
+  - `test_downloader_progress.py`：进度仅走回调不打印、按整数百分比节流、未知大小时 5MB 阶梯上报并完成上报 75%、取消清理文件（mock urlopen，不发真实请求）
+  - `test_config_backup.py`：损坏配置自动备份 `.bak` 并回退默认、回退后保存不丢默认项、合法配置不受影响
+  - `test_ai_worker.py`：加载失败、处理异常（含异常类型）、正常完成、stop 标志各路径
+  - `test_binarization_constants.py`：锁定 `ThresholdMethod`/`EdgeDetectionMode` 编号契约（持久化兼容性）
+  - ai_worker 覆盖率 92%，config_manager 82%
+
 ### 新增功能
 - **CI 测试与 lint 门禁**（`.github/workflows/tests.yml`）：
   - push 到 main/develop 及 PR 时自动运行
