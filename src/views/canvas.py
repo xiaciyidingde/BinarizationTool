@@ -73,6 +73,8 @@ class Canvas(QWidget):
         self.brush_tool = BrushTool()
         self.crop_tool = CropTool()
         self.selection_tool = SelectionTool()
+        # 智能边界优化失败时向用户提示（原先仅打印到控制台）
+        self.selection_tool.boundary_optimization_failed = self._on_boundary_optimization_failed
         self.measure_tool = MeasureTool()
 
         # 分块渲染缓存
@@ -458,7 +460,7 @@ class Canvas(QWidget):
     def mousePressEvent(self, event: QMouseEvent):
         """鼠标按下事件"""
         if event.button() == Qt.LeftButton:
-            if self.space_pressed or event.button() == Qt.MiddleButton:
+            if self.space_pressed:
                 # 开始平移
                 self.is_panning = True
                 self.pan_start_pos = event.pos()
@@ -1026,6 +1028,12 @@ class Canvas(QWidget):
             # 启动全量更新定时器（定期清理，只在增量更新时启动）
             if dirty_rect is not None and not self.full_contour_timer.isActive():
                 self.full_contour_timer.start(self.full_contour_interval)
+
+    def _on_boundary_optimization_failed(self):
+        """智能选区边界优化失败时向用户提示（选区已被工具恢复为原始状态）"""
+        window = getattr(self, "main_window", None)
+        if window is not None and hasattr(window, "statusbar"):
+            window.statusbar.showMessage(window.tr.tr("message.smart_optimize_failed"), 5000)
 
     def wheelEvent(self, event: QWheelEvent):
         """滚轮事件 - 缩放"""

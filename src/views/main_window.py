@@ -6,6 +6,7 @@
 
 import contextlib
 import os
+import traceback
 from datetime import datetime
 
 import numpy as np
@@ -2385,28 +2386,36 @@ class MainWindow(QMainWindow):
             closed = cv2.morphologyEx(mask_uint8, cv2.MORPH_CLOSE, kernel)
 
             # 使用洪水填充来填充更大的空洞
-            # 从边缘开始洪水填充背景（反向思路）
+            # 从图像边界开始洪水填充背景（反向思路）
             filled = closed.copy()
             h, w = filled.shape
-            flood_mask = np.zeros((h + 2, w + 2), dtype=np.uint8)
 
-            # 从四个角开始洪水填充背景
-            cv2.floodFill(filled, flood_mask, (0, 0), 255)
+            # 从值为背景（0）的角落开始填充；若选区覆盖了全部角落，
+            # 无法从边界区分背景，仅保留闭运算结果
+            seed = None
+            for corner_x, corner_y in [(0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1)]:
+                if filled[corner_y, corner_x] == 0:
+                    seed = (corner_x, corner_y)
+                    break
 
-            # 反转得到填充后的选区（背景外的都是选区）
-            filled_inverted = cv2.bitwise_not(filled)
+            if seed is not None:
+                flood_mask = np.zeros((h + 2, w + 2), dtype=np.uint8)
+                cv2.floodFill(filled, flood_mask, seed, 255)
 
-            # 与闭运算结果合并
-            final_mask = cv2.bitwise_or(closed, filled_inverted)
+                # 反转得到填充后的选区（背景外的都是选区）
+                filled_inverted = cv2.bitwise_not(filled)
+
+                # 与闭运算结果合并
+                final_mask = cv2.bitwise_or(closed, filled_inverted)
+            else:
+                final_mask = closed
 
             # 转换回布尔蒙版
             self.canvas.selection_tool.selection_mask = final_mask > 0
             self.image_data.selection_mask = self.canvas.selection_tool.selection_mask
 
             # 更新轮廓显示
-            self.canvas._request_contour_update(
-                self.canvas.selection_tool.selection_mask, dirty_rect=None, immediate=True
-            )
+            self.canvas._request_contour_update(self.canvas.selection_tool.selection_mask, dirty_rect=None, immediate=True)
 
             # 更新分块缓存
             self._safe_update_tile_cache(self.canvas.selection_tool.selection_mask)
@@ -2431,9 +2440,7 @@ class MainWindow(QMainWindow):
                 self.image_data.selection_mask = filled_mask
 
                 # 更新轮廓显示
-                self.canvas._request_contour_update(
-                    self.canvas.selection_tool.selection_mask, dirty_rect=None, immediate=True
-                )
+                self.canvas._request_contour_update(self.canvas.selection_tool.selection_mask, dirty_rect=None, immediate=True)
 
                 # 更新分块缓存
                 self._safe_update_tile_cache(self.canvas.selection_tool.selection_mask)
@@ -2446,6 +2453,11 @@ class MainWindow(QMainWindow):
 
             except ImportError:
                 self.statusbar.showMessage(self.tr.tr("message.feature_unavailable"))
+
+        except Exception as e:
+            # cv2/scipy 处理过程中的运行时异常：保留原选区并提示，避免异常穿透到 Qt 槽
+            traceback.print_exc()
+            self.statusbar.showMessage(self.tr.tr("message.selection_fill_failed") + f" ({e})", 5000)
 
     def _connect_tool_settings(self):
         """连接属性面板中的工具设置信号"""
@@ -3505,10 +3517,10 @@ class MainWindow(QMainWindow):
             # 显示提示信息
             hint_msg = self.tr.tr("binarization_panel.sam_ready") + " - " + self.tr.tr("binarization_panel.sam_hint")
             self.statusbar.showMessage(hint_msg, 5000)
-        else:
-            self.statusbar.showMessage("图像编码失败")
-            self.statusbar.showMessage("SAM 模型加载失败")
-            return False
+            return True
+
+        self.statusbar.showMessage(self.tr.tr("binarization_panel.sam_encoding_failed"), 5000)
+        return False
 
     def _get_mode_display_name(self, mode: str) -> str:
         """获取模式的显示名称"""

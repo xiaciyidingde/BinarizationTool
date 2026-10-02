@@ -31,10 +31,9 @@ class Downloader:
         self.should_cancel = False
 
     def _report_progress(self, message: str, progress: int = 0):
-        """报告进度"""
+        """报告进度（仅在设置了回调时上报，避免无谓的控制台输出）"""
         if self.progress_callback:
             self.progress_callback(message, progress)
-        print(f"[{progress}%] {message}")
 
     def cancel(self):
         """取消下载"""
@@ -72,6 +71,8 @@ class Downloader:
             # 下载文件
             downloaded = 0
             chunk_size = 8192
+            last_reported_progress = 10
+            last_reported_bytes = 0
 
             with open(output_path, "wb") as file_handle:
                 while True:
@@ -87,9 +88,23 @@ class Downloader:
                     downloaded += len(chunk)
 
                     # 更新进度（10% - 75%）
+                    # 服务端返回了大小时按整数百分比变化节流上报；未返回大小时
+                    # 每 5 MB 上报一次并缓慢推进进度，避免界面进度一直停在初始值
                     if total_size > 0:
                         progress = 10 + int((downloaded / total_size) * 65)
-                        self._report_progress(f"{desc}... {downloaded / (1024 * 1024):.1f}/{size_mb:.1f} MB", progress)
+                        if progress > last_reported_progress:
+                            last_reported_progress = progress
+                            self._report_progress(
+                                f"{desc}... {downloaded / (1024 * 1024):.1f}/{size_mb:.1f} MB", progress
+                            )
+                    elif downloaded - last_reported_bytes >= 5 * 1024 * 1024:
+                        last_reported_bytes = downloaded
+                        progress = min(75, 10 + int(downloaded / (1024 * 1024)))
+                        self._report_progress(f"{desc}... {downloaded / (1024 * 1024):.1f} MB", progress)
+
+                # 大小未知的下载完成时上报一次，让进度离开初始值
+                if total_size == 0 and not self.should_cancel:
+                    self._report_progress(f"{desc}完成（{downloaded / (1024 * 1024):.1f} MB）", 75)
 
             # 如果被取消，删除未完成的文件
             if self.should_cancel:

@@ -7,6 +7,7 @@
 - 颜色范围选择：全局选择特定颜色
 """
 
+import contextlib
 from typing import TYPE_CHECKING
 
 import numpy as np
@@ -192,6 +193,9 @@ class SelectionTool:
         self.sam_processor = None  # SAM 处理器实例（由主窗口设置）
         self.sam_points: list[tuple[int, int]] = []  # SAM 提示点坐标
         self.sam_labels: list[int] = []  # SAM 提示点标签（1=前景，0=背景）
+
+        # 智能边界优化失败时的通知回调（由 UI 层设置，用于向用户提示）
+        self.boundary_optimization_failed = None
 
     def has_selection(self) -> bool:
         """
@@ -673,11 +677,14 @@ class SelectionTool:
             return dirty_rect
 
         except Exception:
-            # 如果优化失败，恢复原始选区
+            # 优化失败：恢复原始选区，保留控制台堆栈，并通过回调通知 UI 层
             import traceback
 
             traceback.print_exc()
             self.selection_mask = old_mask
+            if self.boundary_optimization_failed is not None:
+                with contextlib.suppress(Exception):
+                    self.boundary_optimization_failed()
             return (0, 0, 0, 0)
 
     def _extract_main_connected_region(self, mask: np.ndarray, min_area_ratio: float = 0.05) -> np.ndarray | None:

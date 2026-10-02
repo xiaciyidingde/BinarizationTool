@@ -96,7 +96,9 @@
     "image_inverted": "Image inverted",
     "image_flipped_horizontal": "Image flipped horizontally",
     "image_flipped_vertical": "Image flipped vertically",
-    "transform_binary_only": "Image transform is only available in binary view. Please switch to binary mode first"
+    "transform_binary_only": "Image transform is only available in binary view. Please switch to binary mode first",
+    "selection_fill_failed": "Failed to fill selection holes",
+    "smart_optimize_failed": "Smart selection boundary optimization failed, original selection kept"
   },
   "selection": {
     "drag_select": "Paint",
@@ -283,7 +285,8 @@
     "onnxruntime_required": "AI features require onnxruntime library.\n\nPlease run: pip install onnxruntime",
     "download_model_title": "Download Model",
     "download_model_prompt": "Background removal requires downloading the RMBG-2.0 model (~223 MB).\n\nDownload now?",
-    "model_download_success": "Model downloaded successfully! You can now use the background removal feature."
+    "model_download_success": "Model downloaded successfully! You can now use the background removal feature.",
+    "sam_encoding_failed": "SAM image encoding failed. Please retry or reload the model"
   },
   "properties_panel": {
     "properties": "Properties",

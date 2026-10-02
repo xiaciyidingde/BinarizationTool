@@ -5,6 +5,7 @@
 """
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -127,8 +128,16 @@ class ConfigManager:
             # 合并默认配置（处理新增的配置项）
             merged = self._merge_config(copy.deepcopy(self.DEFAULT_CONFIG), config)
             return merged
-        except Exception as e:
-            print(f"加载配置失败: {e}，使用默认配置")
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            # 配置文件损坏：先备份原文件再回退默认配置，
+            # 避免后续保存时用默认配置直接覆盖，导致用户配置彻底丢失
+            backup_path = self.config_file.with_name(self.config_file.name + ".bak")
+            try:
+                shutil.copy2(self.config_file, backup_path)
+                backup_note = f"，原文件已备份到 {backup_path}"
+            except OSError:
+                backup_note = "（原文件备份失败）"
+            print(f"加载配置失败: {e}{backup_note}，使用默认配置")
             return copy.deepcopy(self.DEFAULT_CONFIG)
 
     def save(self):

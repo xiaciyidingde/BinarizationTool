@@ -1212,7 +1212,6 @@ class BinarizationPanel(QWidget):
         self.invert_checkbox.setEnabled(enabled)
         self.flip_horizontal_checkbox.setEnabled(enabled)
         self.flip_vertical_checkbox.setEnabled(enabled)
-        self.flip_vertical_checkbox.setEnabled(enabled)
         # 启用/禁用 AI 工具按钮
         if hasattr(self, "remove_bg_button") and self.remove_bg_button is not None:
             self.remove_bg_button.setEnabled(enabled)
