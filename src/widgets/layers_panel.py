@@ -116,7 +116,7 @@ class LayerListWidget(QListWidget):
     """自定义图层列表，限制拖放行为"""
 
     def dropEvent(self, event):
-        """重写拖放事件，防止拖到根图层上方"""
+        """重写拖放事件，防止拖到根图层下方（根图层是画布最底层，固定在最后一行）"""
         # 获取拖放目标位置
         drop_row = self.indexAt(event.position().toPoint()).row()
 
@@ -128,8 +128,8 @@ class LayerListWidget(QListWidget):
                 root_row = i
                 break
 
-        # 如果目标位置在根图层上方（索引小于根图层），拒绝拖放
-        if root_row != -1 and drop_row <= root_row:
+        # 如果目标位置在根图层下方（索引大于根图层，或落在列表末尾的空白区域），拒绝拖放
+        if root_row != -1 and (drop_row > root_row or drop_row == -1):
             event.ignore()
             return
 
@@ -364,7 +364,7 @@ class LayersPanel(QWidget):
     layer_visibility_changed = Signal(str, bool)  # 图层可见性改变（layer_id, visible）
     layer_locked_changed = Signal(str, bool)  # 图层锁定状态改变（layer_id, locked）
     layer_deleted = Signal(str)  # 图层被删除（layer_id）
-    layer_order_changed = Signal(list)  # 图层顺序改变（layer_ids 列表，从上到下）
+    layer_order_changed = Signal(list)  # 图层顺序改变（layer_ids 列表，从上到下；顶行 = 画布最顶层）
     layer_name_changed = Signal(str, str)  # 图层名称改变（layer_id, new_name）
     save_selection_clicked = Signal()  # 保存选区按钮被点击
     merge_layers_clicked = Signal(list)  # 合并图层按钮被点击（layer_ids）
@@ -526,11 +526,11 @@ class LayersPanel(QWidget):
                     root_index = i
                 layer_ids.append(layer_id)
 
-        # 确保根图层在最前（如果存在）
-        if root_index != -1 and root_index != 0:
-            # 根图层不在最前，需要移动回去
+        # 确保根图层在最后（如果存在）——根图层是画布最底层，面板中固定在最后一行
+        if root_index != -1 and root_index != self.layers_list.count() - 1:
+            # 根图层不在最后，需要移动回去
             root_item = self.layers_list.takeItem(root_index)
-            self.layers_list.insertItem(0, root_item)
+            self.layers_list.addItem(root_item)
             # 重新设置 widget
             widget = self.layers_list.itemWidget(root_item)
             if widget is None:
@@ -553,10 +553,18 @@ class LayersPanel(QWidget):
         self.layer_order_changed.emit(layer_ids)
 
     def add_layer(
-        self, layer_id: str, name: str, is_root: bool = False, is_out_of_bounds: bool = False, visible: bool = True
+        self,
+        layer_id: str,
+        name: str,
+        is_root: bool = False,
+        is_out_of_bounds: bool = False,
+        visible: bool = True,
+        on_top: bool = False,
     ):
         """
         添加图层到列表
+
+        面板行序与画布叠放层级一致：顶行 = 画布最顶层，根图层（最底层）固定在最后一行。
 
         Args:
             layer_id: 图层 ID
@@ -564,6 +572,7 @@ class LayersPanel(QWidget):
             is_root: 是否是根图层
             is_out_of_bounds: 是否超出图像范围（仅用户图层）
             visible: 是否可见
+            on_top: 是否插入到面板顶部（用于新建/合并出的画布最顶层图层）
         """
         item = QListWidgetItem()
         item.setData(Qt.UserRole, layer_id)
@@ -587,7 +596,10 @@ class LayersPanel(QWidget):
             widget.setToolTip(self.tr.tr("layers_panel.out_of_bounds_tooltip"))
 
         # 添加到列表
-        self.layers_list.addItem(item)
+        if on_top and self.layers_list.count() > 0:
+            self.layers_list.insertItem(0, item)
+        else:
+            self.layers_list.addItem(item)
         self.layers_list.setItemWidget(item, widget)
 
         # 设置项的高度

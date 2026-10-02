@@ -87,6 +87,24 @@ def get_layer_overlap(bbox: tuple[int, int, int, int], image_height: int, image_
     )
 
 
+def order_layers_by_panel(layer_ids: list, user_layers: list) -> list:
+    """
+    按图层面板的行序（顶→底）重排用户图层列表
+
+    面板约定：顶行 = 画布最顶层 = 列表尾部，根图层（最底层）固定在最后一行。
+    因此将面板顺序反转后即为数据列表的新顺序（列表头 = 最底层）。
+
+    Args:
+        layer_ids: 面板中用户图层的 ID 顺序（顶→底，不含根图层）
+        user_layers: 当前的用户图层列表
+
+    Returns:
+        重排后的用户图层列表（跳过面板中不存在或已删除的 ID）
+    """
+    by_id = {layer.id: layer for layer in user_layers}
+    return [by_id[layer_id] for layer_id in reversed(layer_ids) if layer_id in by_id]
+
+
 class MainWindow(QMainWindow):
     """
     主窗口类
@@ -810,11 +828,11 @@ class MainWindow(QMainWindow):
                 original_region=layer_data["original_region"],  # 保存原图区域
             )
 
-            # 添加到图层列表
+            # 添加到图层列表（列表尾 = 画布最顶层，面板插到顶行）
             self.image_data.user_layers.append(layer)
 
             # 更新UI
-            self.properties_panel.layers_panel.add_layer(layer.id, layer.name)
+            self.properties_panel.layers_panel.add_layer(layer.id, layer.name, on_top=True)
 
             # 清除选区（包括红色覆盖层）
             self.image_data.clear_selection()
@@ -931,7 +949,7 @@ class MainWindow(QMainWindow):
         图层顺序改变
 
         Args:
-            layer_ids: 新的图层 ID 顺序（从上到下，不包括根图层）
+            layer_ids: 面板中图层的 ID 顺序（从上到下；顶行 = 画布最顶层）
         """
         if self.image_data is None:
             return
@@ -939,16 +957,8 @@ class MainWindow(QMainWindow):
         # 过滤掉根图层 ID
         user_layer_ids = [lid for lid in layer_ids if lid != "root"]
 
-        # 根据新顺序重新排列 user_layers
-        new_layers = []
-        for layer_id in user_layer_ids:
-            for layer in self.image_data.user_layers:
-                if layer.id == layer_id:
-                    new_layers.append(layer)
-                    break
-
-        # 更新图层列表
-        self.image_data.user_layers = new_layers
+        # 面板顶行 = 画布最顶层 = 列表尾部，反转面板顺序作为列表新顺序
+        self.image_data.user_layers = order_layers_by_panel(user_layer_ids, self.image_data.user_layers)
 
         # 如果当前在根图层，需要重新合成显示
         if self.active_layer_id == "root":
@@ -1106,9 +1116,9 @@ class MainWindow(QMainWindow):
                 self.image_data.user_layers.remove(layer)
                 self.properties_panel.layers_panel.remove_layer(layer.id)
 
-            # 添加合并后的图层
+            # 添加合并后的图层（列表尾 = 画布最顶层，面板插到顶行）
             self.image_data.user_layers.append(merged_layer)
-            self.properties_panel.layers_panel.add_layer(merged_layer.id, merged_layer.name)
+            self.properties_panel.layers_panel.add_layer(merged_layer.id, merged_layer.name, on_top=True)
 
             # 切换到合并后的图层
             self.active_layer_id = merged_layer.id
@@ -1825,7 +1835,7 @@ class MainWindow(QMainWindow):
         # 清空图层面板
         self.properties_panel.layers_panel.clear_layers()
 
-        # 重新添加根图层
+        # 重新添加根图层（放在最后一行 = 画布最底层，故最后添加）
         if self.current_file_path:
             import os
 
@@ -1834,15 +1844,16 @@ class MainWindow(QMainWindow):
         else:
             root_layer_name = "🖼️ Root"
 
-        self.properties_panel.layers_panel.add_layer(layer_id="root", name=root_layer_name, is_root=True, visible=True)
-
         # 重新添加所有用户图层，检查是否超出范围
+        # 列表头 = 画布最底层，逆序添加使面板顶行 = 画布最顶层
         image_shape = (self.image_data.height, self.image_data.width)
-        for layer in self.image_data.user_layers:
+        for layer in reversed(self.image_data.user_layers):
             is_out_of_bounds = not layer.is_in_bounds(image_shape)
             self.properties_panel.layers_panel.add_layer(
                 layer.id, layer.name, is_out_of_bounds=is_out_of_bounds, visible=layer.visible
             )
+
+        self.properties_panel.layers_panel.add_layer(layer_id="root", name=root_layer_name, is_root=True, visible=True)
 
         # 确保当前激活的图层仍然有效
         layer_exists = self.active_layer_id == "root" or any(
