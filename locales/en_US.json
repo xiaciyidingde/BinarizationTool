@@ -98,7 +98,11 @@
     "image_flipped_vertical": "Image flipped vertically",
     "transform_binary_only": "Image transform is only available in binary view. Please switch to binary mode first",
     "selection_fill_failed": "Failed to fill selection holes",
-    "smart_optimize_failed": "Smart selection boundary optimization failed, original selection kept"
+    "smart_optimize_failed": "Smart selection boundary optimization failed, original selection kept",
+    "smart_selection_activated": "Switched to smart selection mode",
+    "smart_selection_failed": "Smart selection failed, please retry",
+    "sam_load_failed_after_download": "SAM model still failed to load after download",
+    "sam_model_load_failed": "SAM model failed to load"
   },
   "selection": {
     "drag_select": "Paint",
@@ -132,7 +136,8 @@
     "preprocess_error": "Preprocessing failed:\n{error}",
     "update_error": "Image update failed:\n{error}",
     "feature_developing": "Feature in Development",
-    "theme_not_supported": "Dark theme and system theme will be supported in future versions.\nReverting to light theme."
+    "theme_not_supported": "Dark theme and system theme will be supported in future versions.\nReverting to light theme.",
+    "sam_model_not_found": "SAM2 model file not found.\n\nDownload now?"
   },
   "file_dialog": {
     "open_image": "Open Image",
@@ -350,7 +355,14 @@
     "layer_order_changed": "Layer order updated",
     "layer_renamed": "Layer renamed to: {name}",
     "duplicate_name_error": "Layer name \"{name}\" already exists. Please use a different name",
-    "confirm_delete": "Are you sure you want to delete layer \"{name}\"?\nThis action cannot be undone."
+    "confirm_delete": "Are you sure you want to delete layer \"{name}\"?\nThis action cannot be undone.",
+    "switched_to_layer": "Switched to layer: {name}",
+    "switched_to_root": "Switched to root layer",
+    "no_original_for_rebinarize": "Layer has no original image data, cannot re-binarize",
+    "rebinarized": "Layer {name} re-binarized",
+    "rebinarize_failed": "Re-binarization failed: {error}",
+    "visibility_tooltip": "Show/Hide layer",
+    "delete_tooltip": "Delete layer"
   },
   "ai_result": {
     "title": "AI Processing Result",
@@ -426,6 +438,8 @@
     "sam2_size_tiny": "~80MB",
     "sam2_size_small": "~180MB",
     "sam2_size_base_plus": "~320MB",
-    "sam2_size_large": "~900MB"
+    "sam2_size_large": "~900MB",
+    "unknown_model_type": "Unknown model type",
+    "force_terminate": "Force terminating download thread..."
   }
 }

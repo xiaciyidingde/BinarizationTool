@@ -98,7 +98,11 @@
     "image_flipped_vertical": "图像已垂直翻转",
     "transform_binary_only": "图像变换功能仅在二值化视图下可用，请先切换到二值化模式",
     "selection_fill_failed": "填充选区空洞失败",
-    "smart_optimize_failed": "智能选区边界优化失败，已保留原始选区"
+    "smart_optimize_failed": "智能选区边界优化失败，已保留原始选区",
+    "smart_selection_activated": "已切换到智能选择模式",
+    "smart_selection_failed": "智能选择失败，请重试",
+    "sam_load_failed_after_download": "SAM 模型下载后仍无法加载",
+    "sam_model_load_failed": "SAM 模型加载失败"
   },
   "selection": {
     "drag_select": "涂抹",
@@ -132,7 +136,8 @@
     "preprocess_error": "预处理失败:\n{error}",
     "update_error": "图像更新失败:\n{error}",
     "feature_developing": "功能开发中",
-    "theme_not_supported": "深色主题和跟随系统功能将在后续版本中支持。\n当前将恢复为浅色主题。"
+    "theme_not_supported": "深色主题和跟随系统功能将在后续版本中支持。\n当前将恢复为浅色主题。",
+    "sam_model_not_found": "未找到 SAM2 模型文件。\n\n是否现在下载？"
   },
   "file_dialog": {
     "open_image": "打开图片",
@@ -350,7 +355,14 @@
     "layer_order_changed": "图层顺序已更新",
     "layer_renamed": "图层已重命名为：{name}",
     "duplicate_name_error": "图层名称\"{name}\"已存在，请使用其他名称",
-    "confirm_delete": "确定要删除图层\"{name}\"吗？\n此操作无法撤销。"
+    "confirm_delete": "确定要删除图层\"{name}\"吗？\n此操作无法撤销。",
+    "switched_to_layer": "已切换到图层: {name}",
+    "switched_to_root": "已切换到根图层",
+    "no_original_for_rebinarize": "图层没有原图数据，无法重新二值化",
+    "rebinarized": "图层 {name} 已重新二值化",
+    "rebinarize_failed": "重新二值化失败: {error}",
+    "visibility_tooltip": "显示/隐藏图层",
+    "delete_tooltip": "删除图层"
   },
   "ai_result": {
     "title": "AI 处理结果",
@@ -426,6 +438,8 @@
     "sam2_size_tiny": "约 80MB",
     "sam2_size_small": "约 180MB",
     "sam2_size_base_plus": "约 320MB",
-    "sam2_size_large": "约 900MB"
+    "sam2_size_large": "约 900MB",
+    "unknown_model_type": "未知模型类型",
+    "force_terminate": "强制终止下载线程..."
   }
 }

@@ -557,7 +557,9 @@ class Canvas(QWidget):
                             else:
                                 # SAM选择失败，显示提示
                                 if hasattr(self, "main_window") and self.main_window is not None:
-                                    self.main_window.statusbar.showMessage("智能选择失败，请重试", 2000)
+                                    self.main_window.statusbar.showMessage(
+                                        self.main_window.tr.tr("message.smart_selection_failed"), 2000
+                                    )
                         else:
                             # 开始拖动选择（传统方式）
                             dirty_rect = self.current_tool.start_drag_select(self.image_data, pixel_x, pixel_y)

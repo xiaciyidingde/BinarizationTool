@@ -185,7 +185,7 @@ class LayerItemWidget(QWidget):
                 border-radius: 3px;
             }
         """)
-        self.visibility_button.setToolTip("显示/隐藏图层")
+        self.visibility_button.setToolTip(get_translator().tr("layers_panel.visibility_tooltip"))
         self.visibility_button.clicked.connect(self._on_visibility_clicked)
 
         # 根图层的可见性按钮禁用
@@ -238,7 +238,7 @@ class LayerItemWidget(QWidget):
             delete_pixmap = QPixmap()
             delete_pixmap.loadFromData(DELETE)
             self.delete_button.setIcon(QIcon(delete_pixmap))
-            self.delete_button.setToolTip("删除图层")
+            self.delete_button.setToolTip(get_translator().tr("layers_panel.delete_tooltip"))
             self.delete_button.clicked.connect(self._on_delete_clicked)
             layout.addWidget(self.delete_button)
 

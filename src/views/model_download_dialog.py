@@ -129,7 +129,7 @@ class ModelDownloadDialog(QDialog):
         elif self.model_type == "sam2":
             info_text = self._get_sam2_info_text()
         else:
-            info_text = "未知模型类型"
+            info_text = self.tr.tr("model_download.unknown_model_type")
 
         info_label = QLabel(info_text)
         info_label.setWordWrap(True)
@@ -249,7 +249,7 @@ class ModelDownloadDialog(QDialog):
                 # 等待线程结束（最多等待3秒）
                 if not self.worker.wait(3000):
                     # 如果3秒后还没结束，强制终止（注意：这可能导致资源泄漏）
-                    self.log_text.append("强制终止下载线程...")
+                    self.log_text.append(self.tr.tr("model_download.force_terminate"))
                     self.worker.terminate()
                     self.worker.wait()
                 self.reject()

@@ -731,7 +731,7 @@ class MainWindow(QMainWindow):
                     selected_pixels = int(np.sum(layer.mask))
                     self.properties_panel.set_layer_info(layer.name, selected_pixels)
 
-                    self.statusbar.showMessage(f"已切换到图层: {layer.name}")
+                    self.statusbar.showMessage(self.tr.tr("layers_panel.switched_to_layer", name=layer.name))
                     break
         else:
             # 根图层
@@ -751,7 +751,7 @@ class MainWindow(QMainWindow):
                 )
                 self.properties_panel.size_label.setText(size_text)
 
-            self.statusbar.showMessage("已切换到根图层")
+            self.statusbar.showMessage(self.tr.tr("layers_panel.switched_to_root"))
 
         # 根据当前视图模式更新显示
         self._safe_update_tile_cache(self.image_data.selection_mask if self.image_data else None)
@@ -1988,7 +1988,7 @@ class MainWindow(QMainWindow):
                 break
 
         if current_layer is None or current_layer.original_region is None:
-            self.statusbar.showMessage("图层没有原图数据，无法重新二值化")
+            self.statusbar.showMessage(self.tr.tr("layers_panel.no_original_for_rebinarize"))
             return
 
         try:
@@ -2022,12 +2022,14 @@ class MainWindow(QMainWindow):
 
             # 隐藏处理中状态
             self.canvas.set_processing(False)
-            self.statusbar.showMessage(f"图层 {current_layer.name} 已重新二值化")
+            self.statusbar.showMessage(self.tr.tr("layers_panel.rebinarized", name=current_layer.name))
 
         except Exception as e:
             self.canvas.set_processing(False)
-            self.statusbar.showMessage(f"重新二值化失败: {str(e)}")
-            QMessageBox.critical(self, self.tr.tr("dialog.error"), f"重新二值化失败：{str(e)}")
+            self.statusbar.showMessage(self.tr.tr("layers_panel.rebinarize_failed", error=str(e)))
+            QMessageBox.critical(
+                self, self.tr.tr("dialog.error"), self.tr.tr("layers_panel.rebinarize_failed", error=str(e))
+            )
 
     def _restore_parameters(self, params: dict):
         """
@@ -2901,7 +2903,7 @@ class MainWindow(QMainWindow):
         self._ensure_sam_model_loaded()
 
         # 提示用户
-        self.statusbar.showMessage("已切换到智能选择模式")
+        self.statusbar.showMessage(self.tr.tr("message.smart_selection_activated"))
 
     def _show_ai_result(self, original: "np.ndarray", processed: "np.ndarray", model_type: str, processor=None):
         """
@@ -3402,7 +3404,7 @@ class MainWindow(QMainWindow):
             reply = QMessageBox.question(
                 self,
                 self.tr.tr("dialog.download_model"),
-                "未找到 SAM2 模型文件。\n\n是否现在下载？",
+                self.tr.tr("dialog.sam_model_not_found"),
                 QMessageBox.Yes | QMessageBox.No,
                 QMessageBox.Yes,
             )
@@ -3413,7 +3415,7 @@ class MainWindow(QMainWindow):
                     # 重新尝试创建处理器
                     self.sam_processor = AIProcessorFactory.create_processor("sam", model_dir)
                     if self.sam_processor is None:
-                        self.statusbar.showMessage("SAM 模型下载后仍无法加载")
+                        self.statusbar.showMessage(self.tr.tr("message.sam_load_failed_after_download"))
                         return False
                 else:
                     return False
@@ -3437,7 +3439,7 @@ class MainWindow(QMainWindow):
 
             return True
         else:
-            self.statusbar.showMessage("SAM 模型加载失败")
+            self.statusbar.showMessage(self.tr.tr("message.sam_model_load_failed"))
             return False
 
     def _download_sam_model(self, target_dir: str) -> bool:
