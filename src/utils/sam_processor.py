@@ -13,12 +13,12 @@ class SAMProcessor:
     """
     SAM 模型处理器
 
-    使用 MobileSAM 进行快速图像分割。
+    使用 SAM2 的 ONNX 导出模型（3 输出编码器 + 匹配的解码器）进行图像分割。
     """
 
     def __init__(self, encoder_path: str, decoder_path: str):
         """
-        初始化 SAM 处理器
+        初始化 SAM 模型处理器
 
         Args:
             encoder_path: 编码器模型路径
@@ -29,7 +29,8 @@ class SAMProcessor:
         self.encoder_session = None
         self.decoder_session = None
         self.image_embedding = None
-        self.high_res_feats = None  # SAM2的高分辨率特征
+        self.high_res_feats_0 = None  # SAM2 的高分辨率特征 0
+        self.high_res_feats_1 = None  # SAM2 的高分辨率特征 1
         self.current_image_shape = None
         self.is_loaded = False
 
@@ -137,7 +138,9 @@ class SAMProcessor:
                 self.high_res_feats_1 = encoder_outputs[1]  # (1, 64, 128, 128)
                 self.image_embedding = encoder_outputs[2]  # (1, 256, 64, 64)
             else:
-                # SAM1/MobileSAM: 只有一个输出
+                # 非 SAM2 导出格式（如 SAM1/MobileSAM 的单输出编码器）：仅保存 embedding，
+                # predict() 会因缺少 high-res 特征而拒绝预测
+                print(f"警告：编码器有 {len(encoder_outputs)} 个输出，不是 SAM2 导出格式，预测将不可用")
                 self.image_embedding = encoder_outputs[0]
                 self.high_res_feats_0 = None
                 self.high_res_feats_1 = None
@@ -168,6 +171,11 @@ class SAMProcessor:
             (分割掩码, IoU分数) 元组，掩码值为 0-255，如果失败返回 None
         """
         if not self.is_loaded or self.image_embedding is None:
+            return None
+
+        if self.high_res_feats_0 is None or self.high_res_feats_1 is None:
+            # 非SAM2导出格式（如SAM1/MobileSAM单输出编码器），缺少解码器所需的高分辨率特征
+            print("SAM 预测失败: 编码器不是 SAM2 导出格式（缺少 high_res_feats），仅支持 SAM2 模型")
             return None
 
         try:
@@ -273,6 +281,8 @@ class SAMProcessor:
         self.encoder_session = None
         self.decoder_session = None
         self.image_embedding = None
+        self.high_res_feats_0 = None
+        self.high_res_feats_1 = None
         self.current_image_shape = None
         self.is_loaded = False
 

@@ -168,19 +168,22 @@ class RMBGProcessor(AIProcessor):
         """
         预处理图像
 
+        与 briaai 官方管线一致：resize 到 (1024, 1024) 后除以 255，
+        再按 mean=[0.5, 0.5, 0.5]、std=[1.0, 1.0, 1.0] 归一化到 [-1, 1]。
+
         Args:
             image: 输入图像 (H, W, 3) RGB
 
         Returns:
-            预处理后的图像 (1, 3, H, W) 归一化到 [0, 1]
+            预处理后的图像 (1, 3, H, W)，值范围 [-1, 1]
         """
         import cv2
 
         # 调整大小到模型输入尺寸
         resized = cv2.resize(image, self.input_size, interpolation=cv2.INTER_LINEAR)
 
-        # 转换为 float32 并归一化到 [0, 1]
-        normalized = resized.astype(np.float32) / 255.0
+        # 转换为 float32，除以 255 后减去均值 0.5（官方 mean=[0.5,0.5,0.5]、std=[1,1,1]）
+        normalized = resized.astype(np.float32) / 255.0 - 0.5
 
         # 转换为 (1, 3, H, W) 格式
         transposed = np.transpose(normalized, (2, 0, 1))
@@ -203,6 +206,12 @@ class RMBGProcessor(AIProcessor):
 
         # 移除批次和通道维度
         mask = mask.squeeze()
+
+        # 官方后处理：对掩码做 min-max 归一化，消除不同导出图输出尺度差异
+        mask_min = float(mask.min())
+        mask_max = float(mask.max())
+        if mask_max > mask_min:
+            mask = (mask - mask_min) / (mask_max - mask_min)
 
         # 调整大小到原始尺寸
         h, w = original_size

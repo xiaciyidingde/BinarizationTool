@@ -132,10 +132,12 @@ class ImageEnhancer:
             kernel_size = int(strength / 10) * 2 + 3
             return cv2.medianBlur(img.astype(np.uint8), kernel_size).astype(np.float32)
         elif method == 2:  # 双边滤波
-            d = int(strength)
+            # 直径映射到 1-25：更大的直径在 O(d²) 核下会显著卡顿且效果增益有限
+            d = max(1, int(strength / 4))
             return cv2.bilateralFilter(img.astype(np.uint8), d, 75, 75).astype(np.float32)
         elif method == 3:  # NLMeans降噪
-            h = strength * 2
+            # h 映射到 0-10：典型有效范围 3-10，原 h=strength*2 在中等强度下就会抹平细节
+            h = strength / 10.0
             img_uint8 = img.astype(np.uint8)
             # 检查是否为 RGB 图像
             if len(img.shape) == 3 and img.shape[2] == 3:
@@ -149,12 +151,13 @@ class ImageEnhancer:
                     np.float32
                 )
         elif method == 4:  # 形态学降噪 - 开运算（去除小的孤立点）
-            kernel_size = int(strength / 20) + 1
+            # 核尺寸映射为奇数且至少 3（1×1 核是恒等操作，滑块低段会完全无效）
+            kernel_size = max(3, int(strength / 15) * 2 + 1)
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
             # 开运算 = 先腐蚀后膨胀，去除小的白色噪点
             return cv2.morphologyEx(img.astype(np.uint8), cv2.MORPH_OPEN, kernel).astype(np.float32)
         elif method == 5:  # 形态学降噪 - 闭运算（填充小孔）
-            kernel_size = int(strength / 20) + 1
+            kernel_size = max(3, int(strength / 15) * 2 + 1)
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
             # 闭运算 = 先膨胀后腐蚀，填充小的黑色孔洞
             return cv2.morphologyEx(img.astype(np.uint8), cv2.MORPH_CLOSE, kernel).astype(np.float32)
@@ -182,19 +185,26 @@ class ImageEnhancer:
 
     @staticmethod
     def apply_sharpening(img, sharpen=0):
-        """锐化"""
+        """锐化
+
+        使用混合式锐化：img + 强度 * (锐化结果 - img)。
+        基础核的元素和均为 1（直流增益 1），混合后再乘强度不会破坏亮度，
+        否则部分强度下图像会整体变暗。
+        """
         if sharpen <= 0:
             return img
 
-        # 根据锐化强度选择不同的核
+        # 根据锐化强度选择不同的基础核（元素和均为 1）
         if sharpen < 33:
-            kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]]) * (sharpen / 100.0)
+            base_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]], dtype=np.float32)
         elif sharpen < 66:
-            kernel = np.array([[-2, -2, -2], [-2, 17, -2], [-2, -2, -2]]) * (sharpen / 100.0)
+            base_kernel = np.array([[-2, -2, -2], [-2, 17, -2], [-2, -2, -2]], dtype=np.float32)
         else:
-            kernel = np.array([[-3, -3, -3], [-3, 25, -3], [-3, -3, -3]]) * (sharpen / 100.0)
+            base_kernel = np.array([[-3, -3, -3], [-3, 25, -3], [-3, -3, -3]], dtype=np.float32)
 
-        return cv2.filter2D(img, -1, kernel)
+        sharpened = cv2.filter2D(img, -1, base_kernel)
+        strength = sharpen / 100.0
+        return img + strength * (sharpened - img)
 
     @staticmethod
     def apply_edge_detection(img, mode=0, strength=50, threshold2=150):
@@ -411,7 +421,8 @@ class BinarizationEngine:
             matrix_size = 8
 
         bayer_matrix = generate_bayer_matrix(matrix_size)
-        threshold_map = (bayer_matrix / (matrix_size * matrix_size)) * 255
+        # +0.5 偏置消除系统偏差：否则 Bayer 值为 0 的格点会让所有非纯黑像素强制变白
+        threshold_map = ((bayer_matrix + 0.5) / (matrix_size * matrix_size)) * 255
 
         # 使用 Cython 加速版本
         result = ordered_dithering(img, threshold_map.astype(np.float64), matrix_size)
@@ -633,17 +644,30 @@ class BinarizationEngine:
             window = BinarizationEngine._validate_window_size(kwargs.get("window_size"), img.shape)
 
             # 计算局部均值和标准差
-            mean = cv2.boxFilter(img.astype(float), -1, (window, window))
-            mean_square = cv2.boxFilter(img.astype(float) ** 2, -1, (window, window))
+            img_float = img.astype(float)
+            mean = cv2.boxFilter(img_float, -1, (window, window))
+            mean_square = cv2.boxFilter(img_float**2, -1, (window, window))
             # 使用 np.maximum 确保方差非负，避免浮点数精度问题
             variance = np.maximum(mean_square - mean**2, 0)
             std = np.sqrt(variance)
 
-            # Wolf参数（可自定义）
+            # Wolf-Jolion (2004)：T = mean - k * (mean - 全局最小灰度) * (1 - std / R)
+            # R = 1 - 局部标准差最大值/全局标准差（归一化动态范围）。
+            # 注意：R 定义在 [0,1] 归一化灰度上，而 std 是灰度量纲；
+            # 在 0-255 灰度域计算时 R 需乘 255 做量纲对齐，否则阈值发散。
             k = kwargs.get("wolf_k", 0.5)
-            R = 128
-            min_std = 2
-            threshold = mean - k * std * (1 - std / (R * np.clip(std, min_std, None)))
+            global_min = float(img_float.min())
+            global_std = float(img_float.std())
+
+            if global_std <= 1e-6:
+                # 纯色图像：所有像素同值，直接与均值比较
+                binary = np.where(img >= mean, 255, 0).astype(np.uint8)
+                return BinarizationEngine.ensure_rgb(binary)
+
+            R = 255.0 * (1.0 - float(std.max()) / global_std)
+            if abs(R) < 1e-6:
+                R = 1e-6
+            threshold = mean - k * (mean - global_min) * (1.0 - std / R)
 
             binary = np.where(img >= threshold, 255, 0).astype(np.uint8)
             return BinarizationEngine.ensure_rgb(binary)
