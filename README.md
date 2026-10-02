@@ -5,7 +5,7 @@
 **专业的二值化图片编辑工具，让黑白图像处理变得简单高效**
 
 <p align="center">
-  <img src="https://img.shields.io/badge/版本-1.6.2.1-blue.svg" alt="版本">
+  <img src="https://img.shields.io/badge/版本-1.6.3.0-blue.svg" alt="版本">
   <img src="https://img.shields.io/badge/平台-多平台支持-green.svg" alt="平台">
   <img src="https://img.shields.io/badge/Python-3.8+-yellow.svg" alt="Python">
   <img src="https://img.shields.io/badge/许可证-CC%20BY--NC--SA%204.0-orange.svg" alt="许可证">
