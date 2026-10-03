@@ -25,7 +25,7 @@ from ..models.pan_tool import PanTool
 from ..models.selection_tool import SelectionTool
 from ..models.tile_cache import TileCache
 from ..models.view_transform import ViewTransform
-from ..utils.config_manager import ConfigManager
+from ..utils.config_manager import get_config_manager
 from ..utils.coordinate_transform import CoordinateTransform
 from ..utils.selection_border_renderer import SelectionBorderRenderer
 from ..utils.translation_manager import get_translator
@@ -57,8 +57,8 @@ class Canvas(QWidget):
         # 翻译器
         self.tr = get_translator()
 
-        # 配置管理器
-        self.config = ConfigManager()
+        # 配置管理器（共享全局单例，设置对话框修改后可即时生效）
+        self.config = get_config_manager()
 
         # 数据
         self.image_data: ImageData | None = None

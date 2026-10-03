@@ -3606,9 +3606,8 @@ class MainWindow(QMainWindow):
 
         # 3. 文件设置（暂时不需要应用，在保存时使用）
 
-        # 刷新画布以应用新设置
-        if self.image_data is not None:
-            self.canvas.update()
+        # 刷新画布以应用新设置（无图时也刷新，保证画布背景色等立即生效）
+        self.canvas.update()
 
     def _show_about(self):
         """显示关于对话框"""
