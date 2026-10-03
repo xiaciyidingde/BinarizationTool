@@ -257,7 +257,7 @@ class Canvas(QWidget):
                 self.current_tool.render_cursor(painter, self.mouse_pos.x(), self.mouse_pos.y())
 
         # 渲染选择工具的矩形框选覆盖层和十字光标
-        if isinstance(self.current_tool, SelectionTool) and self.current_tool.rect_select_mode:
+        if isinstance(self.current_tool, SelectionTool) and self.current_tool.method == "rect":
             self.current_tool.render_rect_select_overlay(painter, self.view_transform)
             # 在矩形框选模式下显示十字光标
             if self.mouse_pos is not None:
@@ -272,28 +272,19 @@ class Canvas(QWidget):
         if (
             isinstance(self.current_tool, SelectionTool)
             and self.mouse_pos is not None
-            and not self.current_tool.rect_select_mode
+            and self.current_tool.method != "rect"
         ):
             # 检查是否应该使用智能选择模式
             use_sam_mode = False
-            if self.current_tool.sam_processor is not None and self.image_data is not None:
-                # 检查智能选择开关是否打开
-                smart_enabled = False
-                if (
-                    hasattr(self, "main_window")
-                    and self.main_window is not None
-                    and hasattr(self.main_window, "properties_panel")
-                ):
-                    panel = self.main_window.properties_panel
-                    smart_enabled = (
-                        hasattr(panel, "smart_selection_switch") and panel.smart_selection_switch.isChecked()
-                    )
-
-                # 只在原图/预处理视图且智能选择开启时使用SAM模式
-                if smart_enabled:
-                    view_mode = self.image_data.view_mode
-                    if view_mode in ["original", "preprocessed"]:
-                        use_sam_mode = True
+            if (
+                self.current_tool.sam_processor is not None
+                and self.image_data is not None
+                and self.current_tool.method == "smart"
+            ):
+                # 只在智能选择方式、原图/预处理视图下使用SAM模式
+                view_mode = self.image_data.view_mode
+                if view_mode in ["original", "preprocessed"]:
+                    use_sam_mode = True
 
             if use_sam_mode:
                 # 智能选择模式：显示十字光标
@@ -493,33 +484,33 @@ class Canvas(QWidget):
 
                 elif isinstance(self.current_tool, SelectionTool):
                     # 检查是否是矩形框选模式
-                    if self.current_tool.rect_select_mode:
+                    if self.current_tool.method == "rect":
                         # 开始矩形框选
                         self.current_tool.start_rect_select(pixel_x, pixel_y)
                         self.update()
                     else:
                         # 检查是否启用智能选择且在预处理/原图视图
-                        smart_enabled = False
                         use_sam = False
-                        if hasattr(self, "main_window") and self.main_window is not None:
-                            if hasattr(self.main_window, "properties_panel"):
-                                panel = self.main_window.properties_panel
-                                if hasattr(panel, "smart_selection_switch"):
-                                    smart_enabled = panel.smart_selection_switch.isChecked()
-
-                            # 只在预处理/原图视图且智能选择开启时使用 SAM
-                            if smart_enabled and self.image_data is not None:
-                                view_mode = self.image_data.view_mode
-                                if view_mode in ["original", "preprocessed"]:
-                                    use_sam = True
+                        if self.current_tool.method == "smart" and self.image_data is not None:
+                            # 只在预处理/原图视图下使用 SAM
+                            view_mode = self.image_data.view_mode
+                            if view_mode in ["original", "preprocessed"]:
+                                use_sam = True
 
                         if use_sam:
                             # 使用 SAM 智能选择（单点点击）
                             # 始终使用前景点（label=1），通过selection_mode控制选区合并方式
                             is_foreground = True
 
+                            # 从主窗口读取左面板配置的智能选择参数
+                            smart_config = self.main_window.smart_selection_config
                             result = self.current_tool.smart_select_by_point(
-                                self.image_data, pixel_x, pixel_y, is_foreground
+                                self.image_data,
+                                pixel_x,
+                                pixel_y,
+                                is_foreground,
+                                confidence=smart_config.get("confidence", 0.5),
+                                mask_index=smart_config.get("mask_level", "auto"),
                             )
 
                             if result and result[0]:  # 检查是否成功
@@ -665,29 +656,22 @@ class Canvas(QWidget):
             elif isinstance(self.current_tool, SelectionTool):
                 # 检查是否应该使用智能选择模式（与paintEvent保持一致）
                 use_sam_mode = False
-                if self.current_tool.sam_processor is not None and self.image_data is not None:
-                    smart_enabled = False
-                    if (
-                        hasattr(self, "main_window")
-                        and self.main_window is not None
-                        and hasattr(self.main_window, "properties_panel")
-                    ):
-                        panel = self.main_window.properties_panel
-                        smart_enabled = (
-                            hasattr(panel, "smart_selection_switch") and panel.smart_selection_switch.isChecked()
-                        )
-
-                    if smart_enabled:
-                        view_mode = self.image_data.view_mode
-                        if view_mode in ["original", "preprocessed"]:
-                            use_sam_mode = True
+                if (
+                    self.current_tool.sam_processor is not None
+                    and self.image_data is not None
+                    and self.current_tool.method == "smart"
+                ):
+                    # 只在智能选择方式、原图/预处理视图下使用SAM模式
+                    view_mode = self.image_data.view_mode
+                    if view_mode in ["original", "preprocessed"]:
+                        use_sam_mode = True
 
                 if use_sam_mode:
                     # 智能选择模式：鼠标移动时更新光标显示
                     self.update()
                 elif self.current_tool.is_dragging:
                     # 检查是否是矩形框选模式
-                    if self.current_tool.rect_select_mode:
+                    if self.current_tool.method == "rect":
                         # 更新矩形框选
                         self.current_tool.continue_rect_select(pixel_x, pixel_y)
                         self.update()
@@ -875,7 +859,7 @@ class Canvas(QWidget):
 
                 elif isinstance(self.current_tool, SelectionTool) and self.current_tool.is_dragging:
                     # 检查是否是矩形框选模式
-                    if self.current_tool.rect_select_mode:
+                    if self.current_tool.method == "rect":
                         # 结束矩形框选
                         self.current_tool.end_rect_select(self.image_data)
                         # 将选区同步到 image_data
@@ -895,21 +879,9 @@ class Canvas(QWidget):
                         self.image_modified.emit()
                         self.update()
                     else:
-                        # 检查智能选择开关状态
-                        smart_enabled = False
-                        if (
-                            hasattr(self, "main_window")
-                            and self.main_window is not None
-                            and hasattr(self.main_window, "properties_panel")
-                        ):
-                            panel = self.main_window.properties_panel
-                            smart_enabled = (
-                                hasattr(panel, "smart_selection_switch") and panel.smart_selection_switch.isChecked()
-                            )
-
-                        # 结束拖动选择，可能触发智能优化
+                        # 结束拖动选择，可能触发智能优化（智能选择方式下吸附边界）
                         smart_dirty_rect = self.current_tool.end_drag_select(
-                            self.image_data, smart_selection=smart_enabled
+                            self.image_data, smart_selection=self.current_tool.method == "smart"
                         )
 
                         # 停止节流定时器并执行最后一次失效

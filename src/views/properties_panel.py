@@ -6,9 +6,10 @@
 
 import os
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QButtonGroup,
+    QComboBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -33,6 +34,9 @@ class PropertiesPanel(QWidget):
     - 第一页：图片属性
     - 第二页：工具设置（预留）
     """
+
+    # 选择方式变更（"paint" / "rect" / "smart"）
+    selection_method_changed = Signal(str)
 
     def __init__(self, parent=None):
         """初始化属性面板"""
@@ -303,57 +307,22 @@ class PropertiesPanel(QWidget):
         mode_layout.addStretch()
         basic_layout.addLayout(mode_layout)
 
-        # 选择方式设置
+        # 选择方式设置（下拉框：涂抹 / 框选 / 智能选择）
         method_layout = QHBoxLayout()
         method_layout.setSpacing(12)
         method_label = QLabel(self.tr.tr("properties_panel.selection_method"))
         method_label.setMinimumWidth(40)
         method_layout.addWidget(method_label)
 
-        self.selection_method_group = QButtonGroup(self)
-        self.brush_method_radio = QRadioButton(self.tr.tr("properties_panel.method_paint"))
-        self.rect_method_radio = QRadioButton(self.tr.tr("properties_panel.method_rect"))
-        self.selection_method_group.addButton(self.brush_method_radio, 0)
-        self.selection_method_group.addButton(self.rect_method_radio, 1)
-        self.brush_method_radio.setChecked(True)
+        self.selection_method_combo = QComboBox()
+        self.selection_method_combo.addItem(self.tr.tr("properties_panel.method_paint"), userData="paint")
+        self.selection_method_combo.addItem(self.tr.tr("properties_panel.method_rect"), userData="rect")
+        self.selection_method_combo.addItem(self.tr.tr("properties_panel.method_smart"), userData="smart")
+        self.selection_method_combo.setCurrentIndex(0)  # 默认涂抹
+        self.selection_method_combo.currentIndexChanged.connect(self._on_selection_method_combo_changed)
+        method_layout.addWidget(self.selection_method_combo, 1)
 
-        method_layout.addWidget(self.brush_method_radio)
-        method_layout.addWidget(self.rect_method_radio)
-        method_layout.addStretch()
         basic_layout.addLayout(method_layout)
-
-        # 智能选择设置
-        smart_layout = QHBoxLayout()
-        smart_layout.setSpacing(8)
-        smart_label = QLabel(self.tr.tr("properties_panel.smart_selection"))
-        smart_label.setMinimumWidth(40)
-        smart_layout.addWidget(smart_label)
-
-        from ..widgets.toggle_switch import ToggleSwitch
-
-        self.smart_selection_switch = ToggleSwitch()
-        self.smart_selection_switch.setChecked(False)  # 默认关闭
-
-        smart_layout.addWidget(self.smart_selection_switch)
-
-        # AI 标识（仅在预处理/原图视图显示）
-        self.smart_selection_ai_label = QLabel("AI")
-        self.smart_selection_ai_label.setStyleSheet("""
-            QLabel {
-                color: #4CAF50;
-                font-weight: bold;
-                font-size: 11px;
-                padding: 2px 6px;
-                background-color: rgba(76, 175, 80, 0.1);
-                border: 1px solid #4CAF50;
-                border-radius: 3px;
-            }
-        """)
-        self.smart_selection_ai_label.setVisible(False)  # 默认隐藏
-        smart_layout.addWidget(self.smart_selection_ai_label)
-
-        smart_layout.addStretch()
-        basic_layout.addLayout(smart_layout)
 
         # 填充选区（两个按钮：黑色和白色）
         fill_layout = QHBoxLayout()
@@ -514,18 +483,24 @@ class PropertiesPanel(QWidget):
         self.selection_settings.setVisible(True)
         self.measure_settings.setVisible(False)
 
-    def update_smart_selection_ai_label(self, view_mode: str, smart_enabled: bool):
+    def current_selection_method(self) -> str:
+        """当前选择方式（"paint" / "rect" / "smart"）"""
+        return self.selection_method_combo.currentData()
+
+    def set_selection_method(self, method: str):
         """
-        更新智能选择AI标识的显示状态
+        编程式设置选择方式（触发 selection_method_changed 信号）
 
         Args:
-            view_mode: 当前视图模式 ('original', 'preprocessed', 'binary')
-            smart_enabled: 智能选择是否开启
+            method: "paint" / "rect" / "smart"
         """
-        # 只在预处理或原图视图且智能选择开启时显示AI标识
-        should_show = (view_mode in ["original", "preprocessed"]) and smart_enabled
-        if hasattr(self, "smart_selection_ai_label"):
-            self.smart_selection_ai_label.setVisible(should_show)
+        index = self.selection_method_combo.findData(method)
+        if index >= 0:
+            self.selection_method_combo.setCurrentIndex(index)
+
+    def _on_selection_method_combo_changed(self, index: int):
+        """下拉框变更时发出方式字符串"""
+        self.selection_method_changed.emit(self.selection_method_combo.itemData(index))
 
     def show_measure_settings(self):
         """显示测量工具设置，隐藏其他"""

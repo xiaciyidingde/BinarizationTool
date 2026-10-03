@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from .image_data import ImageData
 
 from ..utils.cursor_renderer import CursorRenderer
+from ..utils.sam_processor import SAMProcessor
 from ..utils.stroke_interpolator import StrokeInterpolator
 from .rect_selector import RectSelector
 
@@ -186,13 +187,17 @@ class SelectionTool:
         self.last_point: tuple[int, int] | None = None
 
         # 矩形框选模式（使用 RectSelector）
-        self.rect_select_mode: bool = False  # 是否启用矩形框选模式
+        # 选择方式："paint"=涂抹 / "rect"=框选 / "smart"=智能选择（由属性面板下拉框驱动）
+        self.method: str = "paint"
         self.rect_selector = RectSelector()
 
         # SAM 智能选择
         self.sam_processor = None  # SAM 处理器实例（由主窗口设置）
         self.sam_points: list[tuple[int, int]] = []  # SAM 提示点坐标
         self.sam_labels: list[int] = []  # SAM 提示点标签（1=前景，0=背景）
+
+        # 智能边界优化的 Canny 高阈值（左面板"边缘吸附阈值"，默认 200）
+        self.edge_canny_high: int = 200
 
         # 智能边界优化失败时的通知回调（由 UI 层设置，用于向用户提示）
         self.boundary_optimization_failed = None
@@ -412,7 +417,13 @@ class SelectionTool:
         self._merge_selection(new_mask, width, height)
 
     def smart_select_by_point(
-        self, image_data: "ImageData", x: int, y: int, is_foreground: bool = True
+        self,
+        image_data: "ImageData",
+        x: int,
+        y: int,
+        is_foreground: bool = True,
+        confidence: float = 0.5,
+        mask_index: str | int = "auto",
     ) -> tuple[bool, float]:
         """
         使用 SAM 模型进行智能选择
@@ -422,6 +433,8 @@ class SelectionTool:
             x: 点击的 X 坐标
             y: 点击的 Y 坐标
             is_foreground: True=前景点，False=背景点
+            confidence: 置信度概率阈值 (0, 1)，默认 0.5，越高端点越紧
+            mask_index: "auto" 取 IoU 最高的掩码；0/1/2 指定掩码级别
 
         Returns:
             (成功标志, IoU分数) 元组
@@ -433,8 +446,11 @@ class SelectionTool:
         self.sam_points = [(x, y)]
         self.sam_labels = [1 if is_foreground else 0]
 
-        # 使用 SAM 预测
-        result = self.sam_processor.predict(self.sam_points, self.sam_labels)
+        # 概率阈值转换为 logits 阈值后传给模型
+        logit_threshold = SAMProcessor.probability_to_logit(confidence)
+        result = self.sam_processor.predict(
+            self.sam_points, self.sam_labels, logit_threshold=logit_threshold, mask_index=mask_index
+        )
 
         if result is None or not isinstance(result, tuple):
             return False, 0.0
@@ -790,10 +806,10 @@ class SelectionTool:
         if region.size == 0:
             return np.zeros_like(mask, dtype=np.uint8)
 
-        # PS风格：提高阈值，只检测强边缘，减少噪点干扰
-        # 使用更高的阈值
-        high_threshold1 = max(threshold1, 100)
-        high_threshold2 = max(threshold2, 200)
+        # PS风格：只检测强边缘，减少噪点干扰
+        # 高阈值由左面板"边缘吸附阈值"控制（默认 200），低阈值取其一半
+        high_threshold2 = max(threshold2, self.edge_canny_high)
+        high_threshold1 = max(threshold1, high_threshold2 // 2)
 
         # Canny 边缘检测
         edges = cv2.Canny(

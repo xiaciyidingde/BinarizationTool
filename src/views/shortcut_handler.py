@@ -165,22 +165,15 @@ class ShortcutHandler:
     # ========== 选择工具快捷键 ==========
 
     def _toggle_selection_method(self):
-        """切换选择工具方式（涂抹/框选）"""
+        """切换选择工具方式（涂抹/框选互换；智能选择方式下切回涂抹）"""
         if not isinstance(self.canvas.current_tool, SelectionTool):
             return
 
-        current_mode = self.canvas.selection_tool.rect_select_mode
-        new_mode = not current_mode
-        self.canvas.selection_tool.rect_select_mode = new_mode
+        current = self.canvas.selection_tool.method
+        new_method = "rect" if current == "paint" else "paint"
 
-        # 更新属性面板
-        if new_mode:
-            self.main_window.properties_panel.rect_method_radio.setChecked(True)
-        else:
-            self.main_window.properties_panel.drag_method_radio.setChecked(True)
-
-        method_name = self.tr.tr("selection.rect_select") if new_mode else self.tr.tr("selection.drag_select")
-        self.main_window.statusbar.showMessage(self.tr.tr("message.selection_method", method=method_name))
+        # 更新属性面板下拉框（触发统一处理器同步工具与状态栏）
+        self.main_window.properties_panel.set_selection_method(new_method)
         self.canvas.update()  # 更新光标显示
 
     def _toggle_selection_tool_mode(self):

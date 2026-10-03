@@ -7,6 +7,7 @@
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIcon, QImage, QPixmap
 from PySide6.QtWidgets import (
+    QComboBox,
     QGroupBox,
     QHBoxLayout,
     QLabel,
@@ -46,6 +47,7 @@ class BinarizationPanel(QWidget):
 
     # 信号：请求智能选择
     smart_selection_requested = Signal()
+    smart_config_changed = Signal(dict)
 
     def __init__(self, parent=None, panel_width=300):
         """
@@ -164,8 +166,10 @@ class BinarizationPanel(QWidget):
         """)
 
         # 标签页内容容器
+        # 注意：不要在这里用裸声明 setStyleSheet("background-color: transparent;")——
+        # 裸声明会级联到所有后代（包括下拉框弹出层），导致弹层透明；
+        # 内容容器的透明由上方 QScrollArea > QWidget > QWidget 规则实现
         tab_content = QWidget()
-        tab_content.setStyleSheet("background-color: transparent;")
         settings_layout = QVBoxLayout(tab_content)
         settings_layout.setContentsMargins(12, 8, 12, 8)  # 左右边距12px
         settings_layout.setSpacing(8)
@@ -209,6 +213,44 @@ class BinarizationPanel(QWidget):
         first_row.addWidget(self.smart_selection_button)
 
         ai_tools_layout.addLayout(first_row)
+
+        # 智能选择配置区：智能选择开关开启时显示（默认隐藏）
+        self.smart_config_widget = QWidget()
+        smart_config_layout = QVBoxLayout(self.smart_config_widget)
+        smart_config_layout.setContentsMargins(0, 0, 0, 0)
+        smart_config_layout.setSpacing(6)
+
+        # 置信度阈值（概率 0.10-0.90，默认 0.50；仅影响点击式智能选择）
+        self.confidence_slider = self._create_slider_with_reset(
+            "smart_confidence", 10, 90, 50, smart_config_layout, scale=0.01
+        )
+        self.confidence_slider.setToolTip(self.tr.tr("binarization_panel.smart_confidence_hint"))
+        self.confidence_slider.valueChanged.connect(self._emit_smart_config_changed)
+
+        # 掩码级别（自动 / 粗糙 / 精细）
+        # 注意：粗糙/精细对应解码器第 2/0 个输出掩码——顺序以实测为准
+        # （该模型的输出为 2=大区域/粗、0=小区域/细，与 SAM 论文的排列惯例相反）
+        mask_row = QHBoxLayout()
+        self.mask_level_label = QLabel(self.tr.tr("binarization_panel.smart_mask_level"))
+        self.mask_level_label.setMinimumWidth(70)
+        mask_row.addWidget(self.mask_level_label)
+
+        self.mask_level_combo = QComboBox()
+        self.mask_level_combo.addItem(self.tr.tr("binarization_panel.smart_mask_auto"), userData="auto")
+        self.mask_level_combo.addItem(self.tr.tr("binarization_panel.smart_mask_coarse"), userData=2)
+        self.mask_level_combo.addItem(self.tr.tr("binarization_panel.smart_mask_fine"), userData=0)
+        mask_row.addWidget(self.mask_level_combo, 1)
+
+        smart_config_layout.addLayout(mask_row)
+        self.mask_level_combo.currentIndexChanged.connect(self._emit_smart_config_changed)
+
+        # 边缘吸附阈值（Canny 高阈值 150-400，默认 200；仅影响拖拽选择的边界吸附）
+        self.edge_snap_slider = self._create_slider_with_reset("smart_edge_snap", 150, 400, 200, smart_config_layout)
+        self.edge_snap_slider.setToolTip(self.tr.tr("binarization_panel.smart_edge_snap_hint"))
+        self.edge_snap_slider.valueChanged.connect(self._emit_smart_config_changed)
+
+        self.smart_config_widget.setVisible(False)
+        ai_tools_layout.addWidget(self.smart_config_widget)
 
         # 保存模型状态
         self.has_rmbg_model = has_rmbg_model
@@ -287,8 +329,10 @@ class BinarizationPanel(QWidget):
         """)
 
         # 标签页内容容器
+        # 注意：不要在这里用裸声明 setStyleSheet("background-color: transparent;")——
+        # 裸声明会级联到所有后代（包括下拉框弹出层），导致弹层透明；
+        # 内容容器的透明由上方 QScrollArea > QWidget > QWidget 规则实现
         tab_content = QWidget()
-        tab_content.setStyleSheet("background-color: transparent;")
         settings_layout = QVBoxLayout(tab_content)
         settings_layout.setContentsMargins(12, 8, 12, 8)  # 左右边距12px
         settings_layout.setSpacing(8)
@@ -667,8 +711,9 @@ class BinarizationPanel(QWidget):
         label.setMinimumWidth(70)
         row_layout.addWidget(label)
 
-        # 数值标签
-        value_label = QLabel(str(int(default_val * scale)))
+        # 数值标签（初始文本与 valueChanged 的显示格式保持一致）
+        initial_text = f"{default_val * scale:.2f}" if scale != 1.0 else str(int(default_val * scale))
+        value_label = QLabel(initial_text)
         value_label.setMinimumWidth(25)
         value_label.setMaximumWidth(25)
         value_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
@@ -841,8 +886,10 @@ class BinarizationPanel(QWidget):
         """)
 
         # 标签页内容容器
+        # 注意：不要在这里用裸声明 setStyleSheet("background-color: transparent;")——
+        # 裸声明会级联到所有后代（包括下拉框弹出层），导致弹层透明；
+        # 内容容器的透明由上方 QScrollArea > QWidget > QWidget 规则实现
         tab_content = QWidget()
-        tab_content.setStyleSheet("background-color: transparent;")
         settings_layout = QVBoxLayout(tab_content)
         settings_layout.setContentsMargins(12, 8, 12, 8)
         settings_layout.setSpacing(8)
@@ -1424,3 +1471,30 @@ class BinarizationPanel(QWidget):
         """智能选择按钮点击事件"""
         # 发送信号通知主窗口切换到选择工具并开启智能选择
         self.smart_selection_requested.emit()
+
+    def get_smart_selection_config(self) -> dict:
+        """收集智能选择配置区的当前参数"""
+        return {
+            "confidence": self.confidence_slider.value() * 0.01,
+            "mask_level": self.mask_level_combo.currentData(),
+            "canny_high": self.edge_snap_slider.value(),
+        }
+
+    def _emit_smart_config_changed(self, *_):
+        """任一参数变化时发出配置信号"""
+        self.smart_config_changed.emit(self.get_smart_selection_config())
+
+    def set_smart_config_visible(self, visible: bool):
+        """显示/隐藏智能选择配置区（由属性面板的智能选择开关驱动）"""
+        self.smart_config_widget.setVisible(visible)
+
+    def apply_smart_selection_config(self, config: dict):
+        """从持久化配置恢复智能选择参数 UI（逐项设置）"""
+        if "confidence" in config:
+            self.confidence_slider.setValue(int(round(float(config["confidence"]) * 100)))
+        if "mask_level" in config:
+            idx = self.mask_level_combo.findData(config["mask_level"])
+            if idx >= 0:
+                self.mask_level_combo.setCurrentIndex(idx)
+        if "canny_high" in config:
+            self.edge_snap_slider.setValue(int(config["canny_high"]))

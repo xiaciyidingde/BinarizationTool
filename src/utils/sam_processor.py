@@ -159,13 +159,37 @@ class SAMProcessor:
             traceback.print_exc()
             return False
 
-    def predict(self, point_coords: list[tuple[int, int]], point_labels: list[int]) -> tuple[np.ndarray, float] | None:
+    @staticmethod
+    def probability_to_logit(probability: float) -> float:
+        """
+        将置信度概率 (0, 1) 转换为 logits 二值化阈值
+
+        sigmoid(logits) > p 等价于 logits > logit(p)，端点做夹取避免发散。
+
+        Args:
+            probability: 置信度概率，越高端点越紧
+
+        Returns:
+            logits 阈值（0.5 → 0.0）
+        """
+        p = min(max(float(probability), 1e-4), 1.0 - 1e-4)
+        return float(np.log(p / (1.0 - p)))
+
+    def predict(
+        self,
+        point_coords: list[tuple[int, int]],
+        point_labels: list[int],
+        logit_threshold: float = 0.0,
+        mask_index: str | int = "auto",
+    ) -> tuple[np.ndarray, float] | None:
         """
         根据提示点预测分割掩码
 
         Args:
             point_coords: 提示点坐标列表 [(x, y), ...]
             point_labels: 提示点标签列表 [1, 1, ...] (1=前景, 0=背景)
+            logit_threshold: logits 二值化阈值，默认 0（等价 sigmoid 概率 0.5）
+            mask_index: "auto" 取 IoU 最高的掩码；0/1/2 直接选用对应级别的掩码
 
         Returns:
             (分割掩码, IoU分数) 元组，掩码值为 0-255，如果失败返回 None
@@ -217,22 +241,26 @@ class SAMProcessor:
             masks = outputs[0]  # 掩码 (1, 3, H, W) - logits
             iou_predictions = outputs[1] if len(outputs) > 1 else None
 
-            # 选择最佳掩码（基于IoU分数）
+            # 选择掩码：auto 按 IoU 最高，否则使用指定级别（0/1/2）
             best_iou = 0.0
             if iou_predictions is not None:
-                best_idx = np.argmax(iou_predictions[0])
-                best_iou = float(iou_predictions[0, best_idx])
-                mask = masks[0, best_idx]
+                ious = iou_predictions[0]
+                best_idx = int(np.argmax(ious))
+                if isinstance(mask_index, (int, np.integer)) and 0 <= int(mask_index) < len(ious):
+                    best_idx = int(mask_index)
+                best_iou = float(ious[best_idx])
             else:
-                mask = masks[0, 0]
+                best_idx = 0
+
+            mask = masks[0, best_idx]
 
             # 调整大小到原始图像尺寸
             import cv2
 
             mask_resized = cv2.resize(mask, (w, h), interpolation=cv2.INTER_LINEAR)
 
-            # 二值化 - 直接使用0作为阈值（logits > 0 相当于 sigmoid > 0.5）
-            mask_binary = (mask_resized > 0.0).astype(np.uint8) * 255
+            # 二值化 - logits 阈值可调（0 等价于 sigmoid 概率 0.5）
+            mask_binary = (mask_resized > logit_threshold).astype(np.uint8) * 255
 
             return mask_binary, best_iou
 

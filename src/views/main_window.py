@@ -146,6 +146,14 @@ class MainWindow(QMainWindow):
         self.sam_processor = None  # SAM 处理器实例
         self.sam_model_loaded = False  # SAM 模型是否已加载
 
+        # 智能选择参数（左面板配置区可调，持久化到 [smart_selection] 配置节）
+        self.smart_selection_config = {"confidence": 0.5, "mask_level": "auto", "canny_high": 200}
+        # 参数落盘防抖（滑块拖动会连续触发变更信号）
+        self._smart_config_save_timer = QTimer(self)
+        self._smart_config_save_timer.setSingleShot(True)
+        self._smart_config_save_timer.setInterval(500)
+        self._smart_config_save_timer.timeout.connect(self._save_smart_selection_config)
+
         # 异步二值化
         self.binarization_worker: BinarizationWorker | None = None
         self.pending_binarization_params: tuple | None = None  # (preprocess_params, method, threshold, method_params)
@@ -683,6 +691,9 @@ class MainWindow(QMainWindow):
 
         # 智能选择请求
         self.binarization_panel.smart_selection_requested.connect(self._on_smart_selection_requested)
+
+        # 智能选择参数变更（左面板配置区）
+        self.binarization_panel.smart_config_changed.connect(self._on_smart_config_changed)
 
         # Canvas 图片修改
         self.canvas.image_modified.connect(self._on_image_modified)
@@ -2512,9 +2523,7 @@ class MainWindow(QMainWindow):
         # 选择工具设置
         self.properties_panel.selection_size_spinbox.valueChanged.connect(self._on_selection_size_changed_panel)
         self.properties_panel.selection_mode_group.buttonClicked.connect(self._on_selection_mode_changed_panel)
-        self.properties_panel.selection_method_group.buttonClicked.connect(self._on_selection_method_changed_panel)
-        # 智能选择开关
-        self.properties_panel.smart_selection_switch.toggled.connect(self._on_smart_selection_toggled)
+        self.properties_panel.selection_method_changed.connect(self._on_selection_method_changed)
         # 填充按钮
         self.properties_panel.fill_black_button.clicked.connect(lambda: self._fill_selection(0))
         self.properties_panel.fill_white_button.clicked.connect(lambda: self._fill_selection(255))
@@ -2545,19 +2554,28 @@ class MainWindow(QMainWindow):
         self.canvas.selection_tool.selection_mode = mode
         self.canvas.update()
 
-    def _on_selection_method_changed_panel(self):
-        """属性面板：选择方式改变（涂抹/框选）"""
-        button_id = self.properties_panel.selection_method_group.checkedId()
-        is_rect_mode = button_id == 1  # 0=涂抹, 1=框选
-        self.canvas.selection_tool.rect_select_mode = is_rect_mode
+    def _on_selection_method_changed(self, method: str):
+        """属性面板：选择方式改变（涂抹/框选/智能选择）的统一处理器"""
+        self.canvas.selection_tool.method = method
 
-        # 更新光标（无论哪种模式都隐藏系统光标，显示自定义光标）
+        # 更新光标（无论哪种方式都隐藏系统光标，显示自定义光标）
         self.canvas.setCursor(Qt.BlankCursor)
 
-        if is_rect_mode:
+        if method == "rect":
             self.statusbar.showMessage(self.tr.tr("message.rect_select_mode"))
-        else:
+        elif method == "paint":
             self.statusbar.showMessage(self.tr.tr("message.paint_select_mode"))
+
+        # 智能选择配置区跟随方式显示
+        self.binarization_panel.set_smart_config_visible(method == "smart")
+
+        # 进入智能选择方式时，与左面板"智能选择"按钮行为一致：
+        # 先确保在原图/预处理视图（必要时切换到预处理），再加载 SAM 模型
+        if method == "smart" and self.image_data is not None:
+            if self.image_data.view_mode not in ["original", "preprocessed"]:
+                self._on_view_mode_changed("preprocessed")
+                self.binarization_panel.view_mode_switcher.set_mode("preprocessed")
+            self._ensure_sam_model_loaded()
 
         self.canvas.update()
 
@@ -2618,15 +2636,11 @@ class MainWindow(QMainWindow):
         # 更新图像变换按钮的显示状态
         self._update_transform_buttons_visibility()
 
-        # 更新智能选择AI标识的显示
-        self._update_smart_selection_ai_label()
-
-        # 如果切换到预处理/原图视图且智能选择已开启，重新编码图像
+        # 如果切换到预处理/原图视图且处于智能选择方式，重新编码图像
         if (
             mode in ["original", "preprocessed"]
             and self.sam_model_loaded
-            and hasattr(self.properties_panel, "smart_selection_switch")
-            and self.properties_panel.smart_selection_switch.isChecked()
+            and self.canvas.selection_tool.method == "smart"
         ):
             self._update_sam_image_encoding()
 
@@ -2906,9 +2920,8 @@ class MainWindow(QMainWindow):
         # 显示选择工具设置
         self.properties_panel.show_selection_settings()
 
-        # 开启智能选择开关
-        if hasattr(self.properties_panel, "smart_selection_switch"):
-            self.properties_panel.smart_selection_switch.setChecked(True)
+        # 切换到智能选择方式（触发统一处理器加载模型、显示配置区）
+        self.properties_panel.set_selection_method("smart")
 
         # 加载 SAM 模型
         self._ensure_sam_model_loaded()
@@ -3368,29 +3381,21 @@ class MainWindow(QMainWindow):
         should_show = is_root_layer and is_binary_mode
         self.binarization_panel.set_transform_buttons_visible(should_show)
 
-    def _update_smart_selection_ai_label(self):
-        """更新智能选择AI标识的显示"""
-        if self.image_data is None:
-            self.properties_panel.update_smart_selection_ai_label("binary", False)
-            return
+    def _on_smart_config_changed(self, settings: dict):
+        """智能选择参数变更：更新内存配置与画布工具，落盘走防抖"""
+        self.smart_selection_config = dict(settings)
+        self.canvas.selection_tool.edge_canny_high = int(settings.get("canny_high", 200))
+        self._smart_config_save_timer.start()
 
-        # 获取当前视图模式和智能选择状态
-        view_mode = self.image_data.view_mode
-        smart_enabled = self.properties_panel.smart_selection_switch.isChecked()
+    def _save_smart_selection_config(self):
+        """将智能选择参数持久化到配置文件（防抖到期后调用）"""
+        from ..utils.config_manager import get_config_manager
 
-        # 更新AI标识显示
-        self.properties_panel.update_smart_selection_ai_label(view_mode, smart_enabled)
-
-    def _on_smart_selection_toggled(self, checked: bool):
-        """智能选择开关切换事件"""
-        # 更新AI标识显示
-        self._update_smart_selection_ai_label()
-
-        # 如果开启智能选择且在预处理/原图视图，尝试加载 SAM 模型
-        if checked and self.image_data is not None:
-            view_mode = self.image_data.view_mode
-            if view_mode in ["original", "preprocessed"]:
-                self._ensure_sam_model_loaded()
+        config_manager = get_config_manager()
+        config_manager.set("smart_selection", "confidence", float(self.smart_selection_config.get("confidence", 0.5)))
+        config_manager.set("smart_selection", "mask_level", self.smart_selection_config.get("mask_level", "auto"))
+        config_manager.set("smart_selection", "canny_high", int(self.smart_selection_config.get("canny_high", 200)))
+        config_manager.save()
 
     def _ensure_sam_model_loaded(self):
         """确保 SAM 模型已加载"""
@@ -3575,6 +3580,15 @@ class MainWindow(QMainWindow):
         self.canvas.selection_tool.size = default_selection_size
         # 更新属性面板 UI
         self.properties_panel.selection_size_spinbox.setValue(default_selection_size)
+
+        # 智能选择参数（恢复到内存、画布工具与左面板 UI）
+        self.smart_selection_config = {
+            "confidence": float(config.get("smart_selection", "confidence", 0.5)),
+            "mask_level": config.get("smart_selection", "mask_level", "auto"),
+            "canny_high": int(config.get("smart_selection", "canny_high", 200)),
+        }
+        self.canvas.selection_tool.edge_canny_high = int(self.smart_selection_config["canny_high"])
+        self.binarization_panel.apply_smart_selection_config(self.smart_selection_config)
 
         # 撤销历史限制
         undo_limit = config.get("editor", "undo_history_limit", 50)
