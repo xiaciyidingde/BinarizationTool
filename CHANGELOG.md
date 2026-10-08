@@ -6,6 +6,9 @@
 - **画布背景色修改后不生效**：设置对话框修改"画布背景色"（白/灰/黑）后需重启才能生效。根因是 `canvas.py` 初始化时新建独立的 `ConfigManager()` 实例（`self.config = ConfigManager()`），只在构造时从磁盘加载一次；而设置对话框与主窗口用的都是全局单例 `get_config_manager()`，二者不是同一份内存，导致画布重绘时读到的仍是启动时的旧值。修复：画布改用共享单例，设置保存后下一次 paintEvent 立即读到新值
 - **无图时画布背景也不刷新**：`apply_config()` 仅在 `image_data is not None` 时调用 `canvas.update()`，而无图时画布背景色同样会填充（`paintEvent` 无图分支先填背景）。现改为无条件刷新画布，保证任何状态下面板设置即时生效
 
+### 测试
+- **CI 补齐 psutil**：`test_real_images.py::test_memory_usage` 在 CI 上失败（`ModuleNotFoundError: No module named 'psutil'`）——psutil 仅在测试中使用却未在任何依赖文件中声明，且 CI 的 test job 只装 `requirements.txt`，从未安装开发依赖。现把 `psutil>=5.9.0` 加入 `requirements-dev.txt`（纯测试依赖），并让 CI 的 test job 改装 `requirements-dev.txt`（经 `-r requirements.txt` 继承全部运行时依赖），内存占用用例由"本地恰好有 psutil 才通过"变为 CI 上可复现的硬性检查
+
 ---
 
 ## [v1.6.4.0] - 2026-10-03
