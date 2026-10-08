@@ -1770,7 +1770,10 @@ class MainWindow(QMainWindow):
                 if len(self.image_data.user_layers) > 0:
                     # 有用户图层，保存合成后的结果
                     composited_pixels = self._composite_layers()
-                    img = Image.fromarray(composited_pixels, mode="L")
+                    if len(composited_pixels.shape) == 3:
+                        img = Image.fromarray(composited_pixels, mode="RGB")
+                    else:
+                        img = Image.fromarray(composited_pixels, mode="L")
                     img.save(file_path, format=format_str)
                 else:
                     # 没有用户图层，使用原有的保存方法

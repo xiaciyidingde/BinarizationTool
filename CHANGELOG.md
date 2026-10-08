@@ -1,5 +1,15 @@
 ﻿# 更新日志
 
+## [v1.6.6.0] - 2026-10-08
+
+### 修复
+- **二值化视图保存/另存为必失败（"无法保存图片: Too many dimensions: 3 > 2"）**：`_save_to_file()` 的二值化分支（有用户图层走 `_composite_layers()` 合成、无用户图层走 `save_image()`）把像素数组硬编码为 `Image.fromarray(..., mode="L")`，但全程序像素模型早已全面 RGB 3 通道（`ImageData.pixels` 与 `apply_threshold()` 均输出 `(H, W, 3)`，见 `image_data.py` 注释"所有图像现在都是 RGB 3通道"）。Pillow 的 `"L"` 模式只接受二维数组，收到三维 RGB 即抛 `ValueError: Too many dimensions: 3 > 2`。原图、预处理两分支本就按 `len(shape)` 判断选择 `mode="RGB"/"L"`，唯独二值化分支在像素模型改造时漏改（回归源）。修复：两处按通道数选择模式，保留 2D 灰度兼容
+
+### 测试
+- **新增 `test_save_path.py` 共 5 个用例**（总量 256 → 261）：`save_image()` 对 2D 灰度/3D RGB 像素分别存 PNG/JPEG 并校验写出内容；`MainWindow._save_to_file()` 二值化视图在有/无用户图层两条路径下均能写出文件，且合成结果校验用户图层像素确实覆盖基础层。此前整个测试套件没有任何用例覆盖保存落盘路径，本次回归因此漏网
+
+---
+
 ## [v1.6.5.0] - 2026-10-03
 
 ### 修复
