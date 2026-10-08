@@ -83,7 +83,7 @@ class CropTool:
         """获取拖动状态"""
         return self.rect_selector.is_dragging
 
-    def render_cursor(self, painter: 'QPainter', view_x: float, view_y: float):
+    def render_cursor(self, painter: "QPainter", view_x: float, view_y: float):
         """
         渲染裁剪工具的十字光标
 
@@ -98,12 +98,14 @@ class CropTool:
 
         # 红色十字光标
         CursorRenderer.render_crosshair_cursor(
-            painter, view_x, view_y,
+            painter,
+            view_x,
+            view_y,
             color=QColor(255, 0, 0),  # 红色
-            size=20
+            size=20,
         )
 
-    def render_overlay(self, painter: 'QPainter', view_transform: 'ViewTransform'):
+    def render_overlay(self, painter: "QPainter", view_transform: "ViewTransform"):
         """
         渲染裁剪选区覆盖层
 
@@ -124,5 +126,5 @@ class CropTool:
             view_transform,
             QColor(255, 0, 0),  # 红色
             show_handles=True,
-            dash_style=True
+            dash_style=True,
         )

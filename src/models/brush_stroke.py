@@ -42,7 +42,7 @@ class BrushStroke:
         """
         self.points.append((x, y))
 
-    def rasterize(self, image_data: 'ImageData', start_index: int = 0) -> tuple[int, int, int, int]:
+    def rasterize(self, image_data: "ImageData", start_index: int = 0) -> tuple[int, int, int, int]:
         """
         将笔画光栅化到图片数据
 
@@ -85,7 +85,7 @@ class BrushStroke:
 
         return (x_min, y_min, x_max, y_max)
 
-    def _draw_brush_dab(self, image_data: 'ImageData', center_x: int, center_y: int):
+    def _draw_brush_dab(self, image_data: "ImageData", center_x: int, center_y: int):
         """
         绘制单个笔刷印记（圆形）- 使用 NumPy 向量化优化
 
@@ -145,22 +145,22 @@ class BrushStroke:
 
         # 批量设置像素
         if image_data.temp_layer is not None:
-            image_data.temp_layer[y_min:y_max+1, x_min:x_max+1][mask] = self.color
+            image_data.temp_layer[y_min : y_max + 1, x_min : x_max + 1][mask] = self.color
             # 同时标记这些像素为已编辑
             if image_data.temp_edit_mask is not None:
-                image_data.temp_edit_mask[y_min:y_max+1, x_min:x_max+1][mask] = True
+                image_data.temp_edit_mask[y_min : y_max + 1, x_min : x_max + 1][mask] = True
         elif image_data.edit_mask is not None:
             # 如果有编辑掩码，标记这些像素（RGB格式）
             # 注意：必须先获取区域引用，再应用掩码，避免 NumPy 链式索引问题
-            edit_mask_region = image_data.edit_mask[y_min:y_max+1, x_min:x_max+1]
+            edit_mask_region = image_data.edit_mask[y_min : y_max + 1, x_min : x_max + 1]
             edit_mask_region[mask] = True
             # 将单通道颜色值扩展为RGB
             color_rgb = np.array([self.color, self.color, self.color], dtype=np.uint8)
-            edit_values_region = image_data.edit_values[y_min:y_max+1, x_min:x_max+1]
+            edit_values_region = image_data.edit_values[y_min : y_max + 1, x_min : x_max + 1]
             edit_values_region[mask] = color_rgb
         else:
             # 直接修改基础层（RGB格式）
             color_rgb = np.array([self.color, self.color, self.color], dtype=np.uint8)
             # 注意：必须先获取区域引用，再应用掩码，避免 NumPy 链式索引问题
-            pixels_region = image_data.pixels[y_min:y_max+1, x_min:x_max+1]
+            pixels_region = image_data.pixels[y_min : y_max + 1, x_min : x_max + 1]
             pixels_region[mask] = color_rgb

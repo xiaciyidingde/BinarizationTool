@@ -117,8 +117,7 @@ class TileCache:
         for key in self.cache:
             if key[0] == scale_key:
                 tile_x, tile_y = key[1], key[2]
-                if (tile_x_start <= tile_x <= tile_x_end and
-                    tile_y_start <= tile_y <= tile_y_end):
+                if tile_x_start <= tile_x <= tile_x_end and tile_y_start <= tile_y <= tile_y_end:
                     keys_to_remove.append(key)
 
         for key in keys_to_remove:
@@ -164,8 +163,9 @@ class TileCache:
 
         return pixmap
 
-    def get_tiles_in_viewport(self, view_x: float, view_y: float,
-                              view_width: int, view_height: int) -> list[tuple[int, int, float, float, int, int, QPixmap]]:
+    def get_tiles_in_viewport(
+        self, view_x: float, view_y: float, view_width: int, view_height: int
+    ) -> list[tuple[int, int, float, float, int, int, QPixmap]]:
         """
         获取视口内的所有块
 
@@ -248,7 +248,7 @@ class TileCache:
         tile_height = min(self.tile_size, self.image_height - pixel_y)
 
         # 提取块数据（必须复制以确保内存连续）
-        tile_data = self.pixels[pixel_y:pixel_y+tile_height, pixel_x:pixel_x+tile_width].copy()
+        tile_data = self.pixels[pixel_y : pixel_y + tile_height, pixel_x : pixel_x + tile_width].copy()
 
         # 判断是灰度图还是彩色图
         is_color = len(tile_data.shape) == 3
@@ -256,30 +256,18 @@ class TileCache:
         # 不再在tile中渲染选区，改为在Canvas中绘制边框
         if is_color:
             # 彩色图
-            if not tile_data.flags['C_CONTIGUOUS']:
+            if not tile_data.flags["C_CONTIGUOUS"]:
                 tile_data = np.ascontiguousarray(tile_data)
 
             bytes_per_line = tile_width * 3
-            qimage = QImage(
-                tile_data.data,
-                tile_width,
-                tile_height,
-                bytes_per_line,
-                QImage.Format_RGB888
-            ).copy()
+            qimage = QImage(tile_data.data, tile_width, tile_height, bytes_per_line, QImage.Format_RGB888).copy()
         else:
             # 灰度图
-            if not tile_data.flags['C_CONTIGUOUS']:
+            if not tile_data.flags["C_CONTIGUOUS"]:
                 tile_data = np.ascontiguousarray(tile_data)
 
             bytes_per_line = tile_width
-            qimage = QImage(
-                tile_data.data,
-                tile_width,
-                tile_height,
-                bytes_per_line,
-                QImage.Format_Grayscale8
-            ).copy()
+            qimage = QImage(tile_data.data, tile_width, tile_height, bytes_per_line, QImage.Format_Grayscale8).copy()
 
         # 缩放到视图大小 - 使用 round 而不是 int 以减少累积误差
         scaled_width = round(tile_width * self.current_scale)
@@ -297,7 +285,7 @@ class TileCache:
             scaled_width,
             scaled_height,
             Qt.IgnoreAspectRatio,  # 使用 IgnoreAspectRatio 确保精确尺寸
-            transform_mode
+            transform_mode,
         )
 
         return pixmap
@@ -322,9 +310,9 @@ class TileCache:
             包含缓存统计的字典
         """
         return {
-            'cached_tiles': len(self.cache),
-            'max_tiles': self.max_tiles,
-            'tile_size': self.tile_size,
-            'current_scale': self.current_scale,
-            'image_size': (self.image_width, self.image_height) if self.pixels is not None else None
+            "cached_tiles": len(self.cache),
+            "max_tiles": self.max_tiles,
+            "tile_size": self.tile_size,
+            "current_scale": self.current_scale,
+            "image_size": (self.image_width, self.image_height) if self.pixels is not None else None,
         }

@@ -13,7 +13,7 @@ from typing import Any
 class TranslationManager:
     """翻译管理器"""
 
-    def __init__(self, locale: str = 'zh_CN'):
+    def __init__(self, locale: str = "zh_CN"):
         """
         初始化翻译管理器
 
@@ -35,7 +35,7 @@ class TranslationManager:
             return
 
         try:
-            with open(translation_file, encoding='utf-8') as f:
+            with open(translation_file, encoding="utf-8") as f:
                 self.translations = json.load(f)
         except Exception as e:
             print(f"加载翻译文件失败: {e}")
@@ -46,7 +46,7 @@ class TranslationManager:
         """获取翻译文件目录"""
         current_file = Path(__file__)
         project_root = current_file.parent.parent.parent
-        locales_dir = project_root / 'locales'
+        locales_dir = project_root / "locales"
         locales_dir.mkdir(parents=True, exist_ok=True)
         return locales_dir
 
@@ -66,7 +66,7 @@ class TranslationManager:
             tr('message.loaded', filename='test.png')  # 返回 "已加载: test.png"
         """
         # 分割键
-        keys = key.split('.')
+        keys = key.split(".")
         value = self.translations
 
         # 逐级查找
@@ -111,7 +111,7 @@ class TranslationManager:
         locales_dir = self.get_locales_dir()
         languages = []
 
-        for file in locales_dir.glob('*.json'):
+        for file in locales_dir.glob("*.json"):
             languages.append(file.stem)
 
         return sorted(languages)
@@ -127,8 +127,9 @@ def get_translator() -> TranslationManager:
     if _translator is None:
         # 从配置管理器获取语言设置
         from src.utils.config_manager import get_config_manager
+
         config = get_config_manager()
-        locale = config.get('general', 'language', 'zh_CN')
+        locale = config.get("general", "language", "zh_CN")
         _translator = TranslationManager(locale)
     return _translator
 

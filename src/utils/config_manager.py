@@ -5,6 +5,7 @@
 """
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -21,25 +22,19 @@ class ConfigManager:
         "interface": {
             "theme": "light",  # light, dark, system
             "animations_enabled": True,  # 启用 UI 动画
-            "window_geometry": {
-                "width": 1550,
-                "height": 900,
-                "x": 100,
-                "y": 100,
-                "maximized": False
-            }
+            "window_geometry": {"width": 1550, "height": 900, "x": 100, "y": 100, "maximized": False},
         },
         "editor": {
             "default_brush_size": 20,
             "default_selection_size": 50,
             "undo_history_limit": 50,
-            "canvas_background": "gray"  # white, gray, black
+            "canvas_background": "gray",  # white, gray, black
         },
         "performance": {
             "tile_cache_size": 1000,
             "debounce_delay": 150,
             "hardware_acceleration": True,
-            "max_image_size": 20000
+            "max_image_size": 20000,
         },
         "file": {
             "default_save_format": "follow_original",  # follow_original, png, jpg, bmp, webp
@@ -48,29 +43,22 @@ class ConfigManager:
             "custom_suffix": "",
             "recent_files": [],
             "last_open_directory": "",
-            "last_save_directory": ""
-        }
+            "last_save_directory": "",
+        },
     }
 
     # 值映射：配置文件值 -> 翻译键
     # UI 显示时使用翻译键获取本地化文本
     VALUE_TRANSLATION_KEYS = {
         # 语言
-        "language": {
-            "zh_CN": "settings.language_chinese",
-            "en_US": "settings.language_english"
-        },
+        "language": {"zh_CN": "settings.language_chinese", "en_US": "settings.language_english"},
         # 主题
-        "theme": {
-            "light": "settings.theme_light",
-            "dark": "settings.theme_dark",
-            "system": "settings.theme_system"
-        },
+        "theme": {"light": "settings.theme_light", "dark": "settings.theme_dark", "system": "settings.theme_system"},
         # 画布背景
         "canvas_background": {
             "white": "settings.canvas_white",
             "gray": "settings.canvas_gray",
-            "black": "settings.canvas_black"
+            "black": "settings.canvas_black",
         },
         # 保存格式
         "save_format": {
@@ -78,49 +66,28 @@ class ConfigManager:
             "png": "PNG",
             "jpg": "JPG",
             "bmp": "BMP",
-            "webp": "WebP"
+            "webp": "WebP",
         },
         # 文件名格式
         "filename_format": {
             "timestamp": "settings.filename_timestamp_short",
             "copy": "settings.filename_copy_short",
-            "custom": "settings.filename_custom"
-        }
+            "custom": "settings.filename_custom",
+        },
     }
 
     # 值映射：UI显示值 <-> 配置文件值（向后兼容，逐步废弃）
     VALUE_MAPPING = {
         # 语言
-        "language": {
-            "中文": "zh_CN",
-            "English": "en_US"
-        },
+        "language": {"中文": "zh_CN", "English": "en_US"},
         # 主题
-        "theme": {
-            "浅色主题": "light",
-            "深色主题": "dark",
-            "跟随系统": "system"
-        },
+        "theme": {"浅色主题": "light", "深色主题": "dark", "跟随系统": "system"},
         # 画布背景
-        "canvas_background": {
-            "白色": "white",
-            "灰色": "gray",
-            "黑色": "black"
-        },
+        "canvas_background": {"白色": "white", "灰色": "gray", "黑色": "black"},
         # 保存格式
-        "save_format": {
-            "跟随原文件": "follow_original",
-            "PNG": "png",
-            "JPG": "jpg",
-            "BMP": "bmp",
-            "WebP": "webp"
-        },
+        "save_format": {"跟随原文件": "follow_original", "PNG": "png", "JPG": "jpg", "BMP": "bmp", "WebP": "webp"},
         # 文件名格式
-        "filename_format": {
-            "原名_时间戳": "timestamp",
-            "原名_副本": "copy",
-            "自定义": "custom"
-        }
+        "filename_format": {"原名_时间戳": "timestamp", "原名_副本": "copy", "自定义": "custom"},
     }
 
     def __init__(self):
@@ -135,14 +102,14 @@ class ConfigManager:
         current_file = Path(__file__)
         project_root = current_file.parent.parent.parent
 
-        config_dir = project_root / 'data'
+        config_dir = project_root / "data"
         config_dir.mkdir(parents=True, exist_ok=True)
         return config_dir
 
     @staticmethod
     def get_config_file() -> Path:
         """获取配置文件路径"""
-        return ConfigManager.get_config_dir() / 'config.json'
+        return ConfigManager.get_config_dir() / "config.json"
 
     def load(self) -> dict[str, Any]:
         """加载配置"""
@@ -155,20 +122,28 @@ class ConfigManager:
             return self.config
 
         try:
-            with open(self.config_file, encoding='utf-8') as f:
+            with open(self.config_file, encoding="utf-8") as f:
                 config = json.load(f)
 
             # 合并默认配置（处理新增的配置项）
             merged = self._merge_config(copy.deepcopy(self.DEFAULT_CONFIG), config)
             return merged
-        except Exception as e:
-            print(f"加载配置失败: {e}，使用默认配置")
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as e:
+            # 配置文件损坏：先备份原文件再回退默认配置，
+            # 避免后续保存时用默认配置直接覆盖，导致用户配置彻底丢失
+            backup_path = self.config_file.with_name(self.config_file.name + ".bak")
+            try:
+                shutil.copy2(self.config_file, backup_path)
+                backup_note = f"，原文件已备份到 {backup_path}"
+            except OSError:
+                backup_note = "（原文件备份失败）"
+            print(f"加载配置失败: {e}{backup_note}，使用默认配置")
             return copy.deepcopy(self.DEFAULT_CONFIG)
 
     def save(self):
         """保存配置"""
         try:
-            with open(self.config_file, 'w', encoding='utf-8') as f:
+            with open(self.config_file, "w", encoding="utf-8") as f:
                 json.dump(self.config, f, indent=2, ensure_ascii=False)
             return True
         except Exception as e:
@@ -227,6 +202,7 @@ class ConfigManager:
     def reset_to_default(self):
         """重置为默认配置"""
         import copy
+
         self.config = copy.deepcopy(self.DEFAULT_CONFIG)
         self.save()
 
@@ -265,8 +241,7 @@ class ConfigManager:
 
         if translator:
             # 使用翻译器
-            return [translator.tr(key) if key.count('.') > 0 else key
-                   for key in translation_keys.values()]
+            return [translator.tr(key) if key.count(".") > 0 else key for key in translation_keys.values()]
         else:
             # 回退到旧的映射
             return list(cls.VALUE_MAPPING.get(category, {}).keys())
@@ -352,7 +327,7 @@ class ConfigManager:
             file_path: 文件路径
             max_count: 最大保留数量
         """
-        recent = self.config['file']['recent_files']
+        recent = self.config["file"]["recent_files"]
 
         # 移除已存在的相同路径
         if file_path in recent:
@@ -362,16 +337,16 @@ class ConfigManager:
         recent.insert(0, file_path)
 
         # 限制数量
-        self.config['file']['recent_files'] = recent[:max_count]
+        self.config["file"]["recent_files"] = recent[:max_count]
         self.save()
 
     def get_recent_files(self) -> list:
         """获取最近文件列表"""
-        return self.config['file']['recent_files']
+        return self.config["file"]["recent_files"]
 
     def clear_recent_files(self):
         """清除最近文件列表"""
-        self.config['file']['recent_files'] = []
+        self.config["file"]["recent_files"] = []
         self.save()
 
 

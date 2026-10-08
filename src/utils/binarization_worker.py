@@ -23,8 +23,14 @@ class BinarizationWorker(QThread):
     # 信号：处理出错 (error_message)
     error = Signal(str)
 
-    def __init__(self, original_pixels: np.ndarray, preprocess_params: dict,
-                 method: int, threshold: int, method_params: dict = None):
+    def __init__(
+        self,
+        original_pixels: np.ndarray,
+        preprocess_params: dict,
+        method: int,
+        threshold: int,
+        method_params: dict = None,
+    ):
         """
         初始化工作线程
 
@@ -51,10 +57,7 @@ class BinarizationWorker(QThread):
                 return
 
             # 预处理
-            preprocessed = BinarizationEngine.apply_preprocess(
-                self.original_pixels,
-                **self.preprocess_params
-            )
+            preprocessed = BinarizationEngine.apply_preprocess(self.original_pixels, **self.preprocess_params)
 
             # 检查是否已取消
             if self._is_cancelled:

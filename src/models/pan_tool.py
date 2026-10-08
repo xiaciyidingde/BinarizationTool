@@ -5,7 +5,6 @@
 """
 
 
-
 class PanTool:
     """
     抓取工具类

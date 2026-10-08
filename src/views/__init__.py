@@ -8,8 +8,8 @@ from .main_window import MainWindow
 from .shortcut_handler import ShortcutHandler
 
 __all__ = [
-    'Canvas',
-    'BinarizationPanel',
-    'MainWindow',
-    'ShortcutHandler',
+    "Canvas",
+    "BinarizationPanel",
+    "MainWindow",
+    "ShortcutHandler",
 ]

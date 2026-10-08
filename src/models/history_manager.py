@@ -32,7 +32,7 @@ class HistoryManager:
         self.current_index: int = -1  # -1 表示没有历史
         self.max_history = max_history
 
-    def push_state(self, image_data: 'ImageData'):
+    def push_state(self, image_data: "ImageData"):
         """
         保存当前状态到历史
 
@@ -47,7 +47,7 @@ class HistoryManager:
 
         # 清空当前位置之后的所有历史（新编辑会使后续历史失效）
         if self.current_index < len(self.history) - 1:
-            self.history = self.history[:self.current_index + 1]
+            self.history = self.history[: self.current_index + 1]
 
         # 添加新状态
         self.history.append(state)
@@ -58,7 +58,7 @@ class HistoryManager:
             self.history.pop(0)
             self.current_index -= 1
 
-    def undo(self, current_state: 'ImageData') -> Optional['ImageData']:
+    def undo(self, current_state: "ImageData") -> Optional["ImageData"]:
         """
         撤销操作
 
@@ -75,7 +75,9 @@ class HistoryManager:
         # 需要先保存当前状态（但不移动索引）
         # 检查当前状态是否与历史中的最后一个状态不同
         # 如果不同，说明有未保存的修改，需要先保存
-        if self.current_index == len(self.history) - 1 and not self._states_equal(current_state, self.history[self.current_index]):
+        if self.current_index == len(self.history) - 1 and not self._states_equal(
+            current_state, self.history[self.current_index]
+        ):
             self.history.append(current_state.copy())
 
         # 向前移动索引
@@ -84,7 +86,7 @@ class HistoryManager:
         # 返回前一个状态的副本
         return self.history[self.current_index].copy()
 
-    def redo(self) -> Optional['ImageData']:
+    def redo(self) -> Optional["ImageData"]:
         """
         重做操作
 
@@ -145,7 +147,7 @@ class HistoryManager:
         """
         return len(self.history) - self.current_index - 1
 
-    def _states_equal(self, state1: 'ImageData', state2: 'ImageData') -> bool:
+    def _states_equal(self, state1: "ImageData", state2: "ImageData") -> bool:
         """
         比较两个状态是否相等
 
@@ -157,4 +159,5 @@ class HistoryManager:
             True 如果两个状态相等
         """
         import numpy as np
+
         return np.array_equal(state1.pixels, state2.pixels)

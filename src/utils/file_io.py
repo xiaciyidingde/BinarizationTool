@@ -13,9 +13,9 @@ from ..models.image_data import ImageData
 from .binarization_engine import BinarizationEngine
 
 
-def load_image(file_path: str, binarize: bool = True,
-               binarization_method: str = "otsu",
-               threshold: int = 127) -> ImageData:
+def load_image(
+    file_path: str, binarize: bool = True, binarization_method: str = "otsu", threshold: int = 127
+) -> ImageData:
     """
     加载图片文件
 
@@ -39,7 +39,7 @@ def load_image(file_path: str, binarize: bool = True,
         raise FileNotFoundError(f"文件不存在: {file_path}")
 
     # 检查文件格式
-    supported_formats = {'.png', '.jpg', '.jpeg', '.bmp', '.webp'}
+    supported_formats = {".png", ".jpg", ".jpeg", ".bmp", ".webp"}
     if path.suffix.lower() not in supported_formats:
         raise ValueError(f"不支持的文件格式: {path.suffix}。支持的格式: {', '.join(supported_formats)}")
 
@@ -47,13 +47,13 @@ def load_image(file_path: str, binarize: bool = True,
         # 使用 Pillow 加载图片
         with Image.open(file_path) as img:
             # 转换为 RGB 模式（如果是 RGBA 或其他模式）
-            if img.mode == 'RGBA':
+            if img.mode == "RGBA":
                 # 创建白色背景
-                background = Image.new('RGB', img.size, (255, 255, 255))
+                background = Image.new("RGB", img.size, (255, 255, 255))
                 background.paste(img, mask=img.split()[3])  # 使用 alpha 通道作为 mask
                 img = background
-            elif img.mode != 'RGB' and img.mode != 'L':
-                img = img.convert('RGB')
+            elif img.mode != "RGB" and img.mode != "L":
+                img = img.convert("RGB")
 
             # 转换为 NumPy 数组
             original_pixels = np.array(img)
@@ -98,12 +98,12 @@ def save_image(image_data: ImageData, file_path: str, format: str | None = None)
 
     # 推断格式
     if format is None:
-        format = path.suffix.upper().lstrip('.')
-        if format == 'JPG':
-            format = 'JPEG'
+        format = path.suffix.upper().lstrip(".")
+        if format == "JPG":
+            format = "JPEG"
 
     # 检查格式
-    supported_formats = {'PNG', 'JPEG', 'BMP', 'WEBP'}
+    supported_formats = {"PNG", "JPEG", "BMP", "WEBP"}
     if format not in supported_formats:
         raise ValueError(f"不支持的文件格式: {format}。支持的格式: {', '.join(supported_formats)}")
 
@@ -112,7 +112,7 @@ def save_image(image_data: ImageData, file_path: str, format: str | None = None)
         pixels = image_data.get_current_pixels()
 
         # 转换为 PIL Image
-        img = Image.fromarray(pixels, mode='L')
+        img = Image.fromarray(pixels, mode="L")
 
         # 保存文件
         img.save(file_path, format=format)

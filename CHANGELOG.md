@@ -1,5 +1,127 @@
 ﻿# 更新日志
 
+## [v1.6.5.0] - 2026-10-03
+
+### 修复
+- **画布背景色修改后不生效**：设置对话框修改"画布背景色"（白/灰/黑）后需重启才能生效。根因是 `canvas.py` 初始化时新建独立的 `ConfigManager()` 实例（`self.config = ConfigManager()`），只在构造时从磁盘加载一次；而设置对话框与主窗口用的都是全局单例 `get_config_manager()`，二者不是同一份内存，导致画布重绘时读到的仍是启动时的旧值。修复：画布改用共享单例，设置保存后下一次 paintEvent 立即读到新值
+- **无图时画布背景也不刷新**：`apply_config()` 仅在 `image_data is not None` 时调用 `canvas.update()`，而无图时画布背景色同样会填充（`paintEvent` 无图分支先填背景）。现改为无条件刷新画布，保证任何状态下面板设置即时生效
+
+### 测试
+- **CI 补齐 psutil**：`test_real_images.py::test_memory_usage` 在 CI 上失败（`ModuleNotFoundError: No module named 'psutil'`）——psutil 仅在测试中使用却未在任何依赖文件中声明，且 CI 的 test job 只装 `requirements.txt`，从未安装开发依赖。现把 `psutil>=5.9.0` 加入 `requirements-dev.txt`（纯测试依赖），并让 CI 的 test job 改装 `requirements-dev.txt`（经 `-r requirements.txt` 继承全部运行时依赖），内存占用用例由"本地恰好有 psutil 才通过"变为 CI 上可复现的硬性检查
+
+---
+
+## [v1.6.4.0] - 2026-10-03
+
+### 新增功能
+- **智能选择参数配置区**（左面板"AI 工具"组）：
+  - 属性面板的智能选择开关开启时，"去除背景/智能选择"两个按钮下方显示配置区，关闭时收起（默认隐藏）
+  - **置信度阈值**（0.10-0.90，默认 0.50，仅影响点击式智能选择）：原先 logits > 0 硬编码，现按概率换算 logits 阈值，调高选区收紧、调低扩张
+  - **掩码级别**（自动/粗糙/精细）：解码器的 3 个候选掩码原先固定取 IoU 最高，现可手动指定级别，越界编号自动回退 auto；粗糙/精细对应第 2/0 个输出掩码（顺序以实测为准：该模型 2=大区域、0=小区域）
+  - **边缘吸附阈值**（150-400，默认 200，仅影响拖拽选择）：控制边界吸附的 Canny 高阈值，原先函数形参存在但调用不可达且被内部 max(·,200) 硬钳制；滑块下限与调用链的 threshold2=150 托底对齐，无死区
+  - 两个滑块参数右侧带与现有滑块行一致的旋转动画重置按钮
+- **参数持久化**：新增 `[smart_selection]` 配置节（confidence/mask_level/canny_high），变更 500ms 防抖落盘，启动时恢复到面板 UI 与画布工具
+- **API 参数化**：`SAMProcessor.predict()` 新增 `logit_threshold`/`mask_index` 参数与 `probability_to_logit()` 换算；`SelectionTool.smart_select_by_point()` 新增 `confidence`/`mask_index` 透传——均带默认值，旧调用零破坏
+
+### 重构
+- **选择方式控件合并为下拉框**：
+  - 属性面板的"选择方式"单选组（涂抹/框选）与"智能选择"开关合并为一个下拉框：涂抹（默认）/框选/智能选择；原"AI"角标移除
+  - 选择方式成为 `SelectionTool.method` 单一事实源（"paint"/"rect"/"smart"），canvas 9 处对属性面板私有控件的穿透读取改为读工具属性；`rect_select_mode` 布尔字段移除
+  - 手动选"智能选择"与点击左面板"智能选择"按钮行为完全一致（统一由 `_on_selection_method_changed` 驱动）：必要时自动切换到预处理视图、加载 SAM 模型、显示配置区（配置区显示条件同步改为 `method == "smart"`）
+  - 顺带修复：选择方式切换快捷键引用不存在的 `drag_method_radio` 导致的 AttributeError（该快捷键此前不可用），现按涂抹↔框选互换实现
+
+### 修复
+- **下拉框弹出层透明**：删除预处理/二值化/其他三个标签页内容容器上的裸声明样式 `setStyleSheet("background-color: transparent;")`。裸声明会级联到所有后代（包括 QComboBox 弹出层），且按 Qt 级联规则以"来源更近"压过主题中 `QComboBox QAbstractItemView` 的白底规则，导致弹层透明、透出下层滑块等控件；内容容器的透明改由上方已有的 `QScrollArea > QWidget > QWidget` 规则承担（该规则为普通选择器，不会级联到弹层）
+- **缩放滑块初值标签**：scale ≠ 1 的滑块（如 Sauvola k 参数）初值标签显示 int 截断值（"0"）而非换算值（"0.20"），现与拖动后的显示格式一致
+
+### 测试
+- **新增 23 个测试**（总数 225 → 248）：logit 换算与端点夹取、参数透传、掩码级别三分支与越界回退（假解码器会话）、Canny 阈值三档生效（monkeypatch 捕获）、配置区默认值/显隐/信号/往返、`[smart_selection]` 配置节持久化往返与未知节保留
+
+---
+
+## [v1.6.3.0] - 2026-10-02
+
+### 测试
+- **新增 29 个单元测试**（总数 167 → 196）：
+  - `test_layer_overlap.py`：`get_layer_overlap()` 的 8 种边界情况（完全在内、负偏移、右下溢出、零尺寸、完全在外、边缘相接、bbox 大于图像、偏移恒等关系）
+  - `test_downloader_progress.py`：进度仅走回调不打印、按整数百分比节流、未知大小时 5MB 阶梯上报并完成上报 75%、取消清理文件（mock urlopen，不发真实请求）
+  - `test_config_backup.py`：损坏配置自动备份 `.bak` 并回退默认、回退后保存不丢默认项、合法配置不受影响
+  - `test_ai_worker.py`：加载失败、处理异常（含异常类型）、正常完成、stop 标志各路径
+  - `test_binarization_constants.py`：锁定 `ThresholdMethod`/`EdgeDetectionMode` 编号契约（持久化兼容性）
+  - ai_worker 覆盖率 92%，config_manager 82%
+
+### 新增功能
+- **CI 测试与 lint 门禁**（`.github/workflows/tests.yml`）：
+  - push 到 main/develop 及 PR 时自动运行
+  - `lint` 任务：ruff check + ruff format --check
+  - `test` 任务：Ubuntu + Python 3.12，编译 Cython 扩展后在 offscreen Qt 平台运行完整 pytest 套件
+- **界面文案国际化补全**（新增 15 个翻译键，中英文同步）：
+  - 主窗口：图层切换/重新二值化的状态栏与错误提示、SAM 模型缺失询问对话框、智能选择模式提示等 10 处硬编码中文改走翻译键
+  - 画布：智能选择失败提示
+  - 图层面板：图层项的显示/隐藏与删除按钮 tooltip
+  - 模型下载对话框：未知模型类型提示、强制终止下载线程日志
+
+### 重构
+- **二值化方法/边缘模式常量化**：
+  - 新增 `ThresholdMethod`（0-9）与 `EdgeDetectionMode`（0-3）常量类，取代散落在引擎、二值化面板和主窗口中的魔法数字
+  - 方法编号会持久化到图层参数，常量仅替换字面量、数值保持不变，旧配置完全兼容
+- **图层重叠计算去重**：
+  - 新增 `get_layer_overlap()` 辅助函数（`LayerOverlap` 命名元组），统一计算图层边界框与图像的有效重叠区域
+  - 替换主窗口中 7 处复制粘贴的 `x_start/layer_x_offset/layer_w/...` 计算块（图层提取、图层合成、缓存更新各视图分支）
+
+### 文档
+- **修正 README 中的 Python 版本要求**：3.8+ → 3.12+（代码使用 PEP 604 类型语法，与 `pyproject.toml` 保持一致，徽章同步更新）
+
+### 算法正确性修复
+- **Wolf-Jolion 局部阈值公式重写**（binarization_engine.py）：
+  - 旧实现 `threshold = mean - k·std·(1 - std/(R·clip(std, 2)))` 在 std ≥ 2 时代数上恒等于 `mean - 0.496·std`，退化为普通 Niblack，Wolf 公式的全局最小灰度与归一化动态范围完全没有参与计算
+  - 按论文（Wolf & Jolion 2004）重写：`T = mean − k·(mean − 全局最小灰度)·(1 − std/R)`，其中 `R = 1 − σmax/σG` 是定义在 [0,1] 归一化灰度上的动态范围，在 0-255 灰度域计算时 R 乘 255 做量纲对齐，否则阈值发散（渐变图整体全黑/全白）
+  - 增加纯色图像保护分支与 R≈0 保护；文档类图像验证：笔画 100% 变黑、背景 100% 保持白色
+- **锐化亮度漂移**（binarization_engine.py）：旧实现将锐化核直接乘以强度后卷积，核元素和变为 intensity（直流增益 ≠ 1），部分强度下图像整体变暗；改为混合式 `img + 强度·(锐化结果 − img)`，基础核元素和保持 1，任意强度下亮度不漂移
+- **降噪参数标定**（binarization_engine.py）：
+  - 双边滤波直径 d：`strength`（最大 100，O(d²) 核下严重卡顿）→ `strength/4`（1-25）
+  - NLMeans h：`strength×2`（中等强度即抹平细节）→ `strength/10`（典型有效范围 3-10）
+  - 形态学开/闭运算核：`int(strength/20)+1`（低强度为 1×1 恒等核，滑块低段完全无效）→ 最小 3×3 的奇数核
+- **Ordered 抖动系统偏差**：阈值图增加 +0.5 偏置。Bayer 矩阵含 0 值格点，旧阈值图中该格点阈值为 0，导致所有非纯黑像素（含灰度 1）在该格点强制变白
+- **RMBG-2.0 预处理对齐官方**（ai_processor.py）：归一化由 `x/255`（[0,1]）改为 `x/255 − 0.5`（官方 mean=[0.5,0.5,0.5]、std=[1,1,1]，即 [-1,1] 区间）；后处理增加 min-max 归一化，不再假设模型输出恰好落在 [0,1]
+- **SAM 处理器**（sam_processor.py）：
+  - 编码器输出属性名对齐 ONNX 实际输出名（`high_res_feats_0/1`），修复旧属性 `high_res_feats` 从未赋值、预测必失败的死代码
+  - 非 SAM2 三输出编码器（如 SAM1/MobileSAM 导出）加载时明确警告，`predict()` 拒绝预测并返回 None，而非在解码阶段报形状错误
+  - `unload_model` 补全高分辨率特征缓存清理
+- **新增 18 个算法回归测试**（tests/test_algorithm_fixes.py，总测试数 207 → 225）：锐化任意强度亮度保持、Wolf 输出与文档公式逐像素一致/非退化/与 Niblack 可区分、抖动低灰度不出现白点、低强度形态学核生效、RMBG 前后处理区间与除零保护
+
+### 修复
+- **图层面板行序与画布叠放层级不一致**：
+  - 面板约定翻转为 Photoshop 风格：顶行 = 画布最顶层，根图层固定在最后一行
+  - 修复保存选区/合并图层后新图层显示在面板最底部（现在插入顶部，位于根图层之上）
+  - 修复拖拽排序方向与画布相反的问题（往上拖 = 变得更底层 → 现在往上拖 = 更顶层）
+  - 同步调整拖放保护、根图层归位逻辑与 `_sync_layers_panel` 重建顺序
+  - 新增 11 个测试锁定面板行序 ↔ 画布层级映射（总测试数 207）
+- **下载进度显示**：
+  - 修复服务端未返回文件大小时进度一直停在 10% 的问题（现在每 5 MB 上报并缓慢推进，完成时上报 75%）
+  - 进度按整数百分比变化节流上报，大幅减少回调用量
+  - 移除 `_report_progress` 中无条件控制台打印（此前下载 100MB 模型会产生约 1.2 万次打印）
+- **AI 工作线程**（ai_worker.py）：
+  - 删除空实现的 `_start/_stop_loading_simulation` 死代码及从未读取的 `_loading_progress`/`_loading_timer` 状态
+  - 处理异常时输出完整堆栈到控制台，错误对话框中显示异常类型与原因，便于诊断
+- **填充选区空洞**（`_fill_selection_holes`）：
+  - 修复选区覆盖图像全部角落时洪水填充方向错误导致全图被选中的问题（现在从背景角落作为种子，无法区分时仅用闭运算结果）
+  - 扩大异常捕获范围，cv2/scipy 运行时异常不再穿透 Qt 槽导致崩溃，改为提示用户并保留原选区
+- **配置管理器**：配置文件损坏时先自动备份为 `config.json.bak` 再回退默认配置，避免后续保存覆盖丢失用户配置
+- **智能选区**：边界优化失败时通过回调在状态栏提示用户（原先仅在控制台打印，用户无感知），并保留原始选区
+- **SAM 图像编码**：修复失败提示被第二条消息立即覆盖的问题，消息改走翻译键，返回值统一为 True/False
+- **画布**：删除左键按下事件中恒为 False 的中键判断死逻辑
+- **二值化面板**：删除 `set_enabled` 中重复的 `flip_vertical_checkbox.setEnabled` 调用
+
+### 代码质量
+- **全量 lint 清理与格式统一**：
+  - 修复全部 ruff 检查问题（2300+ 处：空白字符、导入排序、未使用变量、裸 except 等）
+  - 运行 `ruff format` 统一代码格式（62 个文件）
+  - `downloader.py` 改用上下文管理器管理文件句柄，`contextlib.suppress` 替换裸 except
+  - 测试断言去除冗余布尔比较；167 个测试全部通过
+
+---
+
 ## [v1.6.2.1] - 2026-04-07
 
 ### 修复

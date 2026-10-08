@@ -18,11 +18,7 @@ class CursorRenderer:
     """
 
     @staticmethod
-    def render_crosshair_cursor(painter: 'QPainter',
-                               view_x: float,
-                               view_y: float,
-                               color: 'QColor',
-                               size: int = 20):
+    def render_crosshair_cursor(painter: "QPainter", view_x: float, view_y: float, color: "QColor", size: int = 20):
         """
         渲染十字准星光标（用于矩形框选模式）
 
@@ -45,29 +41,25 @@ class CursorRenderer:
         half_size = size // 2
 
         # 绘制水平线
-        painter.drawLine(
-            int(view_x - half_size), int(view_y),
-            int(view_x + half_size), int(view_y)
-        )
+        painter.drawLine(int(view_x - half_size), int(view_y), int(view_x + half_size), int(view_y))
 
         # 绘制垂直线
-        painter.drawLine(
-            int(view_x), int(view_y - half_size),
-            int(view_x), int(view_y + half_size)
-        )
+        painter.drawLine(int(view_x), int(view_y - half_size), int(view_x), int(view_y + half_size))
 
         # 恢复画笔状态
         painter.setPen(old_pen)
 
     @staticmethod
-    def render_circle_cursor(painter: 'QPainter',
-                            view_x: float,
-                            view_y: float,
-                            view_size: float,
-                            ring_color: 'QColor',
-                            center_color: Optional['QColor'] = None,
-                            show_crosshair: bool = True,
-                            crosshair_threshold: float = 30.0):
+    def render_circle_cursor(
+        painter: "QPainter",
+        view_x: float,
+        view_y: float,
+        view_size: float,
+        ring_color: "QColor",
+        center_color: Optional["QColor"] = None,
+        show_crosshair: bool = True,
+        crosshair_threshold: float = 30.0,
+    ):
         """
         渲染圆形光标
 
@@ -127,22 +119,18 @@ class CursorRenderer:
 
             # 水平线
             painter.drawLine(
-                int(view_x - radius - gap - crosshair_length), int(view_y),
-                int(view_x - radius - gap), int(view_y)
+                int(view_x - radius - gap - crosshair_length), int(view_y), int(view_x - radius - gap), int(view_y)
             )
             painter.drawLine(
-                int(view_x + radius + gap), int(view_y),
-                int(view_x + radius + gap + crosshair_length), int(view_y)
+                int(view_x + radius + gap), int(view_y), int(view_x + radius + gap + crosshair_length), int(view_y)
             )
 
             # 垂直线
             painter.drawLine(
-                int(view_x), int(view_y - radius - gap - crosshair_length),
-                int(view_x), int(view_y - radius - gap)
+                int(view_x), int(view_y - radius - gap - crosshair_length), int(view_x), int(view_y - radius - gap)
             )
             painter.drawLine(
-                int(view_x), int(view_y + radius + gap),
-                int(view_x), int(view_y + radius + gap + crosshair_length)
+                int(view_x), int(view_y + radius + gap), int(view_x), int(view_y + radius + gap + crosshair_length)
             )
 
         # 恢复画笔状态

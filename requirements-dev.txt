@@ -5,6 +5,7 @@ pytest>=7.0.0
 hypothesis>=6.0.0
 ruff>=0.1.0
 pylint>=3.0.0
+psutil>=5.9.0
 
 # 运行时依赖（从 requirements.txt 继承）
 -r requirements.txt

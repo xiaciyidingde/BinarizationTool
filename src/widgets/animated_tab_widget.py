@@ -118,4 +118,3 @@ class AnimatedTabWidget(QTabWidget):
 
         # 更新上一个索引
         self._previous_index = index
-

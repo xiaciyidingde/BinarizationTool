@@ -144,4 +144,5 @@ class ToggleSwitch(QAbstractButton):
     def sizeHint(self):
         """返回推荐尺寸"""
         from PySide6.QtCore import QSize
+
         return QSize(self._width, self._height)

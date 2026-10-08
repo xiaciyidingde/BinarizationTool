@@ -33,7 +33,7 @@ class ViewModeSwitcher(QWidget):
         self.tr = get_translator()
 
         # 当前模式
-        self._current_mode = 'binary'
+        self._current_mode = "binary"
 
         # 动画开关（默认启用）
         self._animation_enabled = True
@@ -69,9 +69,9 @@ class ViewModeSwitcher(QWidget):
         self.button_group.setExclusive(True)
 
         # 创建三个按钮
-        self.original_button = QPushButton(self.tr.tr('view_mode.original'))
-        self.preprocessed_button = QPushButton(self.tr.tr('view_mode.preprocessed'))
-        self.binary_button = QPushButton(self.tr.tr('view_mode.binary'))
+        self.original_button = QPushButton(self.tr.tr("view_mode.original"))
+        self.preprocessed_button = QPushButton(self.tr.tr("view_mode.preprocessed"))
+        self.binary_button = QPushButton(self.tr.tr("view_mode.binary"))
 
         # 设置按钮为可选中
         self.original_button.setCheckable(True)
@@ -79,9 +79,11 @@ class ViewModeSwitcher(QWidget):
         self.binary_button.setCheckable(True)
 
         # 设置按钮 tooltip（显示快捷键）
-        self.original_button.setToolTip(self.tr.tr('view_mode.original') + " (Ctrl+1)")
-        self.preprocessed_button.setToolTip(self.tr.tr('view_mode.preprocessed') + " (Ctrl+2)")
-        self.binary_button.setToolTip(self.tr.tr('view_mode.binary') + " (Ctrl+3)\n\n" + self.tr.tr('view_mode.tab_hint'))
+        self.original_button.setToolTip(self.tr.tr("view_mode.original") + " (Ctrl+1)")
+        self.preprocessed_button.setToolTip(self.tr.tr("view_mode.preprocessed") + " (Ctrl+2)")
+        self.binary_button.setToolTip(
+            self.tr.tr("view_mode.binary") + " (Ctrl+3)\n\n" + self.tr.tr("view_mode.tab_hint")
+        )
 
         # 设置按钮高度（与工具栏一致）
         for btn in [self.original_button, self.preprocessed_button, self.binary_button]:
@@ -109,9 +111,9 @@ class ViewModeSwitcher(QWidget):
 
     def connect_signals(self):
         """连接信号"""
-        self.original_button.clicked.connect(lambda: self._on_button_clicked('original'))
-        self.preprocessed_button.clicked.connect(lambda: self._on_button_clicked('preprocessed'))
-        self.binary_button.clicked.connect(lambda: self._on_button_clicked('binary'))
+        self.original_button.clicked.connect(lambda: self._on_button_clicked("original"))
+        self.preprocessed_button.clicked.connect(lambda: self._on_button_clicked("preprocessed"))
+        self.binary_button.clicked.connect(lambda: self._on_button_clicked("binary"))
 
     def _init_indicator_position(self):
         """初始化指示器位置（在布局完成后调用）"""
@@ -131,9 +133,9 @@ class ViewModeSwitcher(QWidget):
             对应的按钮对象
         """
         mode_buttons = {
-            'original': self.original_button,
-            'preprocessed': self.preprocessed_button,
-            'binary': self.binary_button
+            "original": self.original_button,
+            "preprocessed": self.preprocessed_button,
+            "binary": self.binary_button,
         }
         return mode_buttons.get(mode)
 
@@ -146,6 +148,7 @@ class ViewModeSwitcher(QWidget):
         """
         # 检查全局动画开关和局部动画开关
         from ..utils.animations import is_global_animation_enabled
+
         if not self._animation_enabled or not is_global_animation_enabled():
             # 动画禁用时直接移动
             self.indicator.setGeometry(target_button.geometry())
@@ -197,17 +200,17 @@ class ViewModeSwitcher(QWidget):
         Args:
             mode: 要设置的模式: 'original', 'preprocessed', 或 'binary'
         """
-        if mode not in ['original', 'preprocessed', 'binary']:
+        if mode not in ["original", "preprocessed", "binary"]:
             raise ValueError(f"Invalid mode: {mode}")
 
         self._current_mode = mode
 
         # 更新按钮选中状态
-        if mode == 'original':
+        if mode == "original":
             self.original_button.setChecked(True)
-        elif mode == 'preprocessed':
+        elif mode == "preprocessed":
             self.preprocessed_button.setChecked(True)
-        elif mode == 'binary':
+        elif mode == "binary":
             self.binary_button.setChecked(True)
 
         # 更新指示器位置（无动画）

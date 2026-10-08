@@ -94,9 +94,14 @@ class RectSelector:
 
         return (x, y, width, height)
 
-    def render_overlay(self, painter: 'QPainter', view_transform: 'ViewTransform',
-                      border_color: 'QColor', show_handles: bool = True,
-                      dash_style: bool = True):
+    def render_overlay(
+        self,
+        painter: "QPainter",
+        view_transform: "ViewTransform",
+        border_color: "QColor",
+        show_handles: bool = True,
+        dash_style: bool = True,
+    ):
         """
         渲染矩形覆盖层
 
@@ -147,17 +152,13 @@ class RectSelector:
             painter.setPen(QPen(Qt.black, 1))
 
             # 左上角
-            painter.drawRect(int(x_min - handle_size/2), int(y_min - handle_size/2),
-                            handle_size, handle_size)
+            painter.drawRect(int(x_min - handle_size / 2), int(y_min - handle_size / 2), handle_size, handle_size)
             # 右上角
-            painter.drawRect(int(x_max - handle_size/2), int(y_min - handle_size/2),
-                            handle_size, handle_size)
+            painter.drawRect(int(x_max - handle_size / 2), int(y_min - handle_size / 2), handle_size, handle_size)
             # 左下角
-            painter.drawRect(int(x_min - handle_size/2), int(y_max - handle_size/2),
-                            handle_size, handle_size)
+            painter.drawRect(int(x_min - handle_size / 2), int(y_max - handle_size / 2), handle_size, handle_size)
             # 右下角
-            painter.drawRect(int(x_max - handle_size/2), int(y_max - handle_size/2),
-                            handle_size, handle_size)
+            painter.drawRect(int(x_max - handle_size / 2), int(y_max - handle_size / 2), handle_size, handle_size)
 
         # 恢复状态
         painter.setPen(old_pen)

@@ -30,7 +30,7 @@ try:
     APP_NAME = __app_name__
 except ImportError:
     print("❌ 无法导入版本信息，使用默认值")
-    APP_VERSION = "1.6.2.1"
+    APP_VERSION = "1.6.3.0"
     APP_NAME = "BinarizationTool"
 
 
