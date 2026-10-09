@@ -111,8 +111,11 @@ def save_image(image_data: ImageData, file_path: str, format: str | None = None)
         # 获取当前像素数据
         pixels = image_data.get_current_pixels()
 
-        # 转换为 PIL Image
-        img = Image.fromarray(pixels, mode="L")
+        # 转换为 PIL Image（像素可能是 RGB 3通道或灰度 2通道）
+        if len(pixels.shape) == 3:
+            img = Image.fromarray(pixels, mode="RGB")
+        else:
+            img = Image.fromarray(pixels, mode="L")
 
         # 保存文件
         img.save(file_path, format=format)
