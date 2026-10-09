@@ -5,11 +5,12 @@
 **专业的二值化图片编辑工具，让黑白图像处理变得简单高效**
 
 <p align="center">
-  <img src="https://img.shields.io/badge/版本-1.6.3.0-blue.svg" alt="版本">
+  <img src="https://img.shields.io/badge/版本-1.6.6.0-blue.svg" alt="版本">
   <img src="https://img.shields.io/badge/平台-多平台支持-green.svg" alt="平台">
   <img src="https://img.shields.io/badge/Python-3.12+-yellow.svg" alt="Python">
   <img src="https://img.shields.io/badge/许可证-CC%20BY--NC--SA%204.0-orange.svg" alt="许可证">
 </p>
+
 
 </div>
 
@@ -19,6 +20,10 @@
 
 BinarizationTool 是一款基于 PySide6 开发的专业二值化图片编辑器，专注于将彩色或灰度图像转换为黑白二值图像。它提供了类似 Photoshop 的编辑体验，集成了多种先进的二值化算法、丰富的预处理选项和强大的编辑工具。
 本项目高度依赖AI，我已经尽力审查并优化架构，确保可维护性与扩展性。
+
+### 功能演示
+
+![BinarizationTool 演示](docs/demo.gif)
 
 ### 核心特色
 
